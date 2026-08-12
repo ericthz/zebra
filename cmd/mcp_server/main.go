@@ -79,7 +79,6 @@ func evaluateExpression(expr string) (float64, error) {
 		kind  tokenKind
 		value string
 	}
-
 	tokenize := func(s string) ([]token, error) {
 		var tokens []token
 		s = strings.ReplaceAll(s, " ", "")
