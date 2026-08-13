@@ -33,6 +33,7 @@ import (
 	"github.com/ericthz/zebra/internal/rag"
 	"github.com/ericthz/zebra/internal/safety"
 	"github.com/ericthz/zebra/internal/server"
+	"github.com/ericthz/zebra/internal/task"
 	"github.com/ericthz/zebra/internal/skill"
 	"github.com/ericthz/zebra/internal/tool"
 )
@@ -192,9 +193,10 @@ func main() {
 	audit := safety.NewStdAuditLog(logger)
 	reg.SetAuditor(server.NewToolAuditor(audit, metrics)) // D20 审计 + P3 工具成功率指标
 
-	// ---- 会话 / 限流 ----
+	// ---- 会话 / 限流 / 异步任务 ----
 	sessions := server.NewInMemoryStore(30 * time.Minute) // A2
 	rate := server.NewRateLimiter(2, 5)                   // B6：每用户每秒 2 次、突发 5 次
+	taskStore := task.NewInMemoryStore()                  // P12 异步任务存储（生产换 Redis/DB）
 
 	api := server.NewAPIServer(server.Deps{
 		Router:     router,
@@ -217,6 +219,7 @@ func main() {
 		Cache:      semanticCache,
 		RAG:        ragIndex,
 		Model:      envOr("OLLAMA_MODEL", "qwen3.5:0.8b-mlx"),
+		TaskStore:  taskStore,
 	})
 
 	addr := envOr("ADDR", ":8080")

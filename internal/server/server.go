@@ -21,6 +21,7 @@ import (
 	"github.com/ericthz/zebra/internal/rag"
 	"github.com/ericthz/zebra/internal/safety"
 	"github.com/ericthz/zebra/internal/skill"
+	"github.com/ericthz/zebra/internal/task"
 	"github.com/ericthz/zebra/internal/tool"
 )
 
@@ -46,11 +47,13 @@ type Deps struct {
 	Cache      *cache.SemanticCache // P5 语义缓存（nil 关闭）
 	RAG        *rag.Index      // P8 知识库检索（nil 关闭）
 	Model      string          // 主模型名（成本归因用）
+	TaskStore  task.Store      // P12 异步任务存储（nil 关闭异步 API）
 }
 
 // APIServer HTTP 服务。
 type APIServer struct {
-	deps Deps
+	deps  Deps
+	tasks *task.Manager // P12 异步任务管理器（NewAPIServer 时构建）
 }
 
 // NewAPIServer 构造。
@@ -61,11 +64,19 @@ func NewAPIServer(deps Deps) *APIServer {
 	if deps.Metrics == nil {
 		deps.Metrics = NewMetrics()
 	}
-	return &APIServer{deps: deps}
+	api := &APIServer{deps: deps}
+	// P12 异步任务：有存储则构建管理器（run 由 APIServer 提供，可访问 buildAgent）
+	if deps.TaskStore != nil {
+		api.tasks = task.NewManager(deps.TaskStore, api.taskRun, 4)
+		api.tasks.SetNotify(api.makeTaskNotifier())
+		api.tasks.Start()
+	}
+	return api
 }
 
-// agentFor 为会话创建并绑定 Agent（每会话一个实例，共享只读依赖）。
-func (s *APIServer) agentFor(sess *Session) *agent.Agent {
+// buildAgent 用指定会话上下文构造 Agent（history 可来自会话或任务检查点）。
+// 每 Agent 共享只读依赖；历史按会话/任务隔离（A4）。
+func (s *APIServer) buildAgent(user, role, sessionID string, hist *[]provider.Message) *agent.Agent {
 	ag := agent.New(agent.Config{
 		Router:     s.deps.Router,
 		Tools:      s.deps.Tools,
@@ -83,11 +94,16 @@ func (s *APIServer) agentFor(sess *Session) *agent.Agent {
 			s.deps.Metrics.Inc("tokens_in:" + itoa(in/100))
 			s.deps.Metrics.Inc("tokens_out:" + itoa(out/100))
 			if s.deps.Cost != nil {
-				s.deps.Cost.Record(sess.User, sess.ID, model, in, out)
+				s.deps.Cost.Record(user, sessionID, model, in, out)
 			}
 		},
 	})
-	return ag.Bind(sess.ID, sess.Role, sess.User, sess.History())
+	return ag.Bind(sessionID, role, user, hist)
+}
+
+// agentFor 为会话创建并绑定 Agent（历史指向会话自身的共享切片）。
+func (s *APIServer) agentFor(sess *Session) *agent.Agent {
+	return s.buildAgent(sess.User, sess.Role, sess.ID, sess.History())
 }
 
 // Handler 装配全部路由与中间件。
@@ -96,6 +112,11 @@ func (s *APIServer) Handler() http.Handler {
 	mux.HandleFunc("/v1/chat", s.handleChat)
 	mux.HandleFunc("/v1/chat/stream", s.handleChatStream)
 	mux.HandleFunc("DELETE /v1/user/data", s.handleForget) // P6 被遗忘权
+	if s.tasks != nil {
+		mux.HandleFunc("POST /v1/tasks", s.handleSubmitTask)   // P12 异步任务
+		mux.HandleFunc("GET /v1/tasks", s.handleListTasks)    // P12 任务列表
+		mux.HandleFunc("GET /v1/tasks/", s.handleGetTask)     // P12 任务查询
+	}
 	mux.HandleFunc("/healthz", HealthzHandler())
 	mux.HandleFunc("/readyz", ReadyzHandler(s.deps.Logger, map[string]func() error{
 		"llm":   func() error { return s.toolsReadyCheck() },
@@ -146,6 +167,9 @@ func (s *APIServer) Serve(ctx context.Context, addr string) error {
 		}
 		if st, ok := s.deps.Sessions.(*InMemoryStore); ok {
 			st.Stop() // 停止会话后台清理
+		}
+		if s.tasks != nil {
+			s.tasks.Stop() // 停止异步任务消费者（等待在途任务完成）
 		}
 		s.deps.Logger.Info("shutdown complete")
 		return nil
