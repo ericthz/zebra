@@ -1,0 +1,16 @@
+{
+  "plugins": [
+    {
+      "name": "echo_service",
+      "description": "调用外部 echo 服务（示例插件：POST 到 URL，body 含 args）",
+      "url": "http://localhost:9999/echo",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "text": {"type": "string", "description": "要回显的文本"}
+        },
+        "required": ["text"]
+      }
+    }
+  ]
+}

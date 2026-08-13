@@ -32,6 +32,7 @@ import (
 	"github.com/ericthz/zebra/internal/memory"
 	"github.com/ericthz/zebra/internal/notify"
 	"github.com/ericthz/zebra/internal/observe"
+	"github.com/ericthz/zebra/internal/plugin"
 	"github.com/ericthz/zebra/internal/prompt"
 	"github.com/ericthz/zebra/internal/provider"
 	"github.com/ericthz/zebra/internal/rag"
@@ -134,6 +135,14 @@ func main() {
 
 	// 可选：挂载 MCP 远端工具（保持与既有能力一致）
 	mcpMode, mcpDefs := mcp.RegisterTools(reg, logger)
+	// ---- P53 插件动态加载：plugins/ 目录 JSON 定义的外部 HTTP 工具 ----
+	var pluginNames []string
+	if _, err := os.Stat("plugins"); err == nil {
+		if defs, lerr := plugin.Load("plugins"); lerr == nil && len(defs) > 0 {
+			pluginNames = plugin.Register(reg, defs, &http.Client{Timeout: 10 * time.Second})
+			logger.Info("已注册插件工具", "count", len(pluginNames))
+		}
+	}
 
 	reg.Register(&tool.FetchURLTool{}) // P6 SSRF 防护的抓取工具
 	// ---- P2 本地执行：文件读写 + 命令执行（沙箱隔离 + 高危二次确认）----
@@ -344,6 +353,15 @@ func main() {
 					}
 					logger.Info("热重载知识库", "docs", len(docs))
 				}
+			}
+			// 4. 插件（先移除旧插件工具，再重新注册）
+			for _, n := range pluginNames {
+				reg.Remove(n)
+			}
+			pluginNames = nil
+			if defs, err := plugin.Load("plugins"); err == nil && len(defs) > 0 {
+				pluginNames = plugin.Register(reg, defs, &http.Client{Timeout: 10 * time.Second})
+				logger.Info("热重载插件", "count", len(pluginNames))
 			}
 			return nil
 		}

@@ -44,6 +44,17 @@ func (r *Registry) Register(t Tool) {
 	r.tools[t.Name()] = t
 }
 
+// Remove 移除一个工具（P53 插件热重载用）。
+func (r *Registry) Remove(name string) bool {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if _, ok := r.tools[name]; ok {
+		delete(r.tools, name)
+		return true
+	}
+	return false
+}
+
 // Names 返回全部已注册工具名（排序，供启动清单/审计盘点使用）。
 func (r *Registry) Names() []string {
 	r.mu.RLock()

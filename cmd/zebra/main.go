@@ -23,6 +23,7 @@ import (
 	"github.com/ericthz/zebra/internal/mcp"
 	"github.com/ericthz/zebra/internal/memory"
 	"github.com/ericthz/zebra/internal/observe"
+	"github.com/ericthz/zebra/internal/plugin"
 	"github.com/ericthz/zebra/internal/prompt"
 	"github.com/ericthz/zebra/internal/provider"
 	"github.com/ericthz/zebra/internal/rag"
@@ -87,6 +88,12 @@ func main() {
 	reg.Register(&tool.RunCommandTool{Sandbox: execSandbox})
 	// ---- P32 MCP 远端工具：与 cmd/server 同一装配（MCP_MODE 设置即启用）----
 	mcpMode, mcpDefs := mcp.RegisterTools(reg, logger)
+	// ---- P53 插件动态加载：plugins/ 目录 JSON 定义的外部 HTTP 工具 ----
+	if _, err := os.Stat("plugins"); err == nil {
+		if defs, lerr := plugin.Load("plugins"); lerr == nil && len(defs) > 0 {
+			plugin.Register(reg, defs, &http.Client{Timeout: 10 * time.Second})
+		}
+	}
 
 	// ---- P1 技能体系：加载 skills/ 目录 ----
 	skillReg := skill.NewRegistry()

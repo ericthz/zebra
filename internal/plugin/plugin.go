@@ -1,0 +1,112 @@
+// 插件动态加载（P53）：从目录加载 JSON 定义的外部 HTTP 工具，运行时注册。
+//
+// 背景：工具目前是编译期注册（改一个工具就要改代码重编译）。本包让
+// "新增一个外部服务工具"变成"放一个 JSON 文件"——配合 P18 热更新，
+// 运行时即可加载/卸载插件工具。
+//
+// 协议：插件工具 Execute 时 POST 到 def.url，body 为 {"args":{...}}，
+// 响应文本作为工具结果返回。生产演化方向：插件鉴权、超时/重试、
+// SSRF 校验（复用 P6）、插件市场/版本管理。
+package plugin
+
+import (
+	"bytes"
+	"context"
+	"encoding/json"
+	"fmt"
+	"io"
+	"net/http"
+	"os"
+	"path/filepath"
+	"strings"
+
+	"github.com/ericthz/zebra/internal/tool"
+)
+
+// Def 插件工具定义。
+type Def struct {
+	Name        string                 `json:"name"`
+	Description string                 `json:"description"`
+	URL         string                 `json:"url"`        // POST，body {"args":{...}}
+	Parameters  map[string]interface{} `json:"parameters"` // JSON Schema 子集
+}
+
+// Load 从 dir 读取 *.json 插件定义（文件结构 {"plugins":[...]}）。
+func Load(dir string) ([]Def, error) {
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return nil, err
+	}
+	var out []Def
+	for _, e := range entries {
+		if e.IsDir() || !strings.HasSuffix(e.Name(), ".json") {
+			continue
+		}
+		data, err := os.ReadFile(filepath.Join(dir, e.Name()))
+		if err != nil {
+			continue
+		}
+		var file struct {
+			Plugins []Def `json:"plugins"`
+		}
+		if err := json.Unmarshal(data, &file); err != nil {
+			return nil, fmt.Errorf("%s: %w", e.Name(), err)
+		}
+		out = append(out, file.Plugins...)
+	}
+	if len(out) == 0 {
+		return nil, fmt.Errorf("no plugins in %s", dir)
+	}
+	return out, nil
+}
+
+// HTTPPluginTool 通过 HTTP POST 调用的插件工具。
+type HTTPPluginTool struct {
+	def    Def
+	client *http.Client
+}
+
+func (t *HTTPPluginTool) Name() string        { return t.def.Name }
+func (t *HTTPPluginTool) Description() string { return t.def.Description }
+func (t *HTTPPluginTool) Parameters() map[string]interface{} {
+	return t.def.Parameters
+}
+
+// Execute POST {"args":{...}} 到插件 URL，响应文本即工具结果。
+func (t *HTTPPluginTool) Execute(ctx context.Context, args map[string]interface{}) (string, error) {
+	body, _ := json.Marshal(map[string]interface{}{"args": args})
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, t.def.URL, bytes.NewReader(body))
+	if err != nil {
+		return "", err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := t.client.Do(req)
+	if err != nil {
+		return "", err
+	}
+	defer resp.Body.Close()
+	data, err := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
+	if err != nil {
+		return "", err
+	}
+	if resp.StatusCode >= 400 {
+		return "", fmt.Errorf("plugin %s: %d %s", t.def.Name, resp.StatusCode, strings.TrimSpace(string(data)))
+	}
+	return string(data), nil
+}
+
+// Register 把插件定义注册为工具，返回已注册的工具名（供热重载移除）。
+func Register(reg *tool.Registry, defs []Def, client *http.Client) []string {
+	if client == nil {
+		client = http.DefaultClient
+	}
+	var names []string
+	for _, d := range defs {
+		if d.Name == "" || d.URL == "" {
+			continue
+		}
+		reg.Register(&HTTPPluginTool{def: d, client: client})
+		names = append(names, d.Name)
+	}
+	return names
+}
