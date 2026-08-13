@@ -57,6 +57,7 @@ type Deps struct {
 	Shadow     *eval.ShadowEvaluator   // P21 在线评测/影子模式（nil 关闭）
 	Profile    *memory.ProfileStore    // P22 用户画像（nil 关闭画像 API 与注入）
 	ProfileTTL time.Duration           // P22 画像事实保鲜期（<=0 永不过期）
+	Voice      *provider.VoiceClient   // P25 语音交互（nil 关闭语音 API）
 }
 
 // APIServer HTTP 服务。
@@ -142,6 +143,11 @@ func (s *APIServer) Handler() http.Handler {
 	if s.deps.Profile != nil {
 		mux.HandleFunc("GET /v1/user/profile", s.handleGetProfile)            // P22 画像查看
 		mux.HandleFunc("POST /v1/user/profile/forget", s.handleForgetProfile) // P22 精细遗忘
+	}
+	if s.deps.Voice != nil {
+		mux.HandleFunc("POST /v1/voice/transcribe", s.handleVoiceTranscribe) // P25 ASR
+		mux.HandleFunc("POST /v1/voice/synthesize", s.handleVoiceSynthesize) // P25 TTS
+		mux.HandleFunc("POST /v1/voice/chat", s.handleVoiceChat)             // P25 语音对话
 	}
 	mux.HandleFunc("/", uiHandler()) // P14 前端 Web UI（公开）
 	mux.HandleFunc("/healthz", HealthzHandler())

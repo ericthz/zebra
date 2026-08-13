@@ -230,6 +230,20 @@ func main() {
 		logger.Info("画像遗忘清理完成", "forgotten", n)
 	}
 
+	// ---- P25 语音交互：OpenAI 兼容 ASR/TTS（可选，VOICE_BASE_URL 开启）----
+	var voice *provider.VoiceClient
+	if vb := os.Getenv("VOICE_BASE_URL"); vb != "" {
+		voice = &provider.VoiceClient{
+			BaseURL:  vb,
+			APIKey:   os.Getenv("VOICE_API_KEY"),
+			ASRModel: envOr("VOICE_ASR_MODEL", "whisper-1"),
+			TTSModel: envOr("VOICE_TTS_MODEL", "tts-1"),
+			Voice:    envOr("VOICE_TONE", "alloy"),
+			Client:   &http.Client{Timeout: time.Duration(atoiDefault(os.Getenv("HTTP_TIMEOUT"), 60)) * time.Second},
+		}
+		logger.Info("已启用语音交互", "base", vb, "asr", voice.ASRModel, "tts", voice.TTSModel)
+	}
+
 	// ---- P13 多 Agent Supervisor：数据/知识/常规 三个专业 worker ----
 	var supervisorInst *supervisor.Supervisor
 	if router != nil && prompts != nil {
@@ -332,6 +346,7 @@ func main() {
 		Shadow:     shadowEval,
 		Profile:    profileStore,
 		ProfileTTL: profilePolicy.TTL,
+		Voice:      voice,
 	})
 
 	addr := envOr("ADDR", ":8080")
