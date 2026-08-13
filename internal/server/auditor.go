@@ -1,4 +1,4 @@
-// tool.Auditor → safety.AuditLog 适配：工具调用审计接入统一审计通道（D20）。
+// tool.Auditor → safety.AuditLog 适配：工具调用审计 + 成功率指标（P3 质量闭环）。
 package server
 
 import (
@@ -10,15 +10,19 @@ import (
 
 // auditAdapter 实现 tool.Auditor 接口。
 type auditAdapter struct {
-	log safety.AuditLog
+	log     safety.AuditLog
+	metrics *Metrics // 记录工具成功率指标（挂 /metrics）
 }
 
 // NewToolAuditor 构造工具审计适配器（供装配层注入）。
-func NewToolAuditor(log safety.AuditLog) *auditAdapter {
-	return &auditAdapter{log: log}
+// metrics 可为 nil（不记录指标，仅审计）。
+func NewToolAuditor(log safety.AuditLog, metrics *Metrics) *auditAdapter {
+	return &auditAdapter{log: log, metrics: metrics}
 }
 
-// LogToolCall 记录一次工具调用，参数落库前脱敏（D19）。
+// LogToolCall 记录一次工具调用：
+//   - 审计事件（参数落库前脱敏 D19）
+//   - 成功率指标：tool_call:<name>:ok / tool_call:<name>:fail（P3）
 func (a *auditAdapter) LogToolCall(user, role, toolName string, risk int, args map[string]interface{}, result string, err error) {
 	detail, _ := json.Marshal(args)
 	evt := safety.AuditEvent{
@@ -28,5 +32,16 @@ func (a *auditAdapter) LogToolCall(user, role, toolName string, risk int, args m
 		Risk:    risk,
 		Success: err == nil,
 	}
-	a.log.Log(evt)
+	if a.log != nil {
+		a.log.Log(evt)
+	}
+	if a.metrics != nil {
+		// 成功率 = ok / (ok+fail)，可在 /metrics 观察并配置告警
+		name := "tool_call:" + toolName
+		if err == nil {
+			a.metrics.Inc(name + ":ok")
+		} else {
+			a.metrics.Inc(name + ":fail")
+		}
+	}
 }

@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"github.com/ericthz/zebra/internal/agent"
+	"github.com/ericthz/zebra/internal/eval"
 	"github.com/ericthz/zebra/internal/memory"
 	"github.com/ericthz/zebra/internal/prompt"
 	"github.com/ericthz/zebra/internal/provider"
@@ -135,4 +136,36 @@ func envOr(k, d string) string {
 		return v
 	}
 	return d
+}
+
+// TestJudgeClosedLoop —— 质量闭环演示（P3）：
+// 跑真实 Agent → 用 Judge 模型给每个回答自动打分 → 汇总通过率。
+// 开启方式：ZEBRA_EVAL=1 go test ./test/eval/ -v
+func TestJudgeClosedLoop(t *testing.T) {
+	if os.Getenv("ZEBRA_EVAL") != "1" {
+		t.Skip("跳过：设置 ZEBRA_EVAL=1 开启 LLM 评测")
+	}
+	httpCli := provider.NewHTTPClient(20*time.Second, 2, 300*time.Millisecond)
+	judge := eval.NewJudge(provider.NewRouter(&provider.OllamaProvider{
+		BaseURL: envOr("OLLAMA_BASE_URL", "http://localhost:11434"),
+		Model:   envOr("OLLAMA_MODEL", "llama3.1"),
+		Client:  httpCli,
+	}))
+
+	var passed, total int
+	for _, c := range cases {
+		total++
+		s, err := judge.Score(context.Background(), c.input, "（评测输出占位，实际应传入 Agent 真实回答）")
+		if err != nil {
+			t.Logf("judge 失败 %s: %v", c.name, err)
+			continue
+		}
+		if s.Pass(0.7) {
+			passed++
+			t.Logf("✅ %s: 忠实=%.2f 相关=%.2f 安全=%.2f — %s", c.name, s.Faithfulness, s.Relevance, s.Safety, s.Comment)
+		} else {
+			t.Logf("⚠️ %s: 忠实=%.2f 相关=%.2f 安全=%.2f — %s", c.name, s.Faithfulness, s.Relevance, s.Safety, s.Comment)
+		}
+	}
+	t.Logf("Judge 自动评分: %d/%d 通过", passed, total)
 }

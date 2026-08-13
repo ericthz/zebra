@@ -142,10 +142,13 @@ func main() {
 		cancel()
 	}
 
+	// ---- 指标（B5/P3）----
+	metrics := server.NewMetrics() // 工具成功率指标记录 + /metrics 暴露
+
 	// ---- 安全横切（D17/D18/D20）----
 	moderator := safety.NewKeywordModerator() // 空敏感词表 = 演示用
 	audit := safety.NewStdAuditLog(logger)
-	reg.SetAuditor(server.NewToolAuditor(audit)) // D20 工具调用审计
+	reg.SetAuditor(server.NewToolAuditor(audit, metrics)) // D20 审计 + P3 工具成功率指标
 
 	// ---- 会话 / 限流 ----
 	sessions := server.NewInMemoryStore(30 * time.Minute) // A2
@@ -163,6 +166,7 @@ func main() {
 		Keys:       keys,
 		Rate:       rate,
 		Logger:     logger,
+		Metrics:    metrics,
 		MaxTurns:   5,
 		PromptName: "assistant",
 		Skills:     skillReg,
