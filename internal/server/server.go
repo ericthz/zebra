@@ -21,6 +21,7 @@ import (
 	"github.com/ericthz/zebra/internal/rag"
 	"github.com/ericthz/zebra/internal/safety"
 	"github.com/ericthz/zebra/internal/skill"
+	"github.com/ericthz/zebra/internal/supervisor"
 	"github.com/ericthz/zebra/internal/task"
 	"github.com/ericthz/zebra/internal/tool"
 )
@@ -48,6 +49,7 @@ type Deps struct {
 	RAG        *rag.Index      // P8 知识库检索（nil 关闭）
 	Model      string          // 主模型名（成本归因用）
 	TaskStore  task.Store      // P12 异步任务存储（nil 关闭异步 API）
+	Supervisor *supervisor.Supervisor // P13 多 Agent（nil 关闭 supervisor 模式）
 }
 
 // APIServer HTTP 服务。

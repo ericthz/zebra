@@ -67,6 +67,32 @@ func (r *Registry) DenyTool(role, name string) {
 	delete(set, name)
 }
 
+// Subset 返回只包含指定工具的子注册表（P13 多 Agent 专业化）：
+// 未在 names 中的工具不复制；names 为空表示复制全部。
+// 同时复制角色白名单 allow，保持权限语义一致。
+func (r *Registry) Subset(names ...string) *Registry {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	out := NewRegistry()
+	allowSet := make(map[string]bool, len(names))
+	for _, n := range names {
+		allowSet[n] = true
+	}
+	for n, t := range r.tools {
+		if len(names) == 0 || allowSet[n] {
+			out.tools[n] = t
+		}
+	}
+	for role, set := range r.allow {
+		cp := make(map[string]bool, len(set))
+		for k, v := range set {
+			cp[k] = v
+		}
+		out.allow[role] = cp
+	}
+	return out
+}
+
 // ToolsFor 返回某角色可见的工具列表（转成 provider.Tool 供模型消费）。
 func (r *Registry) ToolsFor(role string) []provider.Tool {
 	r.mu.RLock()

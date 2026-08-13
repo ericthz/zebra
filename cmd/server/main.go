@@ -35,6 +35,7 @@ import (
 	"github.com/ericthz/zebra/internal/server"
 	"github.com/ericthz/zebra/internal/task"
 	"github.com/ericthz/zebra/internal/skill"
+	"github.com/ericthz/zebra/internal/supervisor"
 	"github.com/ericthz/zebra/internal/tool"
 )
 
@@ -131,6 +132,11 @@ func main() {
 你拥有工具调用能力，回答尽量简洁准确。当前用户角色：{role}。`})
 	prompts.Register(&prompt.Template{Name: "assistant", Version: "v2", Text: `你是 zebra 企业级 AI 助手（v2 灰度版）。
 你拥有工具调用能力，回答尽量简洁准确。当前用户角色：{role}。`})
+	// P13 多 Agent：专业 worker 专属提示词（persona）
+	prompts.Register(&prompt.Template{Name: "data", Version: "v1", Text: `你是 zebra 的【数据专家 Agent】。
+你擅长数学计算、单位换算、文本翻译、日期时间等数据处理任务。回答给出精确数值与计算过程。角色：{role}。`})
+	prompts.Register(&prompt.Template{Name: "knowledge", Version: "v1", Text: `你是 zebra 的【知识专家 Agent】。
+你擅长搜索资料、抓取网页、查阅本地文档。回答必须基于检索/抓取到的信息并注明来源，不要编造。角色：{role}。`})
 	prompts.Activate("assistant", "v1")
 
 	// ---- C12 记忆：工作记忆 + 可选 Qdrant 长期记忆 ----
@@ -198,6 +204,16 @@ func main() {
 	rate := server.NewRateLimiter(2, 5)                   // B6：每用户每秒 2 次、突发 5 次
 	taskStore := task.NewInMemoryStore()                  // P12 异步任务存储（生产换 Redis/DB）
 
+	// ---- P13 多 Agent Supervisor：数据/知识/常规 三个专业 worker ----
+	var supervisorInst *supervisor.Supervisor
+	if router != nil && prompts != nil {
+		supervisorInst = buildSupervisor(workerDeps{
+			router: router, prompts: prompts, mem: mem, window: &agent.ContextWindow{MaxTokens: 4000, Summarizer: agent.PrefixSummarizer{MaxChars: 600}},
+			moderator: moderator, skills: skillReg, cache: semanticCache, rag: ragIndex,
+			model: envOr("OLLAMA_MODEL", "qwen3.5:0.8b-mlx"), maxTurns: 5, cost: costTracker,
+		}, reg)
+	}
+
 	api := server.NewAPIServer(server.Deps{
 		Router:     router,
 		Tools:      reg,
@@ -220,6 +236,7 @@ func main() {
 		RAG:        ragIndex,
 		Model:      envOr("OLLAMA_MODEL", "qwen3.5:0.8b-mlx"),
 		TaskStore:  taskStore,
+		Supervisor: supervisorInst,
 	})
 
 	addr := envOr("ADDR", ":8080")

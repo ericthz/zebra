@@ -10,6 +10,7 @@ import (
 
 	"github.com/ericthz/zebra/internal/agent"
 	"github.com/ericthz/zebra/internal/notify"
+	"github.com/ericthz/zebra/internal/supervisor"
 )
 
 // ChatRequest 请求体。
@@ -46,11 +47,24 @@ func (s *APIServer) handleChat(w http.ResponseWriter, r *http.Request) {
 	if req.ConfirmRisky {
 		opts.Confirm = func(string, map[string]interface{}) bool { return true }
 	}
-	// P10 编排模式：先规划再逐步执行；普通模式直接执行
+	// P10 编排模式：先规划再逐步执行；P13 多 Agent：自动路由到专业 Worker
 	var reply string
-	if req.Mode == "plan" {
+	switch req.Mode {
+	case "plan":
 		reply, err = ag.PlanAndExecute(ctx, req.Message, opts)
-	} else {
+	case "supervisor":
+		if s.deps.Supervisor == nil {
+			http.Error(w, "supervisor 未启用", http.StatusNotImplemented)
+			return
+		}
+		var workerName string
+		var w *supervisor.Worker
+		reply, w, err = s.deps.Supervisor.Run(ctx, req.Message, sess.ID, sess.Role, sess.User, sess.History(), opts)
+		if w != nil {
+			workerName = w.Name
+		}
+		s.deps.Logger.Info("supervisor 路由", "worker", workerName)
+	default:
 		reply, err = ag.Run(ctx, req.Message, opts)
 	}
 	if err != nil {
