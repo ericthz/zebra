@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/ericthz/zebra/internal/agent"
+	"github.com/ericthz/zebra/internal/notify"
 )
 
 // ChatRequest 请求体。
@@ -52,6 +53,28 @@ func (s *APIServer) handleChat(w http.ResponseWriter, r *http.Request) {
 	}
 
 	json.NewEncoder(w).Encode(ChatResponse{SessionID: sess.ID, Reply: reply})
+
+	// P4 主动出站：任务完成异步通知业务系统（不阻塞响应）
+	if s.deps.Notifier != nil {
+		go func() {
+			ev := notify.Event{
+				Type: "task.complete", Session: sess.ID, Title: "对话完成",
+				Payload: map[string]any{"user": sess.User, "reply_summary": truncateText(reply, 100)},
+			}
+			if err := s.deps.Notifier.Send(context.Background(), ev); err != nil {
+				s.deps.Logger.Warn("webhook 通知失败", "session", sess.ID, "err", err)
+			}
+		}()
+	}
+}
+
+// truncateText 截断摘要，避免把完整回复推给业务系统。
+func truncateText(s string, n int) string {
+	runes := []rune(s)
+	if len(runes) > n {
+		return string(runes[:n]) + "…"
+	}
+	return s
 }
 
 // handleChatStream SSE 流式：事件逐条推给客户端（C10）。

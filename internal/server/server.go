@@ -13,6 +13,7 @@ import (
 
 	"github.com/ericthz/zebra/internal/agent"
 	"github.com/ericthz/zebra/internal/memory"
+	"github.com/ericthz/zebra/internal/notify"
 	"github.com/ericthz/zebra/internal/prompt"
 	"github.com/ericthz/zebra/internal/provider"
 	"github.com/ericthz/zebra/internal/safety"
@@ -37,6 +38,7 @@ type Deps struct {
 	MaxTurns   int
 	PromptName string
 	Skills     *skill.Registry // P1 技能注册表（nil 关闭技能检索）
+	Notifier   notify.Notifier // P4 主动出站：任务完成通知（nil 关闭）
 }
 
 // APIServer HTTP 服务。

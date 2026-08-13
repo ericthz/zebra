@@ -22,6 +22,7 @@ import (
 	"github.com/ericthz/zebra/internal/agent"
 	"github.com/ericthz/zebra/internal/memory"
 	"github.com/ericthz/zebra/internal/mcp"
+	"github.com/ericthz/zebra/internal/notify"
 	"github.com/ericthz/zebra/internal/prompt"
 	"github.com/ericthz/zebra/internal/provider"
 	"github.com/ericthz/zebra/internal/safety"
@@ -145,6 +146,13 @@ func main() {
 	// ---- 指标（B5/P3）----
 	metrics := server.NewMetrics() // 工具成功率指标记录 + /metrics 暴露
 
+	// ---- P4 主动出站：Webhook 通知器（可选，WEBHOOK_URL 为空则关闭）----
+	var notifier notify.Notifier
+	if wh := os.Getenv("WEBHOOK_URL"); wh != "" {
+		notifier = notify.NewWebhookNotifier(wh, os.Getenv("WEBHOOK_SECRET"))
+		logger.Info("已启用 Webhook 通知", "url", wh)
+	}
+
 	// ---- 安全横切（D17/D18/D20）----
 	moderator := safety.NewKeywordModerator() // 空敏感词表 = 演示用
 	audit := safety.NewStdAuditLog(logger)
@@ -170,6 +178,7 @@ func main() {
 		MaxTurns:   5,
 		PromptName: "assistant",
 		Skills:     skillReg,
+		Notifier:   notifier,
 	})
 
 	addr := envOr("ADDR", ":8080")
