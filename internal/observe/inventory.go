@@ -15,6 +15,13 @@ import (
 	"github.com/ericthz/zebra/internal/tool"
 )
 
+// labelWidth 标签列定宽（显示宽度）。
+const labelWidth = 16
+
+// childIndent 子项缩进：父行 "├── "(4 格) + 标签(labelWidth) 后冒号位于第
+// 4+labelWidth+1 列；子项用 "│" + (3+labelWidth) 个空格，使内容起点与冒号同列。
+var childIndent = "│" + strings.Repeat(" ", 3+labelWidth)
+
 // Info 启动清单所需信息（由 cmd/zebra、cmd/server 装配后传入）。
 type Info struct {
 	Title           string         // 清单标题（如 "zebra 启动清单" / "zebra CLI Agent（输入 exit 退出）"）
@@ -36,7 +43,7 @@ type Info struct {
 func PrintInventory(w io.Writer, info Info) {
 	fmt.Fprintln(w, console.Symbol("──", console.ColorTitle)+" "+orDefault(info.Title, "zebra 启动清单"))
 	lbl := func(sym string, code int, name string) string { // 符号上色 + 标签列定宽
-		return console.Pad(console.Symbol(sym, code)+" "+name, 16)
+		return console.Pad(console.Symbol(sym, code)+" "+name, labelWidth)
 	}
 
 	// 1. 模型
@@ -44,12 +51,14 @@ func PrintInventory(w io.Writer, info Info) {
 		fmt.Fprintf(w, "├── %s: %s\n", lbl("◆", console.ColorModel, "模型"), strings.Join(info.Models, " → "))
 	}
 
-	// 2. 工具（数量 + 逗号连接的名称列表）
+	// 2. 工具（父级：数量；子项：每个工具逐行，起点与冒号对齐）
 	if info.Tools != nil {
 		names := info.Tools.Names()
 		fmt.Fprintf(w, "├── %s: %d 个\n", lbl("▲", console.ColorTool, "工具"), len(names))
 		if len(names) > 0 {
-			fmt.Fprintf(w, "│     %s\n", strings.Join(names, ", "))
+			for _, n := range names {
+				fmt.Fprintf(w, "%s%s\n", childIndent, n)
+			}
 		}
 	}
 
@@ -60,15 +69,14 @@ func PrintInventory(w io.Writer, info Info) {
 		fmt.Fprintf(w, "├── %s: 模式=%s · 已连接 %d 个工具\n", lbl("●", console.ColorMCP, "MCP"), info.MCPMode, info.MCPCount)
 	}
 
-	// 4. 技能列表（名称(描述) 逗号连接）
+	// 4. 技能（父级：数量；子项：每个技能名称(描述) 逐行，起点与冒号对齐）
 	if len(info.Skills) == 0 {
 		fmt.Fprintf(w, "├── %s: 无（skills/ 目录为空或加载失败）\n", lbl("■", console.ColorSkill, "技能"))
 	} else {
-		names := make([]string, 0, len(info.Skills))
+		fmt.Fprintf(w, "├── %s: %d 个\n", lbl("■", console.ColorSkill, "技能"), len(info.Skills))
 		for _, sk := range info.Skills {
-			names = append(names, fmt.Sprintf("%s(%s)", sk.Name, sk.Description))
+			fmt.Fprintf(w, "%s%s(%s)\n", childIndent, sk.Name, sk.Description)
 		}
-		fmt.Fprintf(w, "├── %s: %d 个 —— %s\n", lbl("■", console.ColorSkill, "技能"), len(info.Skills), strings.Join(names, ", "))
 	}
 
 	// 5. 记忆 / 知识库

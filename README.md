@@ -545,8 +545,13 @@ curl -X POST :8080/v1/user/profile/forget -H "Authorization: Bearer user-key" \
 ── zebra 启动清单
 ├── ◆ 模型          : ollama
 ├── ▲ 工具          : 15 个
+│                   calculator
+│                   convert_units
+│                   ...
 ├── ● MCP           : 未启用（MCP_MODE 未设置）
-├── ■ 技能          : 无
+├── ■ 技能          : 2 个
+│                   data-check（当用户要求核对数据...时使用）
+│                   report-sop（当用户要求撰写研究报告...时使用）
 ├── ▣ 记忆          : 工作记忆
 ├── ▤ 知识库        : 0 篇文档 / 0 块
 ├── ♪ 语音          : 已启用（ASR/TTS）

@@ -22,6 +22,12 @@ func displayWidth(s string) int {
 	return displayWidthRunes(stripANSI(s))
 }
 
+// Width 返回字符串的近似终端显示宽度（CJK/全角/emoji 计 2，其余计 1；
+// 忽略 ANSI 转义）。供外部做"字节列 vs 显示列"换算。
+func Width(s string) int {
+	return displayWidth(s)
+}
+
 func displayWidthRunes(s string) int {
 	w := 0
 	for _, r := range s {

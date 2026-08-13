@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/ericthz/zebra/internal/console"
 	"github.com/ericthz/zebra/internal/skill"
 	"github.com/ericthz/zebra/internal/tool"
 )
@@ -49,7 +50,8 @@ func TestPrintInventory(t *testing.T) {
 	for _, want := range []string{
 		"zebra 启动清单",
 		": 2 个",
-		"calculator, fetch_url",
+		"calculator", // 工具子项逐行
+		"fetch_url",
 		"模式=http · 已连接 3 个工具",
 		"技能",
 		"report-sop(写研究报告)",
@@ -60,6 +62,28 @@ func TestPrintInventory(t *testing.T) {
 	} {
 		if !strings.Contains(out, want) {
 			t.Fatalf("启动清单缺少 %q\n%s", want, out)
+		}
+	}
+
+	// 对齐：工具/技能子项起点显示列 == 父行冒号显示列
+	// （用 console.Width 按显示宽度换算，避免多字节 UTF-8 的字节列干扰）
+	colonCol := -1
+	for _, l := range strings.Split(out, "\n") {
+		if strings.Contains(l, "▲ 工具") {
+			colonCol = console.Width(l[:strings.Index(l, ":")])
+			break
+		}
+	}
+	if colonCol < 0 {
+		t.Fatal("未找到工具父行")
+	}
+	for _, l := range strings.Split(out, "\n") {
+		for _, item := range []string{"calculator", "report-sop"} {
+			if i := strings.Index(l, item); i >= 0 {
+				if got := console.Width(l[:i]); got != colonCol {
+					t.Fatalf("子项 %q 起点显示列 %d 应与冒号列 %d 对齐: %q", item, got, colonCol, l)
+				}
+			}
 		}
 	}
 }
