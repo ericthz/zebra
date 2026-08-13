@@ -15,8 +15,8 @@ import (
 	"github.com/ericthz/zebra/internal/cache"
 	"github.com/ericthz/zebra/internal/memory"
 	"github.com/ericthz/zebra/internal/prompt"
-	"github.com/ericthz/zebra/internal/rag"
 	"github.com/ericthz/zebra/internal/provider"
+	"github.com/ericthz/zebra/internal/rag"
 	"github.com/ericthz/zebra/internal/safety"
 	"github.com/ericthz/zebra/internal/skill"
 	"github.com/ericthz/zebra/internal/tool"
@@ -24,19 +24,19 @@ import (
 
 // Config Agent 构造参数。
 type Config struct {
-	Router     *provider.Router    // C15 多模型路由（含 fallback）
-	Tools      *tool.Registry      // D20 工具权限白名单所在
-	Prompts    *prompt.Registry    // C16 系统提示模板
-	Mem        *memory.Manager     // C12 分层记忆
-	Window     *ContextWindow      // C11 上下文工程（nil 则关闭预算控制）
-	Moderator  safety.Moderator    // D18 内容审核（nil 则跳过）
-	MaxTurns   int                 // 工具调用最大轮数
-	PromptName string              // 使用的系统提示模板名
-	Model      string              // 当前模型名（用于成本归因 P5）
+	Router     *provider.Router                            // C15 多模型路由（含 fallback）
+	Tools      *tool.Registry                              // D20 工具权限白名单所在
+	Prompts    *prompt.Registry                            // C16 系统提示模板
+	Mem        *memory.Manager                             // C12 分层记忆
+	Window     *ContextWindow                              // C11 上下文工程（nil 则关闭预算控制）
+	Moderator  safety.Moderator                            // D18 内容审核（nil 则跳过）
+	MaxTurns   int                                         // 工具调用最大轮数
+	PromptName string                                      // 使用的系统提示模板名
+	Model      string                                      // 当前模型名（用于成本归因 P5）
 	OnUsage    func(model string, inTokens, outTokens int) // B5/P5 用量与成本钩子
-	Skills     *skill.Registry     // 技能注册表（P1，nil 则关闭技能检索）
-	Cache      *cache.SemanticCache // 语义缓存（P5，nil 则关闭）
-	RAG        *rag.Index          // 知识库检索（P8，nil 则关闭 RAG）
+	Skills     *skill.Registry                             // 技能注册表（P1，nil 则关闭技能检索）
+	Cache      *cache.SemanticCache                        // 语义缓存（P5，nil 则关闭）
+	RAG        *rag.Index                                  // 知识库检索（P8，nil 则关闭 RAG）
 }
 
 // Agent 单个会话的 Agent 实例。
@@ -233,9 +233,10 @@ func (a *Agent) toolLoop(ctx context.Context, msgs []provider.Message, tools []p
 	return finalAnswer, lastErr, toolsUsed
 }
 
-
 // execTool 单次工具调用的完整处理链（P9 并行执行的最小执行单元）：
-//   解析参数(C13纠错) → 高危二次确认(D20) → 执行 → 注入防护(D17) → 事件上报
+//
+//	解析参数(C13纠错) → 高危二次确认(D20) → 执行 → 注入防护(D17) → 事件上报
+//
 // 返回要追加进对话的工具结果消息。
 func (a *Agent) execTool(ctx context.Context, tc provider.ToolCall, opts RunOptions, emit func(Event)) provider.Message {
 	args, perr := tool.ParseArguments(tc.Function.Arguments)
@@ -298,11 +299,13 @@ func (a *Agent) buildMessages(ctx context.Context, userInput string) []provider.
 		}
 	}
 
-	// RAG 知识库检索与注入（P8）：
-	// 按用户输入在私有知识库检索 topK 相关片段，作为 system 消息注入，
-	// 片段带【来源】标记，要求模型回答基于这些资料（接地/防幻觉，支持引用）。
+	// RAG 知识库检索与注入（P8 / P20 混合检索）：
+	// 按用户输入在私有知识库检索 topK 相关片段，作为 system 消息注入。
+	// P20 起默认用【向量+BM25 混合检索】：向量抓语义、BM25 抓精确术语
+	// （专有名词/编号类问题不再因嵌入质量丢分），片段带【来源】标记
+	// 要求模型基于资料回答（接地/防幻觉，支持引用）。
 	if a.cfg.RAG != nil {
-		if hits, err := a.cfg.RAG.Retrieve(ctx, userInput, 3); err == nil && len(hits) > 0 {
+		if hits, err := a.cfg.RAG.RetrieveHybrid(ctx, userInput, 3, 0.7); err == nil && len(hits) > 0 {
 			var kb strings.Builder
 			kb.WriteString("以下是知识库中与本问题相关的资料（回答请优先基于这些资料，并标注来源）：\n")
 			for _, h := range hits {
