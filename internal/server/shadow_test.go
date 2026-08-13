@@ -53,7 +53,7 @@ func (judgeProvider) ChatStream(context.Context, []provider.Message, []provider.
 }
 
 // newShadowServer 构造带影子评测的服务（主模型固定回答，评审模型脚本化）。
-func newShadowServer(t *testing.T) (http.Handler, *eval.ShadowStore) {
+func newShadowServer(t *testing.T) (http.Handler, *eval.ShadowStore, *APIServer) {
 	t.Helper()
 	keys := NewKeyStore()
 	keys.Register(Principal{Key: "admin-key", User: "admin", Role: "admin", Tenant: "default"})
@@ -86,11 +86,11 @@ func newShadowServer(t *testing.T) (http.Handler, *eval.ShadowStore) {
 		Model:      "primary-model",
 		Shadow:     shadow,
 	})
-	return api.Handler(), store
+	return api.Handler(), store, api
 }
 
 func TestShadowAPI(t *testing.T) {
-	h, store := newShadowServer(t)
+	h, store, _ := newShadowServer(t)
 
 	do := func(method, path, key string, body string) *httptest.ResponseRecorder {
 		req := httptest.NewRequest(method, path, bytes.NewBufferString(body))
@@ -140,7 +140,7 @@ func TestShadowAPI(t *testing.T) {
 
 // TestShadowDashboardAndPromote 看板统计 + 灰度切换（P26）。
 func TestShadowDashboardAndPromote(t *testing.T) {
-	h, _ := newShadowServer(t)
+	h, _, _ := newShadowServer(t)
 	do := func(method, path, key string) *httptest.ResponseRecorder {
 		req := httptest.NewRequest(method, path, bytes.NewBufferString(""))
 		if key != "" {
@@ -179,5 +179,47 @@ func TestShadowDashboardAndPromote(t *testing.T) {
 	rr = do("GET", "/v1/eval/shadow/stats", "admin-key")
 	if !strings.Contains(rr.Body.String(), `"primary":"candidate-model"`) {
 		t.Fatalf("切换后主模型应为候选: %s", rr.Body.String())
+	}
+}
+
+// TestShadowAutoRollback P42 金丝雀自动回滚：promote 后胜率不达标自动切回原主。
+func TestShadowAutoRollback(t *testing.T) {
+	h, store, api := newShadowServer(t)
+	do := func(method, path, key string) *httptest.ResponseRecorder {
+		req := httptest.NewRequest(method, path, bytes.NewBufferString(""))
+		if key != "" {
+			req.Header.Set("Authorization", "Bearer "+key)
+		}
+		rr := httptest.NewRecorder()
+		h.ServeHTTP(rr, req)
+		return rr
+	}
+
+	// promote：主模型切为候选（candidate-model），记录原主 primary-model
+	if rr := do("POST", "/v1/eval/shadow/promote", "admin-key"); rr.Code != http.StatusOK {
+		t.Fatalf("promote 失败: %d %s", rr.Code, rr.Body.String())
+	}
+	if got := api.deps.Router.Primary().Name(); got != "candidate-model" {
+		t.Fatalf("promote 后主模型应为 candidate-model，实际 %s", got)
+	}
+
+	// 造出低胜率样本：10 条有效记录中 candidate 只赢 2 条
+	now := time.Now()
+	for i := 0; i < 8; i++ {
+		store.Add(&eval.ShadowResult{Time: now, Verdict: eval.VerdictPrimaryBetter})
+	}
+	for i := 0; i < 2; i++ {
+		store.Add(&eval.ShadowResult{Time: now, Verdict: eval.VerdictCandidateBetter})
+	}
+
+	// 触发回滚检查 → 自动切回原主
+	api.maybeShadowRollback()
+	if got := api.deps.Router.Primary().Name(); got != "primary-model" {
+		t.Fatalf("胜率不达标应自动回滚到 primary-model，实际 %s", got)
+	}
+	// 回滚后观察期清空，再次检查不动作
+	api.maybeShadowRollback()
+	if got := api.deps.Router.Primary().Name(); got != "primary-model" {
+		t.Fatalf("回滚后不应再次切换: %s", got)
 	}
 }

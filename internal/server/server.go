@@ -10,6 +10,7 @@ import (
 	"os"
 	"os/signal"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
 
@@ -67,6 +68,10 @@ type Deps struct {
 type APIServer struct {
 	deps  Deps
 	tasks *task.Manager // P12 异步任务管理器（NewAPIServer 时构建）
+
+	// P42 金丝雀自动回滚：记录 promote 时的原主模型名，质量回退时切回。
+	shadowMu   sync.Mutex
+	shadowPrev string
 }
 
 // NewAPIServer 构造。

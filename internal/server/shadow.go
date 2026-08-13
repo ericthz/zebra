@@ -62,6 +62,7 @@ func (s *APIServer) handleRunShadow(w http.ResponseWriter, r *http.Request) {
 	}
 	// 2. 影子对比（同步：评测请求可等待完整结论）
 	res := s.deps.Shadow.Run(r.Context(), sess.User, sess.ID, req.Message, reply, s.deps.Model)
+	s.maybeShadowRollback() // P42：金丝雀质量回退自动切回
 	jsonOK(w, map[string]interface{}{
 		"reply":  reply,
 		"shadow": res,
@@ -134,10 +135,15 @@ func (s *APIServer) handleShadowPromote(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	name := s.deps.Shadow.Candidate.Name()
-	if !s.deps.Router.Promote(name) {
+	prev, ok := s.deps.Router.Promote(name)
+	if !ok {
 		http.Error(w, "候选模型未在路由链中: "+name, http.StatusNotFound)
 		return
 	}
+	// 记录原主模型，供金丝雀自动回滚（P42）
+	s.shadowMu.Lock()
+	s.shadowPrev = prev
+	s.shadowMu.Unlock()
 	// 切换是重要运维动作，必须审计留痕
 	if s.deps.Audit != nil {
 		s.deps.Audit.Log(safety.AuditEvent{
@@ -147,4 +153,40 @@ func (s *APIServer) handleShadowPromote(w http.ResponseWriter, r *http.Request) 
 	}
 	s.deps.Logger.Info("影子候选已提升为主模型", "user", p.User, "model", name)
 	jsonOK(w, map[string]interface{}{"status": "promoted", "primary": name})
+}
+
+// maybeShadowRollback 金丝雀自动回滚（P42）：promote 后持续监控影子统计，
+// 新主（统计中的 candidate）胜率低于阈值时自动切回原主模型。
+func (s *APIServer) maybeShadowRollback() {
+	if s.deps.Shadow == nil {
+		return
+	}
+	s.shadowMu.Lock()
+	prev := s.shadowPrev
+	s.shadowMu.Unlock()
+	if prev == "" {
+		return // 未处于金丝雀观察期
+	}
+	stats := s.deps.Shadow.Store.Stats("")
+	if !eval.RecommendRollback(stats, 10, 60) {
+		return // 胜率达标，继续观察
+	}
+
+	s.shadowMu.Lock()
+	defer s.shadowMu.Unlock()
+	if s.shadowPrev == "" {
+		return // 已被并发回滚
+	}
+	if _, ok := s.deps.Router.Promote(prev); !ok {
+		return
+	}
+	s.shadowPrev = ""
+	s.deps.Logger.Warn("金丝雀自动回滚：新主胜率不达标，已切回原主", "prev", prev)
+	s.deps.Metrics.Inc("shadow:rollback")
+	if s.deps.Audit != nil {
+		s.deps.Audit.Log(safety.AuditEvent{
+			Time: time.Now(), Action: "shadow.rollback", Target: prev,
+			Risk: 2, Success: true,
+		})
+	}
 }

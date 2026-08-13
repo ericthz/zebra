@@ -51,3 +51,19 @@ func TestRecommendSwitch(t *testing.T) {
 		t.Fatalf("全失败应保持主模型: %+v", r)
 	}
 }
+
+// TestRecommendRollback P42 金丝雀回滚：胜率不达标才建议回滚。
+func TestRecommendRollback(t *testing.T) {
+	// 样本达标 + 胜率低 → 回滚
+	if !RecommendRollback(ShadowStats{Total: 10, CandidateBetter: 2, PrimaryBetter: 8}, 10, 60) {
+		t.Fatal("胜率 20% 应建议回滚")
+	}
+	// 胜率达标 → 不回滚
+	if RecommendRollback(ShadowStats{Total: 10, CandidateBetter: 8, PrimaryBetter: 2}, 10, 60) {
+		t.Fatal("胜率 80% 不应回滚")
+	}
+	// 样本不足 → 不回滚（先观望）
+	if RecommendRollback(ShadowStats{Total: 3, CandidateBetter: 1}, 10, 60) {
+		t.Fatal("样本不足不应回滚")
+	}
+}

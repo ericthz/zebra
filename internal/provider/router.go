@@ -8,12 +8,16 @@
 // 本实现保持"顺序 fallback + 主备"骨架，替换策略不影响上层 Agent。
 package provider
 
-import "context"
+import (
+	"context"
+	"sync"
+)
 
 // Router 按顺序持有候选 Provider。
 type Router struct {
 	// chain 按优先级从高到低；index 指向主提供者（也即 chain 首个成功候选）。
 	chain []Provider
+	mu    sync.Mutex // 保护 chain（P42：影子评测异步 promote/回滚并发安全）
 }
 
 // NewRouter 构造。providers 第一个为默认主模型，其余为备选（fallback）。
@@ -26,6 +30,8 @@ func (r *Router) Chain() []Provider { return r.chain }
 
 // Primary 返回主模型（可能为 nil）。
 func (r *Router) Primary() Provider {
+	r.mu.Lock()
+	defer r.mu.Unlock()
 	if len(r.chain) == 0 {
 		return nil
 	}
@@ -33,8 +39,11 @@ func (r *Router) Primary() Provider {
 }
 
 // Promote 灰度切换（P26）：把指定名称的候选 Provider 提升为主模型。
-// 已位于主位返回 true；未找到返回 false。切换即时生效，后续请求走新主。
-func (r *Router) Promote(name string) bool {
+// 返回（被顶替的原主模型名, 是否成功）；已位于主位时 prev 为空。
+// 切换即时生效，后续请求走新主；prev 供金丝雀自动回滚（P42）使用。
+func (r *Router) Promote(name string) (string, bool) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
 	idx := -1
 	for i, p := range r.chain {
 		if p != nil && p.Name() == name {
@@ -43,15 +52,16 @@ func (r *Router) Promote(name string) bool {
 		}
 	}
 	if idx < 0 {
-		return false
+		return "", false
 	}
 	if idx == 0 {
-		return true // 候选已是主模型
+		return "", true // 候选已是主模型
 	}
+	prev := r.chain[0].Name()
 	p := r.chain[idx]
 	r.chain = append(r.chain[:idx], r.chain[idx+1:]...)
 	r.chain = append([]Provider{p}, r.chain...)
-	return true
+	return prev, true
 }
 
 // ChatWithFallback 依次尝试每个候选，直到成功；返回命中的 Provider 供上层观测。

@@ -24,8 +24,9 @@ func TestRouterPromote(t *testing.T) {
 		t.Fatal("初始主模型应为 primary")
 	}
 
-	// 提升候选 → 变为新主，顺序保持其余不变
-	if !r.Promote("candidate") {
+	// 提升候选 → 变为新主，返回被顶替的原主；顺序保持其余不变
+	prev, ok := r.Promote("candidate")
+	if !ok || prev != "primary" {
 		t.Fatal("promote 应成功")
 	}
 	if r.Primary().Name() != "candidate" {
@@ -36,11 +37,11 @@ func TestRouterPromote(t *testing.T) {
 		t.Fatalf("promote 后顺序错误: %s %s %s", chain[0].Name(), chain[1].Name(), chain[2].Name())
 	}
 
-	// 未找到 → false；已为主 → true
-	if r.Promote("ghost") {
+	// 未找到 → ok=false；已为主 → prev 为空
+	if _, ok := r.Promote("ghost"); ok {
 		t.Fatal("不存在的模型不应 promote 成功")
 	}
-	if !r.Promote("candidate") {
-		t.Fatal("已为主模型应返回 true")
+	if prev, ok := r.Promote("candidate"); !ok || prev != "" {
+		t.Fatalf("已为主模型应返回 (\"\", true): prev=%q ok=%v", prev, ok)
 	}
 }

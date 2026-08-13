@@ -76,3 +76,9 @@ func RecommendSwitch(st ShadowStats, minSamples, minWinRate int) SwitchRecommend
 	return SwitchRecommendation{Action: ActionKeepPrimary,
 		Reason: fmt.Sprintf("候选胜率 %.1f%% < %d%%（样本 %d 条）", winRate, minWinRate, judged)}
 }
+
+// RecommendRollback 金丝雀自动回滚（P42）：promote 后样本达标、但新主
+// （统计中的 candidate）胜率低于阈值 → 建议回滚到原主模型。
+func RecommendRollback(st ShadowStats, minSamples, minWinRate int) bool {
+	return RecommendSwitch(st, minSamples, minWinRate).Action == ActionKeepPrimary
+}

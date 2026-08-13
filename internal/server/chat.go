@@ -94,6 +94,7 @@ func (s *APIServer) handleChat(w http.ResponseWriter, r *http.Request) {
 		go func() {
 			res := s.deps.Shadow.Run(context.Background(), sess.User, sess.ID, req.Message, reply, s.deps.Model)
 			s.deps.Logger.Info("shadow sampled", "id", res.ID, "verdict", res.Verdict)
+			s.maybeShadowRollback() // P42 金丝雀自动回滚
 		}()
 	}
 	json.NewEncoder(w).Encode(resp)
