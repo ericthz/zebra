@@ -78,7 +78,7 @@ func (a *Agent) Run(ctx context.Context, userInput string, opts RunOptions) (str
 // run 核心循环。emit 非 nil 时把增量事件推给调用方（流式模式）。
 func (a *Agent) run(ctx context.Context, userInput string, opts RunOptions, emit func(Event)) (string, error) {
 	// P5 语义缓存：命中相似历史问答 → 直接返回，省一次 LLM 调用（省钱省延迟）。
-	// 仅对"纯文本回答"缓存（本函数末尾 Put 时已过滤工具调用场景）。
+	// 仅对"纯文本回答"缓存（toolLoop 返回 toolsUsed=false 时才写入）。
 	if a.cfg.Cache != nil && emit == nil {
 		if answer, ok := a.cfg.Cache.Get(ctx, userInput); ok {
 			return answer, nil
@@ -94,76 +94,8 @@ func (a *Agent) run(ctx context.Context, userInput string, opts RunOptions, emit
 	// 1. 组装消息（记忆 + 历史 + 系统提示 + 当前输入），并做上下文预算裁剪（C11）
 	msgs := a.buildMessages(ctx, userInput)
 
-	// 2. 工具调用循环
-	tools := a.cfg.Tools.ToolsFor(a.role) // 只暴露该角色可见的工具（D20）
-	var finalAnswer string
-	var lastErr error
-	toolsUsed := false // 是否调用过工具（调用了则不写入缓存，防结果过时）
-
-	// 循环检测（B9 健壮性）：连续相同工具调用视为死循环，提前中止。
-	// 小模型容易出现"反复调同一工具不产出"的退化行为。
-	prevCallsKey := ""
-	repeatTurns := 0
-	const maxRepeatTurns = 3
-
-	for turn := 0; turn < a.cfg.MaxTurns; turn++ {
-		select {
-		case <-ctx.Done():
-			return finalAnswer, ctx.Err() // B9 上下文取消/超时传播
-		default:
-		}
-
-		respMsg, err := a.callProvider(ctx, msgs, tools, emit)
-		if err != nil {
-			lastErr = err // 错误由调用方（Run/RunStream）统一处理，避免流式双发
-			break
-		}
-		msgs = append(msgs, respMsg)
-
-		if len(respMsg.ToolCalls) == 0 {
-			finalAnswer = respMsg.Content
-			lastErr = nil
-			break
-		}
-
-		// 循环检测：本轮工具调用组合与上一轮完全相同 → 无进展
-		callsKey := ""
-		for _, tc := range respMsg.ToolCalls {
-			callsKey += tc.Function.Name + "|" + string(tc.Function.Arguments) + ";"
-		}
-		if callsKey == prevCallsKey {
-			repeatTurns++
-		} else {
-			prevCallsKey = callsKey
-			repeatTurns = 0
-		}
-		if repeatTurns >= maxRepeatTurns {
-			lastErr = fmt.Errorf("模型反复调用相同工具，疑似死循环，已中止")
-			break
-		}
-
-		// 并行执行工具调用（P9 fan-out / fan-in）：
-		// 同一轮多个工具互不依赖（如"查北京和上海的天气"），并发执行可大幅
-		// 降低总延迟。用带索引的 results 保证结果按调用顺序回填，对话不失序。
-		// 注意：opts.Confirm 回调必须并发安全（server 层实现为纯函数，安全）。
-		// 生产演化：用信号量限制并发数；工具间有依赖时拆成多轮或引入 DAG。
-		toolsUsed = true
-		results := make([]provider.Message, len(respMsg.ToolCalls))
-		var wg sync.WaitGroup
-		for i, tc := range respMsg.ToolCalls {
-			wg.Add(1)
-			go func(i int, tc provider.ToolCall) {
-				defer wg.Done()
-				results[i] = a.execTool(ctx, tc, opts, emit)
-			}(i, tc)
-		}
-		wg.Wait()
-		msgs = append(msgs, results...)
-	}
-
-	if finalAnswer == "" && lastErr == nil {
-		lastErr = fmt.Errorf("达到最大工具调用轮数 %d，对话未完成", a.cfg.MaxTurns)
-	}
+	// 2. 工具调用循环（抽取为 toolLoop，供规划-执行 P10 复用）
+	finalAnswer, lastErr, toolsUsed := a.toolLoop(ctx, msgs, a.cfg.Tools.ToolsFor(a.role), opts, emit)
 	if lastErr != nil && finalAnswer == "" {
 		return "", lastErr
 	}
@@ -204,6 +136,11 @@ func (a *Agent) run(ctx context.Context, userInput string, opts RunOptions, emit
 	return finalAnswer, nil
 }
 
+// toolLoop 核心工具调用循环（P10 复用单元）：
+// 反复"调 LLM → 若有工具调用则执行 → 再调"直到出纯文本或达到轮数上限。
+// 返回：最终回答、错误、是否调用过工具（供缓存/统计判断）。
+// 注意：本函数【不】写历史/记忆 —— 由调用方决定（Run 会写，规划-执行的
+// 子步骤不写，避免中间过程污染对话）。
 // callProvider 调用 LLM：非流式走路由 fallback；流式优先主模型，失败自动降级非流式。
 func (a *Agent) callProvider(ctx context.Context, msgs []provider.Message, tools []provider.Tool, emit func(Event)) (provider.Message, error) {
 	if emit == nil {
@@ -225,6 +162,77 @@ func (a *Agent) callProvider(ctx context.Context, msgs []provider.Message, tools
 	msg, _, err := a.cfg.Router.ChatWithFallback(ctx, msgs, tools)
 	return msg, err
 }
+
+func (a *Agent) toolLoop(ctx context.Context, msgs []provider.Message, tools []provider.Tool, opts RunOptions, emit func(Event)) (string, error, bool) {
+	var finalAnswer string
+	var lastErr error
+	toolsUsed := false // 是否调用过工具
+
+	// 循环检测（B9 健壮性）：连续相同工具调用视为死循环，提前中止。
+	// 小模型容易出现"反复调同一工具不产出"的退化行为。
+	prevCallsKey := ""
+	repeatTurns := 0
+	const maxRepeatTurns = 3
+
+	for turn := 0; turn < a.cfg.MaxTurns; turn++ {
+		select {
+		case <-ctx.Done():
+			return finalAnswer, ctx.Err(), toolsUsed // B9 上下文取消/超时传播
+		default:
+		}
+
+		respMsg, err := a.callProvider(ctx, msgs, tools, emit)
+		if err != nil {
+			lastErr = err // 错误由调用方统一处理，避免流式双发
+			break
+		}
+		msgs = append(msgs, respMsg)
+
+		if len(respMsg.ToolCalls) == 0 {
+			finalAnswer = respMsg.Content
+			lastErr = nil
+			break
+		}
+
+		// 循环检测：本轮工具调用组合与上一轮完全相同 → 无进展
+		callsKey := ""
+		for _, tc := range respMsg.ToolCalls {
+			callsKey += tc.Function.Name + "|" + string(tc.Function.Arguments) + ";"
+		}
+		if callsKey == prevCallsKey {
+			repeatTurns++
+		} else {
+			prevCallsKey = callsKey
+			repeatTurns = 0
+		}
+		if repeatTurns >= maxRepeatTurns {
+			lastErr = fmt.Errorf("模型反复调用相同工具，疑似死循环，已中止")
+			break
+		}
+
+		// 并行执行工具调用（P9 fan-out / fan-in）：
+		// 同一轮多个工具互不依赖，并发执行可大幅降低总延迟。
+		// 用带索引的 results 保证结果按调用顺序回填，对话不失序。
+		toolsUsed = true
+		results := make([]provider.Message, len(respMsg.ToolCalls))
+		var wg sync.WaitGroup
+		for i, tc := range respMsg.ToolCalls {
+			wg.Add(1)
+			go func(i int, tc provider.ToolCall) {
+				defer wg.Done()
+				results[i] = a.execTool(ctx, tc, opts, emit)
+			}(i, tc)
+		}
+		wg.Wait()
+		msgs = append(msgs, results...)
+	}
+
+	if finalAnswer == "" && lastErr == nil {
+		lastErr = fmt.Errorf("达到最大工具调用轮数 %d，对话未完成", a.cfg.MaxTurns)
+	}
+	return finalAnswer, lastErr, toolsUsed
+}
+
 
 // execTool 单次工具调用的完整处理链（P9 并行执行的最小执行单元）：
 //   解析参数(C13纠错) → 高危二次确认(D20) → 执行 → 注入防护(D17) → 事件上报

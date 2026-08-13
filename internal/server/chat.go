@@ -14,10 +14,11 @@ import (
 
 // ChatRequest 请求体。
 type ChatRequest struct {
-	SessionID     string `json:"session_id,omitempty"` // 空则新建会话
-	Message       string `json:"message"`              // 用户输入
-	Stream        bool   `json:"stream,omitempty"`     // 是否流式
-	ConfirmRisky  bool   `json:"confirm_risky,omitempty"` // D20 高危工具二次确认授权
+	SessionID     string `json:"session_id,omitempty"`     // 空则新建会话
+	Message       string `json:"message"`                  // 用户输入
+	Stream        bool   `json:"stream,omitempty"`         // 是否流式
+	ConfirmRisky  bool   `json:"confirm_risky,omitempty"`  // D20 高危工具二次确认授权
+	Mode          string `json:"mode,omitempty"`           // "plan"=规划-执行编排(P10)；空=普通执行
 }
 
 // ChatResponse 非流式响应。
@@ -45,7 +46,13 @@ func (s *APIServer) handleChat(w http.ResponseWriter, r *http.Request) {
 	if req.ConfirmRisky {
 		opts.Confirm = func(string, map[string]interface{}) bool { return true }
 	}
-	reply, err := ag.Run(ctx, req.Message, opts)
+	// P10 编排模式：先规划再逐步执行；普通模式直接执行
+	var reply string
+	if req.Mode == "plan" {
+		reply, err = ag.PlanAndExecute(ctx, req.Message, opts)
+	} else {
+		reply, err = ag.Run(ctx, req.Message, opts)
+	}
 	if err != nil {
 		s.deps.Logger.Warn("chat failed", "session", sess.ID, "err", err)
 		http.Error(w, "agent error: "+err.Error(), http.StatusInternalServerError)

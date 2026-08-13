@@ -18,6 +18,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
@@ -58,7 +59,8 @@ func main() {
 	keys.Register(server.Principal{Key: userKey, User: "alice", Role: "user", Tenant: "default"})
 
 	// ---- Provider 路由（C15）：主 Ollama（流式）+ 备选 OpenAI 兼容 ----
-	httpCli := provider.NewHTTPClient(15*time.Second, 2, 300*time.Millisecond) // B7
+	// HTTP_TIMEOUT 可调（本地大模型首 token 慢，默认 60s；生产按 SLO 收紧）
+	httpCli := provider.NewHTTPClient(time.Duration(atoiDefault(os.Getenv("HTTP_TIMEOUT"), 60))*time.Second, 1, 300*time.Millisecond) // B7
 	var chain []provider.Provider
 
 	chain = append(chain, &provider.OllamaProvider{
@@ -286,6 +288,18 @@ func envOr(key, def string) string {
 		return v
 	}
 	return def
+}
+
+// atoiDefault 字符串转 int，失败返回默认值。
+func atoiDefault(s string, def int) int {
+	if s == "" {
+		return def
+	}
+	n, err := strconv.Atoi(s)
+	if err != nil {
+		return def
+	}
+	return n
 }
 
 // loadDocs 读取 docs/ 目录下的 .md / .txt 文档（RAG 摄取源）。
