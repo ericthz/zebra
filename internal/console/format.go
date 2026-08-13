@@ -15,8 +15,13 @@ import (
 	"strings"
 )
 
-// displayWidth 近似终端显示宽度：CJK/全角/emoji 计 2，其余计 1。
+// displayWidth 近似终端显示宽度：CJK/全角/emoji 计 2，其余计 1；
+// 自动忽略 ANSI 颜色转义（它们是零宽度控制序列，不应计入占位）。
 func displayWidth(s string) int {
+	return displayWidthRunes(stripANSI(s))
+}
+
+func displayWidthRunes(s string) int {
 	w := 0
 	for _, r := range s {
 		switch {
@@ -45,4 +50,28 @@ func Pad(s string, width int) string {
 	} else {
 		return s + strings.Repeat(" ", width-w)
 	}
+}
+
+// stripANSI 去除 ANSI 转义序列（本包只产生 CSI SGR：ESC [ ... m）。
+// 用于宽度计算与测试断言，避免把控制字节当成可显示字符。
+func stripANSI(s string) string {
+	var b strings.Builder
+	for i := 0; i < len(s); {
+		if s[i] == 0x1b {
+			j := i + 1
+			if j < len(s) && s[j] == '[' {
+				for j < len(s) && s[j] != 'm' {
+					j++
+				}
+				if j < len(s) {
+					j++ // 跳过结尾 'm'
+				}
+			}
+			i = j
+			continue
+		}
+		b.WriteByte(s[i])
+		i++
+	}
+	return b.String()
 }
