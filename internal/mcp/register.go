@@ -27,7 +27,9 @@ func RegisterTools(reg *tool.Registry, logger *slog.Logger) (string, int) {
 	if mode == "" {
 		return mode, 0
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	// 握手超时放宽到 10s：stdio 子进程常是 `go run`（如 cmd/mcp），首启编译
+	// 可能数秒；http 模式下连接失败是即时拒绝，不受此超时影响。
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
 	var client *Client

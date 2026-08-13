@@ -11,6 +11,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"log/slog"
 	"os"
 	"strings"
@@ -29,14 +30,26 @@ import (
 )
 
 func main() {
-	logger := slog.New(slog.NewTextHandler(os.Stderr, nil))
+	// ---- P30 配置加载：先读 .env（决定日志去向与全部配置）----
+	envN, envErr := config.LoadDefault()
+
+	// ---- P34 诊断日志落盘：终端保持干净，依赖探测细节写日志文件 ----
+	// ZEBRA_LOG 指定路径（默认 zebra.log）；ZEBRA_LOG=off 退回 stderr。
+	// MCP/Qdrant 等可选依赖的降级原因不再刷屏，进日志文件便于排查。
+	logWriter, closeLog, logErr := openLogFile(envOr("ZEBRA_LOG", "zebra.log"))
+	if logErr != nil {
+		logWriter, closeLog = os.Stderr, func() {}
+		fmt.Fprintf(os.Stderr, "打开日志文件失败，诊断日志将输出到 stderr: %v\n", logErr)
+	}
+	defer closeLog()
+
+	logger := slog.New(slog.NewTextHandler(logWriter, nil))
 	slog.SetDefault(logger)
 
-	// ---- P30 配置加载：与 cmd/server 一致，启动自动读取 .env ----
-	if n, err := config.LoadDefault(); err != nil {
-		logger.Warn("加载 .env 失败，继续使用系统环境变量/默认值", "err", err)
-	} else if n > 0 {
-		logger.Info("已从 .env 加载配置", "count", n)
+	if envErr != nil {
+		logger.Warn("加载 .env 失败，继续使用系统环境变量/默认值", "err", envErr)
+	} else if envN > 0 {
+		logger.Info("已从 .env 加载配置", "count", envN)
 	}
 
 	// ---- LLM（默认 Ollama 原生，流式）----
@@ -166,4 +179,16 @@ func envOr(k, d string) string {
 		return v
 	}
 	return d
+}
+
+// openLogFile 打开诊断日志文件（追加写）；ZEBRA_LOG=off 时返回 stderr。
+func openLogFile(path string) (io.Writer, func(), error) {
+	if path == "off" {
+		return os.Stderr, func() {}, nil
+	}
+	f, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o644)
+	if err != nil {
+		return nil, nil, err
+	}
+	return f, func() { _ = f.Close() }, nil
 }

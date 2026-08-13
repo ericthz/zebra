@@ -38,7 +38,7 @@
 
 | 维度 | 现状 |
 |---|---|
-| 代码规模 | 133 个 `.go` 文件（含 49 个测试），约 1.5 万行 |
+| 代码规模 | 135 个 `.go` 文件（含 51 个测试），约 1.5 万行 |
 | 包数量 | 26 个（`cmd/` 3 个入口 + `internal/` 22 个 + `test/` 评测） |
 | 运行时依赖 | 零第三方，纯 Go 标准库 |
 | 质量门禁 | `go build` / `go vet` 零警告，`go test ./...` 全绿 |
@@ -170,7 +170,9 @@ go run ./cmd/zebra
 
 > zebra CLI 与 server 使用**同一套装配逻辑**（P32）：自动加载 `.env`，配置了
 > `MCP_MODE` 则挂载 MCP 工具，配置了可用的 `QDRANT_URL` 则启用长期记忆；
-> 启动清单会如实显示这些状态（未就绪时自动降级，不阻断使用）。
+> 启动清单会如实显示这些状态（未就绪时自动降级，不阻断使用）。MCP/Qdrant 等
+> 依赖的探测细节写入诊断日志 `zebra.log`（`ZEBRA_LOG=off` 可退回 stderr），
+> 终端保持干净，只显示清单与对话。
 
 ### 4.3 企业版 HTTP 服务
 
@@ -194,6 +196,10 @@ docker compose up --build
 ```bash
 go run ./cmd/mcp -http :9000
 ```
+
+> 也支持 stdio 模式：`make build` 产出 `bin/zebra-mcp` 后，在 `.env` 配
+> `MCP_MODE=stdio` + `MCP_COMMAND=bin/zebra-mcp`，zebra CLI/server 启动时
+> 自动拉起并挂载其工具（避免 `go run` 每次编译拖慢启动）。
 
 ### 4.6 快速自检
 
@@ -226,7 +232,8 @@ curl :8080/readyz    # ready
 |---|---|---|
 | `ADDR` | `:8080` | 服务监听地址 |
 | `ADMIN_KEY` / `USER_KEY` | `admin-key` / `user-key` | RBAC 两级 API Key（演示默认值） |
-| `MCP_MODE` / `MCP_COMMAND` / `MCP_HTTP_URL` | 空 | MCP 远端工具（stdio/http） |
+| `ZEBRA_LOG` | `zebra.log` | zebra CLI 诊断日志路径（置 `off` 输出到 stderr） |
+| `MCP_MODE` / `MCP_COMMAND` / `MCP_HTTP_URL` | 空 | MCP 远端工具（stdio/http）；stdio 建议指向预编译 `bin/zebra-mcp`（先 `make build`） |
 
 ### 5.3 本地执行沙箱
 
@@ -393,7 +400,7 @@ curl -X POST :8080/v1/user/profile/forget -H "Authorization: Bearer user-key" \
 
 | # | 能力 | 代码 | 说明 |
 |---|---|---|---|
-| E | 单元测试 | `internal/*/*_test.go` | 49 个测试文件，覆盖限流/会话/脱敏/权限/上下文/prompt/RAG/影子/画像等 |
+| E | 单元测试 | `internal/*/*_test.go` | 51 个测试文件，覆盖限流/会话/脱敏/权限/上下文/prompt/RAG/影子/画像等 |
 | E | LLM 评测 | `test/eval/golden_test.go` | 黄金用例回归（`ZEBRA_EVAL=1` 开启），换模型/改 prompt 必跑 |
 | E | 容器化 | `Dockerfile` `docker-compose.yml` | 多阶段构建 + distroless 最小镜像 + 一键依赖编排 |
 | E | CI/CD | `.github/workflows/ci.yml` `Makefile` | 提交自动 build+vet+test；`make eval` 触发真实模型评测 |
@@ -441,6 +448,7 @@ curl -X POST :8080/v1/user/profile/forget -H "Authorization: Bearer user-key" \
 | ✅ P31 | 学习可观测（Observability for Learning：启动能力清单 + 执行痕迹） | `cmd/server/startup.go` `agent.OnTool/OnSkill` `tool.Registry.Names` | 启动打印工具/MCP/技能清单；执行打印工具调用与技能注入 |
 | ✅ P32 | 入口装配一致（CLI/Server 共享 .env/MCP/记忆） | `memory.SetupManager` `mcp.RegisterTools` | zebra CLI 与 server 同一套装配逻辑，状态如实显示 |
 | ✅ P33 | 终端配色（256 色符号，TTY/NO_COLOR 自动开关） | `internal/console/color.go` | TTY 下符号按类别着色；管道/CI 自动无色、对齐不变 |
+| ✅ P34 | zebra 诊断日志落盘（默认 zebra.log，ZEBRA_LOG=off 回退 stderr） | `cmd/zebra/main.go` | 终端无探测告警刷屏；依赖降级原因可查日志 |
 
 **内置工具**：`calculator` / `get_current_datetime` / `generate_random_number` / `convert_units` / `translate_text` /
 `web_search` / `fetch_url`（SSRF 防护） / `list_dir` / `read_file` / `write_file` / `run_command` /
@@ -492,7 +500,7 @@ curl -X POST :8080/v1/user/profile/forget -H "Authorization: Bearer user-key" \
 
 ## 10. 工程化与质量保障
 
-- **单元测试**：49 个测试文件，`go test ./...` 全绿；每个新增功能强制配套测试。
+- **单元测试**：51 个测试文件，`go test ./...` 全绿；每个新增功能强制配套测试。
 - **静态检查**：`go vet ./...` 零警告；提交前 `gofmt` 全量格式化。
 - **学习可观测（P31）**：启动打印能力清单（模型/工具/MCP/技能/记忆/知识库/语音/影子/Redis）；执行阶段打印 `skill.inject` 与 `tool.call` 痕迹（zebra CLI 终端友好输出，server 结构化日志）。
 - **LLM 评测**：`test/eval/golden_test.go` 黄金用例回归（`ZEBRA_EVAL=1` 开启真实模型），换模型/改 prompt 必跑。

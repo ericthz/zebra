@@ -4,6 +4,7 @@
 build:
 	go build -o bin/zebra-server ./cmd/server
 	go build -o bin/zebra ./cmd/zebra
+	go build -o bin/zebra-mcp ./cmd/mcp
 
 run: ## 启动企业版服务
 	go run ./cmd/server

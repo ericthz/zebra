@@ -31,16 +31,21 @@ func SetupManager(logger *slog.Logger) (*Manager, bool) {
 		return mem, false
 	}
 	qmem := NewQdrantMemory(q, envOr("QDRANT_COLLECTION", "zebra_mem"), vectorSize(), NewEmbedderFromEnv())
-	// 就绪探针：Qdrant 不可用时自动降级为仅工作记忆（B7 降级）
+	// 就绪探针：先 ensure 集合（首启自动创建，幂等），再检索验证读写链路；
+	// Qdrant 不可用（连接失败/嵌入服务不可用）时自动降级为仅工作记忆（B7）。
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
+	if err := qmem.ensure(ctx); err != nil {
+		logger.Warn("Qdrant 不可用，降级为仅工作记忆", "err", err)
+		return mem, false
+	}
 	_, perr := qmem.Retrieve(ctx, "ping", 1)
 	if perr == nil {
 		mem = NewManager(working, qmem)
 		logger.Info("长期记忆已启用", "qdrant", q, "collection", envOr("QDRANT_COLLECTION", "zebra_mem"))
 		return mem, true
 	}
-	logger.Warn("Qdrant 不可用，降级为仅工作记忆", "err", perr)
+	logger.Warn("Qdrant 检索探针失败，降级为仅工作记忆", "err", perr)
 	return mem, false
 }
 

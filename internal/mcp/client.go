@@ -10,6 +10,7 @@ import (
 	"io"
 	"net/http"
 	"os/exec"
+	"strings"
 	"sync"
 	"time"
 )
@@ -61,6 +62,11 @@ func (t *stdioTransport) Send(ctx context.Context, req *Request) (*Response, err
 	}
 	if _, err := fmt.Fprintf(t.stdin, "%s\n", data); err != nil {
 		return nil, err
+	}
+	// 通知类请求（notifications/*）服务器不返回响应：写后即返回。
+	// 若也阻塞读，会占住互斥锁直到超时，饿死后续请求（P34 修复的 stdio 竞态）。
+	if strings.HasPrefix(req.Method, "notifications/") {
+		return &Response{JSONRPC: "2.0"}, nil
 	}
 	line, err := readLineCtx(ctx, t.reader)
 	if err != nil {
