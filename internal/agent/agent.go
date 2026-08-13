@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/ericthz/zebra/internal/cache"
 	"github.com/ericthz/zebra/internal/memory"
@@ -37,6 +38,8 @@ type Config struct {
 	Skills     *skill.Registry                             // 技能注册表（P1，nil 则关闭技能检索）
 	Cache      *cache.SemanticCache                        // 语义缓存（P5，nil 则关闭）
 	RAG        *rag.Index                                  // 知识库检索（P8，nil 则关闭 RAG）
+	Profile    *memory.ProfileStore                        // 用户画像（P22，nil 则关闭）
+	ProfileTTL time.Duration                               // 画像事实保鲜期（P22，<=0 永不过期）
 }
 
 // Agent 单个会话的 Agent 实例。
@@ -111,6 +114,14 @@ func (a *Agent) run(ctx context.Context, userInput string, opts RunOptions, emit
 	// 4. 记忆（C12 分层）
 	if a.cfg.Mem != nil {
 		a.cfg.Mem.Remember(a.sessionID, userInput, finalAnswer)
+	}
+
+	// 4.1 画像学习（P22）：从用户输入抽取事实入库（规则抽取，零成本）。
+	// 只从用户输入抽取（模型回答含事实的置信度低）；生产可换 LLM 抽取器。
+	if a.cfg.Profile != nil {
+		if facts := memory.ExtractFacts(userInput); len(facts) > 0 {
+			a.cfg.Profile.Learn(a.user, facts, time.Now())
+		}
 	}
 
 	// 5. 输出审核（D18）
@@ -281,6 +292,19 @@ func (a *Agent) buildMessages(ctx context.Context, userInput string) []provider.
 	if a.cfg.Mem != nil {
 		if items := a.cfg.Mem.Recall(ctx, a.sessionID, userInput, 3); len(items) > 0 {
 			msgs = append(msgs, provider.Message{Role: "system", Content: "相关记忆：\n" + strings.Join(items, "\n")})
+		}
+	}
+
+	// 用户画像注入（P22）：把已学到的用户事实作为 system 消息带给模型，
+	// 让回答"记得"用户偏好（少问一遍）；TTL 之外的事实自动不参与注入。
+	if a.cfg.Profile != nil {
+		if facts := a.cfg.Profile.FactsFor(a.user, time.Now(), a.cfg.ProfileTTL); len(facts) > 0 {
+			var pf strings.Builder
+			pf.WriteString("以下是该用户的已知画像事实（回答时自然运用，不要复述给用户）：\n")
+			for _, f := range facts {
+				fmt.Fprintf(&pf, "- %s: %s\n", f.Key, f.Value)
+			}
+			msgs = append(msgs, provider.Message{Role: "system", Content: pf.String()})
 		}
 	}
 

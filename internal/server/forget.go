@@ -4,6 +4,7 @@
 //  1. 会话：删除该用户全部会话（含历史）
 //  2. 工作记忆：清空这些会话的进程内记忆
 //  3. 长期记忆：清空该租户的向量集合（Qdrant）
+//  4. 用户画像：删除该用户全部画像事实（P22）
 //
 // 生产演化：还需清理日志/审计/缓存/账单中的个人数据，并落"删除请求"审计。
 package server
@@ -44,7 +45,12 @@ func (s *APIServer) handleForget(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// 4. 审计删除请求（删除操作本身必须留痕，供合规追溯）
+	// 4. 删除用户画像（P22 扩展被遗忘权覆盖范围）
+	if s.deps.Profile != nil {
+		s.deps.Profile.ForgetUser(p.User)
+	}
+
+	// 5. 审计删除请求（删除操作本身必须留痕，供合规追溯）
 	if s.deps.Audit != nil {
 		s.deps.Audit.Log(safety.AuditEvent{
 			Time: time.Now(), User: p.User, Role: p.Role,

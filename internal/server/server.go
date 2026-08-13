@@ -55,6 +55,8 @@ type Deps struct {
 	Feedback   *feedback.InMemoryStore // P16 反馈闭环（nil 关闭反馈 API）
 	Reload     func() error            // P18 配置热更新（nil 关闭重载端点）
 	Shadow     *eval.ShadowEvaluator   // P21 在线评测/影子模式（nil 关闭）
+	Profile    *memory.ProfileStore    // P22 用户画像（nil 关闭画像 API 与注入）
+	ProfileTTL time.Duration           // P22 画像事实保鲜期（<=0 永不过期）
 }
 
 // APIServer HTTP 服务。
@@ -96,6 +98,8 @@ func (s *APIServer) buildAgent(user, role, sessionID string, hist *[]provider.Me
 		Skills:     s.deps.Skills,
 		Cache:      s.deps.Cache,
 		RAG:        s.deps.RAG,
+		Profile:    s.deps.Profile,
+		ProfileTTL: s.deps.ProfileTTL,
 		Model:      s.deps.Model,
 		OnUsage: func(model string, in, out int) { // B5 用量指标 + P5 成本归因
 			s.deps.Metrics.Inc("tokens_in:" + itoa(in/100))
@@ -134,6 +138,10 @@ func (s *APIServer) Handler() http.Handler {
 	if s.deps.Shadow != nil {
 		mux.HandleFunc("POST /v1/eval/shadow", s.handleRunShadow) // P21 影子评测
 		mux.HandleFunc("GET /v1/eval/shadow", s.handleListShadow) // P21 影子记录
+	}
+	if s.deps.Profile != nil {
+		mux.HandleFunc("GET /v1/user/profile", s.handleGetProfile)            // P22 画像查看
+		mux.HandleFunc("POST /v1/user/profile/forget", s.handleForgetProfile) // P22 精细遗忘
 	}
 	mux.HandleFunc("/", uiHandler()) // P14 前端 Web UI（公开）
 	mux.HandleFunc("/healthz", HealthzHandler())

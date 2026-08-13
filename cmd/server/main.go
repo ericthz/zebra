@@ -213,6 +213,20 @@ func main() {
 	taskStore := task.NewInMemoryStore()                  // P12 异步任务存储（生产换 Redis/DB）
 	fbStore := feedback.NewInMemoryStore()                // P16 反馈闭环存储
 
+	// ---- P22 用户画像：对话自动学习 + 遗忘策略（TTL 保鲜 + 容量治理）----
+	profileStore := memory.NewProfileStore()
+	profilePolicy := &memory.ForgetPolicy{
+		TTL:             time.Duration(atoiDefault(os.Getenv("PROFILE_TTL_HOURS"), 24*30)) * time.Hour, // 默认 30 天保鲜
+		MaxFactsPerUser: 50,
+		OnForget: func(user, key string) {
+			logger.Info("画像事实被遗忘（容量裁剪）", "user", user, "key", key)
+		},
+	}
+	// 启动时跑一次全量遗忘清理（生产可接定时任务）
+	if n := profilePolicy.Apply(profileStore, time.Now()); n > 0 {
+		logger.Info("画像遗忘清理完成", "forgotten", n)
+	}
+
 	// ---- P13 多 Agent Supervisor：数据/知识/常规 三个专业 worker ----
 	var supervisorInst *supervisor.Supervisor
 	if router != nil && prompts != nil {
@@ -313,6 +327,8 @@ func main() {
 		Feedback:   fbStore,
 		Reload:     reload,
 		Shadow:     shadowEval,
+		Profile:    profileStore,
+		ProfileTTL: profilePolicy.TTL,
 	})
 
 	addr := envOr("ADDR", ":8080")
