@@ -106,6 +106,23 @@
 
 ---
 
+### ✅ P8 — RAG 文档库（知识接入，防幻觉）
+- [x] `internal/rag/`：分块器(段落优先+重叠) + 向量索引(AddDocument/Retrieve)
+- [x] Agent 注入：检索命中片段带【来源】标记（接地/引用）
+- [x] server 加载 docs/ 目录；示例文档 zebra.md / agent-design.md
+- [x] 单测 + 端到端（'zebra 用什么语言写'→基于知识库准确回答，无幻觉）
+
+### ✅ P9 — 并行工具调用（fan-out / fan-in）
+- [x] 工具循环改为并发执行（goroutine + WaitGroup），结果按序回填不失序
+- [x] execTool 抽为并行执行单元（C13/D20/D17 全链路）
+- [x] 单测：最大并发=2、总耗时显著低于串行、调用顺序保持
+
+### ✅ P10 — 规划-执行编排（Plan-then-Execute）
+- [x] agent/plan.go：plan(拆解 JSON) → executeStep(逐部执行，复用 toolLoop) → 汇总
+- [x] 子步骤不写历史/记忆（不污染对话）
+- [x] API：mode="plan" 触发；HTTP_TIMEOUT 可配置
+- [x] 单测 + 端到端（规划 2 步：计算 123*7=861 + 时间 → 汇总）
+
 ## 3. 设计基调（每个功能都必须遵守）
 
 1. **纯 Go 标准库**，零第三方运行时依赖

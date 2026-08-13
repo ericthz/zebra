@@ -1,9 +1,10 @@
 # zebra — AI Agent 企业架构参考实现
 
 > 一个把 **企业级 AI Agent 的全部横切能力** 落到代码里的学习项目。
-> 纯 Go 标准库（零第三方运行时依赖），覆盖**两轮架构**：
+> 纯 Go 标准库（零第三方运行时依赖），覆盖**三轮架构**：
 > 第一轮 A~E 企业骨架（服务化/可靠性/安全/可观测）；
-> 第二轮 P1~P6 对标成熟 Agent 的能力补全（技能/本地执行/质量闭环/主动出站/成本治理/安全加固）。
+> 第二轮 P1~P6 对标成熟 Agent 的能力补全（技能/本地执行/质量闭环/主动出站/成本治理/安全加固）；
+> 第三轮 P8~P10 智能体纵深（RAG 知识库 / 并行工具调用 / 规划-执行编排）。
 > **每个能力都有真实可运行的最小实现 + 详细中文注释 + 端到端验证**，刻意保持精简、可逐行读懂。
 
 这不是一个"能直接上线的产品"，而是一张**可对照学习的架构地图**：
@@ -240,6 +241,9 @@ curl :8080/metrics
 | ✅ P4 | **主动出站**（Webhook 通知 + 定时调度） | `internal/notify/` `internal/schedule/` | 对话完成自动推送 task.complete |
 | ✅ P5 | **成本治理**（成本归因 + 语义缓存） | `internal/cost/` `internal/cache/` | 同问题 23.8s(LLM) → 21ms(缓存) |
 | ✅ P6 | **安全加固**（SSRF + 租户凭据 + 被遗忘权） | `internal/safety/ssrf.go` `internal/tool/fetch.go` `internal/server/forget.go` | DELETE 后旧会话 401 失效 |
+| ✅ P8 | **RAG 知识库**（分块/向量索引/检索/注入/引用） | `internal/rag/` `docs/` | 问知识库问题→基于资料准确回答，无幻觉 |
+| ✅ P9 | **并行工具调用**（fan-out/fan-in） | `internal/agent/agent.go` | 双工具并发执行，耗时减半、结果有序 |
+| ✅ P10 | **规划-执行编排**（Plan-then-Execute） | `internal/agent/plan.go` | mode=plan 自动拆解→逐步执行→汇总 |
 
 **新增工具**：`list_dir` / `read_file` / `write_file` / `run_command`（本地执行，P2）、`fetch_url`（SSRF 防护，P6）。
 
