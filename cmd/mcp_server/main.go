@@ -31,7 +31,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/ericthz/aidemo/mcp"
+	"github.com/ericthz/zebra/mcp"
 )
 
 // -------------------- 工具函数实现 --------------------

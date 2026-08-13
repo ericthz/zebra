@@ -6,10 +6,10 @@ import (
 	"os"
 	"strings"
 
-	"github.com/ericthz/aidemo/agent"
-	"github.com/ericthz/aidemo/config"
-	"github.com/ericthz/aidemo/provider"
-	"github.com/ericthz/aidemo/tool"
+	"github.com/ericthz/zebra/agent"
+	"github.com/ericthz/zebra/config"
+	"github.com/ericthz/zebra/provider"
+	"github.com/ericthz/zebra/tool"
 )
 
 func main() {

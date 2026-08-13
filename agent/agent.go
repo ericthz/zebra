@@ -6,9 +6,9 @@ import (
 	"log"
 	"strings"
 
-	"github.com/ericthz/aidemo/memory"
-	"github.com/ericthz/aidemo/provider"
-	"github.com/ericthz/aidemo/tool"
+	"github.com/ericthz/zebra/memory"
+	"github.com/ericthz/zebra/provider"
+	"github.com/ericthz/zebra/tool"
 )
 
 // Agent 管理对话上下文、工具调用与长期记忆

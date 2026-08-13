@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/ericthz/aidemo/provider"
+	"github.com/ericthz/zebra/provider"
 )
 
 /*
