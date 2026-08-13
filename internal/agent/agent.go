@@ -10,6 +10,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"sync"
 
 	"github.com/ericthz/zebra/internal/cache"
 	"github.com/ericthz/zebra/internal/memory"
@@ -141,30 +142,23 @@ func (a *Agent) run(ctx context.Context, userInput string, opts RunOptions, emit
 			break
 		}
 
-		// 执行工具调用
+		// 并行执行工具调用（P9 fan-out / fan-in）：
+		// 同一轮多个工具互不依赖（如"查北京和上海的天气"），并发执行可大幅
+		// 降低总延迟。用带索引的 results 保证结果按调用顺序回填，对话不失序。
+		// 注意：opts.Confirm 回调必须并发安全（server 层实现为纯函数，安全）。
+		// 生产演化：用信号量限制并发数；工具间有依赖时拆成多轮或引入 DAG。
 		toolsUsed = true
-		for _, tc := range respMsg.ToolCalls {
-			args, perr := tool.ParseArguments(tc.Function.Arguments)
-			if perr != nil {
-				// C13 纠错：参数解析失败直接作为错误反馈给模型重试
-				msgs = append(msgs, a.toolResult(tc, fmt.Sprintf("参数解析错误: %v", perr), true))
-				continue
-			}
-
-			// D20 高危二次确认：拒绝则把"用户拒绝"反馈给模型，不让其再次尝试
-			if opts.Confirm != nil && !opts.Confirm(tc.Function.Name, args) {
-				msgs = append(msgs, a.toolResult(tc, "用户拒绝执行该工具调用，请勿重试并改用其他方式回答", true))
-				continue
-			}
-			result, terr := a.cfg.Tools.Execute(ctx, tc.Function.Name, args, a.user, a.role, opts.Confirm != nil)
-			if terr != nil {
-				result = fmt.Sprintf("工具执行错误: %v", terr)
-			}
-			msgs = append(msgs, a.toolResult(tc, result, false))
-			if emit != nil {
-				emit(Event{Type: EventTool, Name: tc.Function.Name, Args: args})
-			}
+		results := make([]provider.Message, len(respMsg.ToolCalls))
+		var wg sync.WaitGroup
+		for i, tc := range respMsg.ToolCalls {
+			wg.Add(1)
+			go func(i int, tc provider.ToolCall) {
+				defer wg.Done()
+				results[i] = a.execTool(ctx, tc, opts, emit)
+			}(i, tc)
 		}
+		wg.Wait()
+		msgs = append(msgs, results...)
 	}
 
 	if finalAnswer == "" && lastErr == nil {
@@ -230,6 +224,31 @@ func (a *Agent) callProvider(ctx context.Context, msgs []provider.Message, tools
 	// 降级：非流式 fallback（B7 降级）
 	msg, _, err := a.cfg.Router.ChatWithFallback(ctx, msgs, tools)
 	return msg, err
+}
+
+// execTool 单次工具调用的完整处理链（P9 并行执行的最小执行单元）：
+//   解析参数(C13纠错) → 高危二次确认(D20) → 执行 → 注入防护(D17) → 事件上报
+// 返回要追加进对话的工具结果消息。
+func (a *Agent) execTool(ctx context.Context, tc provider.ToolCall, opts RunOptions, emit func(Event)) provider.Message {
+	args, perr := tool.ParseArguments(tc.Function.Arguments)
+	if perr != nil {
+		// C13 纠错：参数解析失败直接作为错误反馈给模型重试
+		return a.toolResult(tc, fmt.Sprintf("参数解析错误: %v", perr), true)
+	}
+
+	// D20 高危二次确认：拒绝则把"用户拒绝"反馈给模型，不让其再次尝试
+	if opts.Confirm != nil && !opts.Confirm(tc.Function.Name, args) {
+		return a.toolResult(tc, "用户拒绝执行该工具调用，请勿重试并改用其他方式回答", true)
+	}
+
+	result, terr := a.cfg.Tools.Execute(ctx, tc.Function.Name, args, a.user, a.role, opts.Confirm != nil)
+	if terr != nil {
+		result = fmt.Sprintf("工具执行错误: %v", terr)
+	}
+	if emit != nil {
+		emit(Event{Type: EventTool, Name: tc.Function.Name, Args: args})
+	}
+	return a.toolResult(tc, result, false)
 }
 
 func (a *Agent) toolResult(tc provider.ToolCall, content string, isErr bool) provider.Message {
