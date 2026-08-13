@@ -134,16 +134,17 @@ func main() {
 	prompts.Register(&prompt.Template{Name: "assistant", Version: "v1", Text: `你是 zebra AI 助手，可以调用工具。回答简洁准确。角色：{role}。`})
 
 	ag := agent.New(agent.Config{
-		Router:     router,
-		Tools:      reg,
-		Prompts:    prompts,
-		Mem:        mem,
-		Window:     &agent.ContextWindow{MaxTokens: 4000, Summarizer: agent.PrefixSummarizer{MaxChars: 600}},
-		Moderator:  safety.NewKeywordModerator(),
-		MaxTurns:   5,
-		PromptName: "assistant",
-		Skills:     skillReg,
-		RAG:        ragIndex,
+		Router:       router,
+		Tools:        reg,
+		Prompts:      prompts,
+		Mem:          mem,
+		Window:       &agent.ContextWindow{MaxTokens: 4000, Summarizer: agent.PrefixSummarizer{MaxChars: 600}},
+		Moderator:    safety.NewKeywordModerator(),
+		MaxTurns:     5,
+		PromptName:   "assistant",
+		Skills:       skillReg,
+		RAG:          ragIndex,
+		RewriteQuery: os.Getenv("ZEBRA_QUERY_REWRITE") == "1", // P48 查询改写
 		// P31 执行痕迹：工具调用与技能注入在终端可见，学习 Agent 行为
 		OnTool: func(name string, args map[string]interface{}, ok bool, err error) {
 			detail, _ := json.Marshal(args)

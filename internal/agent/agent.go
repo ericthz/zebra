@@ -25,24 +25,25 @@ import (
 
 // Config Agent 构造参数。
 type Config struct {
-	Router     *provider.Router                                                   // C15 多模型路由（含 fallback）
-	Tools      *tool.Registry                                                     // D20 工具权限白名单所在
-	Prompts    *prompt.Registry                                                   // C16 系统提示模板
-	Mem        *memory.Manager                                                    // C12 分层记忆
-	Window     *ContextWindow                                                     // C11 上下文工程（nil 则关闭预算控制）
-	Moderator  safety.Moderator                                                   // D18 内容审核（nil 则跳过）
-	MaxTurns   int                                                                // 工具调用最大轮数
-	PromptName string                                                             // 使用的系统提示模板名
-	Model      string                                                             // 当前模型名（用于成本归因 P5）
-	OnUsage    func(model string, inTokens, outTokens int)                        // B5/P5 用量与成本钩子
-	Skills     *skill.Registry                                                    // 技能注册表（P1，nil 则关闭技能检索）
-	Cache      *cache.SemanticCache                                               // 语义缓存（P5，nil 则关闭）
-	RAG        *rag.Index                                                         // 知识库检索（P8，nil 则关闭 RAG）
-	Profile    *memory.ProfileStore                                               // 用户画像（P22，nil 则关闭）
-	ProfileTTL time.Duration                                                      // 画像事实保鲜期（P22，<=0 永不过期）
-	Extractor  memory.Extractor                                                   // 画像抽取器（P27，nil 用规则抽取）
-	OnSkill    func(names []string)                                               // 技能注入钩子（P31，nil 则关闭）
-	OnTool     func(name string, args map[string]interface{}, ok bool, err error) // 工具调用钩子（P31）
+	Router       *provider.Router                                                   // C15 多模型路由（含 fallback）
+	Tools        *tool.Registry                                                     // D20 工具权限白名单所在
+	Prompts      *prompt.Registry                                                   // C16 系统提示模板
+	Mem          *memory.Manager                                                    // C12 分层记忆
+	Window       *ContextWindow                                                     // C11 上下文工程（nil 则关闭预算控制）
+	Moderator    safety.Moderator                                                   // D18 内容审核（nil 则跳过）
+	MaxTurns     int                                                                // 工具调用最大轮数
+	PromptName   string                                                             // 使用的系统提示模板名
+	Model        string                                                             // 当前模型名（用于成本归因 P5）
+	OnUsage      func(model string, inTokens, outTokens int)                        // B5/P5 用量与成本钩子
+	Skills       *skill.Registry                                                    // 技能注册表（P1，nil 则关闭技能检索）
+	Cache        *cache.SemanticCache                                               // 语义缓存（P5，nil 则关闭）
+	RAG          *rag.Index                                                         // 知识库检索（P8，nil 则关闭 RAG）
+	Profile      *memory.ProfileStore                                               // 用户画像（P22，nil 则关闭）
+	ProfileTTL   time.Duration                                                      // 画像事实保鲜期（P22，<=0 永不过期）
+	Extractor    memory.Extractor                                                   // 画像抽取器（P27，nil 用规则抽取）
+	OnSkill      func(names []string)                                               // 技能注入钩子（P31，nil 则关闭）
+	OnTool       func(name string, args map[string]interface{}, ok bool, err error) // 工具调用钩子（P31）
+	RewriteQuery bool                                                               // 查询改写（P48，false 则关闭）
 }
 
 // Agent 单个会话的 Agent 实例。
@@ -292,6 +293,10 @@ func (a *Agent) toolResult(tc provider.ToolCall, content string, isErr bool) pro
 
 // buildMessages 组装发送给模型的完整消息：系统提示 + 记忆 + 历史 + 当前输入。
 func (a *Agent) buildMessages(ctx context.Context, userInput string) []provider.Message {
+	// 查询改写（P48）：先改写问题，再用于技能/RAG 检索与最终消息
+	if a.cfg.RewriteQuery {
+		userInput = a.rewriteForRetrieval(ctx, userInput)
+	}
 	var msgs []provider.Message
 
 	// 系统提示（C16 模板渲染，含角色信息）

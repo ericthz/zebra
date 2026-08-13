@@ -96,21 +96,22 @@ func NewAPIServer(deps Deps) *APIServer {
 // 每 Agent 共享只读依赖；历史按会话/任务隔离（A4）。
 func (s *APIServer) buildAgent(user, role, sessionID string, hist *[]provider.Message) *agent.Agent {
 	ag := agent.New(agent.Config{
-		Router:     s.deps.Router,
-		Tools:      s.deps.Tools,
-		Prompts:    s.deps.Prompts,
-		Mem:        s.deps.Mem,
-		Window:     s.deps.Window,
-		Moderator:  s.deps.Moderator,
-		MaxTurns:   s.deps.MaxTurns,
-		PromptName: s.deps.PromptName,
-		Skills:     s.deps.Skills,
-		Cache:      s.deps.Cache,
-		RAG:        s.deps.RAG,
-		Profile:    s.deps.Profile,
-		ProfileTTL: s.deps.ProfileTTL,
-		Extractor:  s.deps.Extractor,
-		Model:      s.deps.Model,
+		Router:       s.deps.Router,
+		Tools:        s.deps.Tools,
+		Prompts:      s.deps.Prompts,
+		Mem:          s.deps.Mem,
+		Window:       s.deps.Window,
+		Moderator:    s.deps.Moderator,
+		MaxTurns:     s.deps.MaxTurns,
+		PromptName:   s.deps.PromptName,
+		Skills:       s.deps.Skills,
+		Cache:        s.deps.Cache,
+		RAG:          s.deps.RAG,
+		Profile:      s.deps.Profile,
+		ProfileTTL:   s.deps.ProfileTTL,
+		Extractor:    s.deps.Extractor,
+		Model:        s.deps.Model,
+		RewriteQuery: os.Getenv("ZEBRA_QUERY_REWRITE") == "1", // P48 查询改写
 		OnSkill: func(names []string) { // P31：技能注入可观测
 			s.deps.Logger.Info("skill.inject", "session", sessionID, "user", user,
 				"skills", strings.Join(names, ","))
