@@ -50,11 +50,12 @@ func TestPrintInventory(t *testing.T) {
 	for _, want := range []string{
 		"zebra 启动清单",
 		": 2 个",
-		"calculator", // 工具子项逐行
-		"fetch_url",
+		"calculator — test", // 工具子项：名称 — 描述
+		"fetch_url — test",
 		"模式=http · 已连接 3 个工具",
 		"技能",
-		"report-sop(写研究报告)",
+		"report-sop — 写研究报告",
+		"data-check — 数据核对",
 		": 2 篇文档 / 12 块",
 		": 已启用（ASR/TTS）",
 		"candidate=qwen2.5:7b",
@@ -65,7 +66,7 @@ func TestPrintInventory(t *testing.T) {
 		}
 	}
 
-	// 对齐：工具/技能子项起点显示列 == 父行冒号显示列
+	// 对齐：子项树形分支（├/└）起点显示列 == 父行冒号显示列
 	// （用 console.Width 按显示宽度换算，避免多字节 UTF-8 的字节列干扰）
 	colonCol := -1
 	for _, l := range strings.Split(out, "\n") {
@@ -80,8 +81,12 @@ func TestPrintInventory(t *testing.T) {
 	for _, l := range strings.Split(out, "\n") {
 		for _, item := range []string{"calculator", "report-sop"} {
 			if i := strings.Index(l, item); i >= 0 {
-				if got := console.Width(l[:i]); got != colonCol {
-					t.Fatalf("子项 %q 起点显示列 %d 应与冒号列 %d 对齐: %q", item, got, colonCol, l)
+				bi := strings.IndexAny(l, "├└")
+				if bi < 0 {
+					t.Fatalf("子项行缺少分支符: %q", l)
+				}
+				if got := console.Width(l[:bi]); got != colonCol {
+					t.Fatalf("子项 %q 分支起点显示列 %d 应与冒号列 %d 对齐: %q", item, got, colonCol, l)
 				}
 			}
 		}

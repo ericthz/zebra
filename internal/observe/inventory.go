@@ -18,9 +18,18 @@ import (
 // labelWidth 标签列定宽（显示宽度）。
 const labelWidth = 16
 
-// childIndent 子项缩进：父行 "├── "(4 格) + 标签(labelWidth) 后冒号位于第
-// 4+labelWidth+1 列；子项用 "│" + (3+labelWidth) 个空格，使内容起点与冒号同列。
-var childIndent = "│" + strings.Repeat(" ", 3+labelWidth)
+// childTrunk 子项树干：父行 "├── "(4 格) + 标签(labelWidth) 后冒号位于第
+// 4+labelWidth+1 列；子项用 "│"(树干延续) + (3+labelWidth) 个空格，使
+// 分支（├─/└─）从冒号列开始向下展开，与父级树形组织一致。
+var childTrunk = "│" + strings.Repeat(" ", 3+labelWidth)
+
+// branch 返回树形分支：非末项用 ├─，末项用 └─。
+func branch(i, total int) string {
+	if i == total-1 {
+		return "└─ "
+	}
+	return "├─ "
+}
 
 // Info 启动清单所需信息（由 cmd/zebra、cmd/server 装配后传入）。
 type Info struct {
@@ -51,14 +60,13 @@ func PrintInventory(w io.Writer, info Info) {
 		fmt.Fprintf(w, "├── %s: %s\n", lbl("◆", console.ColorModel, "模型"), strings.Join(info.Models, " → "))
 	}
 
-	// 2. 工具（父级：数量；子项：每个工具逐行，起点与冒号对齐）
+	// 2. 工具（父级：数量；子项：树形分支逐行，名称 + 描述）
 	if info.Tools != nil {
 		names := info.Tools.Names()
 		fmt.Fprintf(w, "├── %s: %d 个\n", lbl("▲", console.ColorTool, "工具"), len(names))
-		if len(names) > 0 {
-			for _, n := range names {
-				fmt.Fprintf(w, "%s%s\n", childIndent, n)
-			}
+		descs := info.Tools.Descriptions()
+		for i, n := range names {
+			fmt.Fprintf(w, "%s%s%s — %s\n", childTrunk, branch(i, len(names)), n, descs[n])
 		}
 	}
 
@@ -69,13 +77,13 @@ func PrintInventory(w io.Writer, info Info) {
 		fmt.Fprintf(w, "├── %s: 模式=%s · 已连接 %d 个工具\n", lbl("●", console.ColorMCP, "MCP"), info.MCPMode, info.MCPCount)
 	}
 
-	// 4. 技能（父级：数量；子项：每个技能名称(描述) 逐行，起点与冒号对齐）
+	// 4. 技能（父级：数量；子项：树形分支逐行，名称 — 描述）
 	if len(info.Skills) == 0 {
 		fmt.Fprintf(w, "├── %s: 无（skills/ 目录为空或加载失败）\n", lbl("■", console.ColorSkill, "技能"))
 	} else {
 		fmt.Fprintf(w, "├── %s: %d 个\n", lbl("■", console.ColorSkill, "技能"), len(info.Skills))
-		for _, sk := range info.Skills {
-			fmt.Fprintf(w, "%s%s(%s)\n", childIndent, sk.Name, sk.Description)
+		for i, sk := range info.Skills {
+			fmt.Fprintf(w, "%s%s%s — %s\n", childTrunk, branch(i, len(info.Skills)), sk.Name, sk.Description)
 		}
 	}
 

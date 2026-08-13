@@ -56,6 +56,17 @@ func (r *Registry) Names() []string {
 	return out
 }
 
+// Descriptions 返回 工具名 → 描述 的映射（供启动清单逐项展示工具说明）。
+func (r *Registry) Descriptions() map[string]string {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	out := make(map[string]string, len(r.tools))
+	for n, t := range r.tools {
+		out[n] = t.Description()
+	}
+	return out
+}
+
 // AllowTool 授予某角色使用某工具的权限。默认仅 admin 全开。
 func (r *Registry) AllowTool(role, name string) {
 	r.mu.Lock()

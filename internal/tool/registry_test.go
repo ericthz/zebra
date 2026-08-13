@@ -111,3 +111,16 @@ func TestRegistryNames(t *testing.T) {
 		t.Fatalf("Names 数量错误: %v", names)
 	}
 }
+
+// TestRegistryDescriptions 启动清单需要工具名 → 描述映射。
+func TestRegistryDescriptions(t *testing.T) {
+	r := NewRegistry()
+	r.Register(fakeTool{})
+	descs := r.Descriptions()
+	if descs["fake"] != "test tool" {
+		t.Fatalf("描述映射错误: %v", descs)
+	}
+	if len(descs) != 1 {
+		t.Fatalf("描述数量错误: %v", descs)
+	}
+}
