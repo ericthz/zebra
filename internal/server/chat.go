@@ -19,7 +19,7 @@ type ChatRequest struct {
 	Message      string `json:"message"`                 // 用户输入
 	Stream       bool   `json:"stream,omitempty"`        // 是否流式
 	ConfirmRisky bool   `json:"confirm_risky,omitempty"` // D20 高危工具二次确认授权
-	Mode         string `json:"mode,omitempty"`          // "plan"=规划-执行编排(P10)；空=普通执行
+	Mode         string `json:"mode,omitempty"`          // "plan"=规划-执行(P10)；"reflect"=反思(P40)；空=普通执行
 	Shadow       bool   `json:"shadow,omitempty"`        // P21 显式触发影子评测（默认按采样率）
 }
 
@@ -66,6 +66,12 @@ func (s *APIServer) handleChat(w http.ResponseWriter, r *http.Request) {
 			workerName = w.Name
 		}
 		s.deps.Logger.Info("supervisor 路由", "worker", workerName)
+	case "reflect":
+		// P40 反思：先正常回答，再让模型批判-改进一轮（失败自动回退原回答）
+		reply, err = ag.Run(ctx, req.Message, opts)
+		if err == nil {
+			reply, err = ag.Reflect(ctx, req.Message, reply)
+		}
 	default:
 		reply, err = ag.Run(ctx, req.Message, opts)
 	}
