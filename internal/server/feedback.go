@@ -14,6 +14,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/ericthz/zebra/internal/eval"
 	"github.com/ericthz/zebra/internal/feedback"
 	"github.com/ericthz/zebra/internal/safety"
 )
@@ -57,7 +58,30 @@ func (s *APIServer) handleSubmitFeedback(w http.ResponseWriter, r *http.Request)
 			Detail: safety.Redact(req.Comment), Risk: 0, Success: true,
 		})
 	}
+	// P55 反馈回流：负面反馈把该问答对追加进评测数据集（供回归纳入）
+	if fb.Rating == feedback.RatingDown && s.deps.EvalCasesDir != "" && req.SessionID != "" {
+		if sess, ok := s.deps.Sessions.Get(req.SessionID); ok {
+			if q, a := latestQAPair(sess); q != "" && a != "" {
+				if err := eval.AppendCase(s.deps.EvalCasesDir, eval.CaseFromFeedback(q, a, fb.Comment)); err != nil {
+					s.deps.Logger.Warn("负面反馈回流失败", "err", err)
+				} else {
+					s.deps.Metrics.Inc("feedback:reflow")
+				}
+			}
+		}
+	}
 	json.NewEncoder(w).Encode(map[string]string{"id": fb.ID, "status": "ok"})
+}
+
+// latestQAPair 取会话历史中最近的一组 用户问题 → 助手回答。
+func latestQAPair(sess *Session) (string, string) {
+	h := *sess.History()
+	for i := len(h) - 1; i >= 1; i-- {
+		if h[i].Role == "assistant" && h[i-1].Role == "user" {
+			return h[i-1].Content, h[i].Content
+		}
+	}
+	return "", ""
 }
 
 // handleListFeedback 列出当前用户的反馈。

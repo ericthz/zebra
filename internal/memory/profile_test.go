@@ -122,6 +122,54 @@ func TestForgetPolicyCapacity(t *testing.T) {
 	}
 }
 
+// TestProfileConflictAndResolve P57：同 key 不同取值记录冲突，可裁决回退。
+func TestProfileConflictAndResolve(t *testing.T) {
+	s := NewProfileStore()
+	now := time.Date(2026, 8, 13, 12, 0, 0, 0, time.UTC)
+	s.Learn("alice", []Fact{{Key: "preference", Value: "火锅", Confidence: 0.85}}, now)
+	// 新值 0.9 ≥ 0.85*0.8 → 记录冲突并覆盖
+	s.Learn("alice", []Fact{{Key: "preference", Value: "烧烤", Confidence: 0.9}}, now.Add(time.Minute))
+
+	cs := s.ConflictsFor("alice")
+	if len(cs) != 1 || cs[0].OldValue != "火锅" || cs[0].NewValue != "烧烤" {
+		t.Fatalf("冲突记录异常: %+v", cs)
+	}
+	if fs := s.FactsFor("alice", now.Add(time.Minute), time.Hour); findFact(fs, "preference").Value != "烧烤" {
+		t.Fatal("覆盖后当前值应为新值")
+	}
+	// 裁决：回退旧值并清除冲突
+	if !s.ResolveConflict("alice", "preference", true) {
+		t.Fatal("应能裁决冲突")
+	}
+	if fs := s.FactsFor("alice", time.Now(), time.Hour); findFact(fs, "preference").Value != "火锅" {
+		t.Fatalf("回退后应为旧值: %+v", fs)
+	}
+	if len(s.ConflictsFor("alice")) != 0 {
+		t.Fatal("裁决后冲突应清空")
+	}
+	if s.ResolveConflict("alice", "name", false) {
+		t.Fatal("不存在冲突应返回 false")
+	}
+}
+
+// TestProfileConsolidate P57：同分类下取值归一化相同的事实合并，保留高置信度。
+func TestProfileConsolidate(t *testing.T) {
+	s := NewProfileStore()
+	now := time.Date(2026, 8, 13, 12, 0, 0, 0, time.UTC)
+	s.Learn("alice", []Fact{{Key: "preference", Value: "火锅", Confidence: 0.7}}, now)
+	s.Learn("alice", []Fact{{Key: "hobby", Value: "吃火锅", Confidence: 0.9}}, now.Add(time.Minute))
+	if s.Count("alice") != 2 {
+		t.Fatalf("前置应 2 条，实际 %d", s.Count("alice"))
+	}
+	if n := s.Consolidate("alice"); n != 1 {
+		t.Fatalf("应合并 1 条，实际 %d", n)
+	}
+	fs := s.FactsFor("alice", now.Add(time.Minute), time.Hour)
+	if len(fs) != 1 || fs[0].Key != "hobby" || fs[0].Value != "吃火锅" {
+		t.Fatalf("合并后应保留高置信度 hobby=吃火锅: %+v", fs)
+	}
+}
+
 func findFact(fs []Fact, key string) Fact {
 	for _, f := range fs {
 		if f.Key == key {

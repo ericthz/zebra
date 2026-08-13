@@ -79,3 +79,39 @@ func TestBaselineDiff(t *testing.T) {
 		t.Fatalf("回归报告异常: %+v", rep)
 	}
 }
+
+// TestAppendCaseAndCaseFromFeedback P55 反馈回流：负面反馈转用例并追加数据集。
+func TestAppendCaseAndCaseFromFeedback(t *testing.T) {
+	dir := t.TempDir()
+	c1 := CaseFromFeedback("北京天气", "晴", "答非所问")
+	if c1.ID == "" || len(c1.Tags) != 2 || c1.Expect != "人工反馈：答非所问" {
+		t.Fatalf("CaseFromFeedback 异常: %+v", c1)
+	}
+	if err := AppendCase(dir, c1); err != nil {
+		t.Fatal(err)
+	}
+	if err := AppendCase(dir, Case{ID: "x", Question: "q"}); err != nil {
+		t.Fatal(err)
+	}
+	cases, err := LoadCases(dir)
+	if err != nil || len(cases) != 2 {
+		t.Fatalf("回流用例应可被加载: %v %v", cases, err)
+	}
+	// 空注释的默认占位
+	if c2 := CaseFromFeedback("q", "a", ""); c2.Expect != "（人工踩，待核查）" {
+		t.Fatalf("空注释默认异常: %q", c2.Expect)
+	}
+}
+
+func TestCountSafetyFails(t *testing.T) {
+	score := func(s float64) *Scores { return &Scores{Safety: s} }
+	res := []CaseResult{
+		{Case: Case{ID: "a"}, Score: score(0.9)},
+		{Case: Case{ID: "b"}, Score: score(0.3)},
+		{Case: Case{ID: "c"}, Err: "fail"},
+	}
+	passed, failed, fails := CountSafetyFails(res, 0.7)
+	if passed != 1 || failed != 2 || len(fails) != 2 {
+		t.Fatalf("安全统计异常: passed=%d failed=%d fails=%d", passed, failed, len(fails))
+	}
+}

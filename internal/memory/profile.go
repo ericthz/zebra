@@ -28,13 +28,25 @@ type Fact struct {
 
 // ProfileStore 按用户存储画像事实（并发安全；生产换 Redis/DB + 序列化）。
 type ProfileStore struct {
-	mu    sync.Mutex
-	facts map[string]map[string]Fact // user → key → fact
+	mu        sync.Mutex
+	facts     map[string]map[string]Fact // user → key → fact
+	conflicts map[string][]Conflict      // user → 冲突历史（P57）
+}
+
+// Conflict 一次画像事实冲突记录：同一 key 出现不同取值（且置信度可比）。
+type Conflict struct {
+	Key      string    `json:"key"`
+	OldValue string    `json:"old_value"`
+	NewValue string    `json:"new_value"`
+	Time     time.Time `json:"time"`
 }
 
 // NewProfileStore 构造空画像存储。
 func NewProfileStore() *ProfileStore {
-	return &ProfileStore{facts: make(map[string]map[string]Fact)}
+	return &ProfileStore{
+		facts:     make(map[string]map[string]Fact),
+		conflicts: make(map[string][]Conflict),
+	}
 }
 
 // Learn 把抽取到的事实合并进某用户画像。
@@ -60,9 +72,96 @@ func (s *ProfileStore) Learn(user string, facts []Fact, now time.Time) {
 			if old.Confidence == f.Confidence && old.LastSeen.After(f.LastSeen) {
 				continue
 			}
+			// P57 冲突消解：不同取值且新置信度与旧值可比 → 记录冲突，不静默覆盖
+			if old.Value != f.Value && f.Confidence >= old.Confidence*0.8 {
+				s.conflicts[user] = append(s.conflicts[user], Conflict{
+					Key: f.Key, OldValue: old.Value, NewValue: f.Value, Time: now,
+				})
+			}
 		}
 		um[f.Key] = f
 	}
+}
+
+// ConflictsFor 返回某用户的画像冲突历史（新在前）。
+func (s *ProfileStore) ConflictsFor(user string) []Conflict {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	list := s.conflicts[user]
+	out := make([]Conflict, 0, len(list))
+	for i := len(list) - 1; i >= 0; i-- {
+		out = append(out, list[i])
+	}
+	return out
+}
+
+// ResolveConflict 裁决某 key 的最新冲突：
+//
+//	keepOld=true  → 回退为旧值（并刷新时间）
+//	keepOld=false → 保留新值
+//
+// 无论哪种都会清除该冲突记录；不存在冲突返回 false。
+func (s *ProfileStore) ResolveConflict(user, key string, keepOld bool) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	list := s.conflicts[user]
+	for i := len(list) - 1; i >= 0; i-- {
+		if list[i].Key != key {
+			continue
+		}
+		c := list[i]
+		s.conflicts[user] = append(list[:i], list[i+1:]...)
+		if keepOld {
+			if um, ok := s.facts[user]; ok {
+				if f, ok := um[key]; ok {
+					f.Value = c.OldValue
+					f.LastSeen = time.Now()
+					um[key] = f
+				}
+			}
+		}
+		return true
+	}
+	return false
+}
+
+// Consolidate 画像合并：同一分类下"取值归一化后相同"的事实只保留置信度
+// 最高的一条（如 preference：火锅 与 吃火锅 合并），返回移除条数。
+func (s *ProfileStore) Consolidate(user string) int {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	um := s.facts[user]
+	keep := map[string]string{} // 组 key（分类+归一化值）→ 保留的事实 key
+	drop := map[string]bool{}
+	for k, f := range um {
+		gk := f.Category + "\x00" + normalizeValue(f.Value)
+		if cur, ok := keep[gk]; ok {
+			if um[cur].Confidence >= f.Confidence {
+				drop[k] = true
+			} else {
+				drop[cur] = true
+				keep[gk] = k
+			}
+		} else {
+			keep[gk] = k
+		}
+	}
+	n := 0
+	for k := range drop {
+		delete(um, k)
+		n++
+	}
+	return n
+}
+
+// normalizeValue 偏好值归一化：去掉"吃/喝/用/喜欢"等动词前缀，便于合并。
+func normalizeValue(v string) string {
+	for _, p := range []string{"吃", "喝", "用", "喜欢"} {
+		if strings.HasPrefix(v, p) {
+			return strings.TrimSpace(v[len(p):])
+		}
+	}
+	return v
 }
 
 // FactsFor 返回某用户未过期的画像事实（TTL 过滤，读时惰性遗忘）。

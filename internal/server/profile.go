@@ -28,8 +28,9 @@ func (s *APIServer) handleGetProfile(w http.ResponseWriter, r *http.Request) {
 	}
 	facts := s.deps.Profile.FactsFor(p.User, time.Now(), s.deps.ProfileTTL)
 	jsonOK(w, map[string]interface{}{
-		"user":  p.User,
-		"facts": facts,
+		"user":      p.User,
+		"facts":     facts,
+		"conflicts": s.deps.Profile.ConflictsFor(p.User), // P57 冲突消解可见
 	})
 }
 
@@ -66,4 +67,33 @@ func (s *APIServer) handleForgetProfile(w http.ResponseWriter, r *http.Request) 
 		})
 	}
 	jsonOK(w, map[string]string{"status": "forgotten", "key": req.Key})
+}
+
+// ProfileResolveRequest 裁决一条画像冲突。
+type ProfileResolveRequest struct {
+	Key  string `json:"key"`
+	Keep string `json:"keep"` // "old"=回退旧值；其它值=保留新值
+}
+
+// handleResolveProfile 裁决画像冲突（P57）。
+func (s *APIServer) handleResolveProfile(w http.ResponseWriter, r *http.Request) {
+	p, ok := principal(r.Context())
+	if !ok {
+		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		return
+	}
+	if s.deps.Profile == nil {
+		http.Error(w, "画像未启用", http.StatusNotImplemented)
+		return
+	}
+	var req ProfileResolveRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.Key == "" {
+		http.Error(w, "bad request: key 必填", http.StatusBadRequest)
+		return
+	}
+	if !s.deps.Profile.ResolveConflict(p.User, req.Key, req.Keep == "old") {
+		http.Error(w, "无该 key 的冲突", http.StatusNotFound)
+		return
+	}
+	jsonOK(w, map[string]string{"status": "resolved", "key": req.Key, "keep": req.Keep})
 }

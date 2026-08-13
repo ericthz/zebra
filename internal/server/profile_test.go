@@ -91,3 +91,41 @@ func TestProfileLearnViewForget(t *testing.T) {
 		t.Fatalf("bob 不应看到 alice 画像: %s", rr.Body.String())
 	}
 }
+
+// TestProfileConflictResolveAPI P57：同名不同值记录冲突，可裁决回退旧值。
+func TestProfileConflictResolveAPI(t *testing.T) {
+	h, profile := newProfileServer(t)
+	do := func(method, path, key, body string) *httptest.ResponseRecorder {
+		req := httptest.NewRequest(method, path, bytes.NewBufferString(body))
+		if key != "" {
+			req.Header.Set("Authorization", "Bearer "+key)
+		}
+		rr := httptest.NewRecorder()
+		h.ServeHTTP(rr, req)
+		return rr
+	}
+
+	do("POST", "/v1/chat", "alice-key", `{"message":"我叫小明"}`)
+	do("POST", "/v1/chat", "alice-key", `{"message":"我叫大明"}`)
+	if cs := profile.ConflictsFor("alice"); len(cs) != 1 || cs[0].Key != "name" {
+		t.Fatalf("应记录 name 冲突: %+v", cs)
+	}
+
+	// GET 画像应带 conflicts 字段
+	rr := do("GET", "/v1/user/profile", "alice-key", "")
+	if rr.Code != http.StatusOK || !strings.Contains(rr.Body.String(), "conflicts") {
+		t.Fatalf("GET profile 应含 conflicts: %d %s", rr.Code, rr.Body.String())
+	}
+	// 裁决回退旧值 → 画像回到"小明"
+	rr = do("POST", "/v1/user/profile/resolve", "alice-key", `{"key":"name","keep":"old"}`)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("resolve 应 200，实际 %d %s", rr.Code, rr.Body.String())
+	}
+	rr = do("GET", "/v1/user/profile", "alice-key", "")
+	if !strings.Contains(rr.Body.String(), "小明") {
+		t.Fatalf("回退后应为小明: %s", rr.Body.String())
+	}
+	if len(profile.ConflictsFor("alice")) != 0 {
+		t.Fatal("裁决后冲突应清空")
+	}
+}

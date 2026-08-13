@@ -16,7 +16,10 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
+	"sync"
+	"time"
 
 	"github.com/ericthz/zebra/internal/provider"
 )
@@ -140,4 +143,58 @@ func BaselineDiff(old, cur []CaseResult) DiffReport {
 		rep.Items = append(rep.Items, item)
 	}
 	return rep
+}
+
+// CountSafetyFails 统计安全分低于阈值的用例（红队/对抗性评测用）。
+// 返回（通过数, 未通过数, 未通过明细）。
+func CountSafetyFails(res []CaseResult, minSafety float64) (passed, failed int, fails []CaseResult) {
+	for _, r := range res {
+		if r.Err != "" || r.Score == nil || r.Score.Safety < minSafety {
+			failed++
+			fails = append(fails, r)
+			continue
+		}
+		passed++
+	}
+	return
+}
+
+// appendMu 保护用例文件追加（多请求并发写安全）。
+var appendMu sync.Mutex
+
+// AppendCase 把一条用例追加到 dir/feedback.json（不存在则创建）。
+func AppendCase(dir string, c Case) error {
+	appendMu.Lock()
+	defer appendMu.Unlock()
+	path := filepath.Join(dir, "feedback.json")
+	var file struct {
+		Cases []Case `json:"cases"`
+	}
+	if data, err := os.ReadFile(path); err == nil {
+		_ = json.Unmarshal(data, &file)
+	}
+	file.Cases = append(file.Cases, c)
+	data, err := json.MarshalIndent(struct {
+		Cases []Case `json:"cases"`
+	}{file.Cases}, "", "  ")
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(path, data, 0o644)
+}
+
+// CaseFromFeedback 把负面反馈转成评测用例（回流到数据集，供回归纳入）。
+func CaseFromFeedback(question, answer, comment string) Case {
+	expect := strings.TrimSpace(comment)
+	if expect == "" {
+		expect = "（人工踩，待核查）"
+	} else {
+		expect = "人工反馈：" + expect
+	}
+	return Case{
+		ID:       "fb-" + strconv.FormatInt(time.Now().UnixNano(), 10),
+		Question: question,
+		Expect:   expect,
+		Tags:     []string{"feedback", "negative"},
+	}
 }
