@@ -38,8 +38,8 @@
 
 | 维度 | 现状 |
 |---|---|
-| 代码规模 | 120 个 `.go` 文件（含 42 个测试），约 1.4 万行 |
-| 包数量 | 25 个（`cmd/` 3 个入口 + `internal/` 21 个 + `test/` 评测） |
+| 代码规模 | 122 个 `.go` 文件（含 43 个测试），约 1.4 万行 |
+| 包数量 | 26 个（`cmd/` 3 个入口 + `internal/` 22 个 + `test/` 评测） |
 | 运行时依赖 | 零第三方，纯 Go 标准库 |
 | 质量门禁 | `go build` / `go vet` 零警告，`go test ./...` 全绿 |
 | 交付轮次 | 七轮（A~E 企业骨架 → P1~P28 能力里程碑） |
@@ -132,6 +132,7 @@
 │   ├── rag/            分块 + BM25 关键词/向量混合检索
 │   ├── eval/           LLM-as-Judge + 影子评测 + 灰度统计
 │   ├── redis/          纯标准库 RESP 客户端（水平扩展）
+│   ├── config/         零依赖 .env 配置加载
 │   ├── mcp/            MCP 协议栈（客户端/服务端/握手）
 │   ├── server/         HTTP API + 会话 + 鉴权 + 限流 + 可观测 + Web UI
 │   ├── safety/         注入防护 + 审核 + 脱敏 + 审计
@@ -200,7 +201,7 @@ curl :8080/readyz    # ready
 
 ## 5. 配置与环境变量
 
-全部配置通过环境变量注入（`.env.example` 为模板；生产建议接 KMS/Vault）。
+全部配置通过环境变量注入（`.env.example` 为模板）。服务启动时**自动加载工作目录下的 `.env`**（P30，零依赖）：真实环境变量优先，`.env` 只填充尚未设置的项，作为本地开发默认值；生产环境仍建议以 KMS/Vault 注入真实密钥。
 
 ### 5.1 模型与协议
 
@@ -386,7 +387,7 @@ curl -X POST :8080/v1/user/profile/forget -H "Authorization: Bearer user-key" \
 
 | # | 能力 | 代码 | 说明 |
 |---|---|---|---|
-| E | 单元测试 | `internal/*/*_test.go` | 42 个测试文件，覆盖限流/会话/脱敏/权限/上下文/prompt/RAG/影子/画像等 |
+| E | 单元测试 | `internal/*/*_test.go` | 43 个测试文件，覆盖限流/会话/脱敏/权限/上下文/prompt/RAG/影子/画像等 |
 | E | LLM 评测 | `test/eval/golden_test.go` | 黄金用例回归（`ZEBRA_EVAL=1` 开启），换模型/改 prompt 必跑 |
 | E | 容器化 | `Dockerfile` `docker-compose.yml` | 多阶段构建 + distroless 最小镜像 + 一键依赖编排 |
 | E | CI/CD | `.github/workflows/ci.yml` `Makefile` | 提交自动 build+vet+test；`make eval` 触发真实模型评测 |
@@ -430,6 +431,7 @@ curl -X POST :8080/v1/user/profile/forget -H "Authorization: Bearer user-key" \
 | ✅ P27 | 画像 LLM 抽取升级（语义抽取 + 规则回退） | `memory/extract.go` | LLM 失败自动回退规则 |
 | ✅ P28 | 水平扩展骨架（RESP 客户端 + Redis 会话存储） | `internal/redis/` `server/redis_session.go` | REDIS_URL 后多副本共享会话 |
 | ✅ P29 | 第七轮收尾（docs） | TODO/README 更新 | 全量验证 |
+| ✅ P30 | 配置加载（零依赖 .env 加载器） | `internal/config/` `cmd/server/main.go` | 启动自动加载 .env，真实环境变量优先 |
 
 **内置工具**：`calculator` / `get_current_datetime` / `generate_random_number` / `convert_units` / `translate_text` /
 `web_search` / `fetch_url`（SSRF 防护） / `list_dir` / `read_file` / `write_file` / `run_command` /
@@ -481,7 +483,7 @@ curl -X POST :8080/v1/user/profile/forget -H "Authorization: Bearer user-key" \
 
 ## 10. 工程化与质量保障
 
-- **单元测试**：42 个测试文件，`go test ./...` 全绿；每个新增功能强制配套测试。
+- **单元测试**：43 个测试文件，`go test ./...` 全绿；每个新增功能强制配套测试。
 - **静态检查**：`go vet ./...` 零警告；提交前 `gofmt` 全量格式化。
 - **LLM 评测**：`test/eval/golden_test.go` 黄金用例回归（`ZEBRA_EVAL=1` 开启真实模型），换模型/改 prompt 必跑。
 - **容器化与 CI**：Docker 多阶段构建 + distroless 最小镜像；GitHub Actions 提交自动 build+vet+test。
