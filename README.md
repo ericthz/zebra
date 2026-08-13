@@ -48,13 +48,13 @@
 
 | 轮次 | 主题 | 覆盖里程碑 |
 |---|---|---|
-| 第一轮 | 企业骨架 | A~E（服务化/可靠性/安全/可观测） |
-| 第二轮 | Agent 能力补全 | P1~P6（技能/本地执行/质量闭环/主动出站/成本治理/安全加固） |
-| 第三轮 | 智能体纵深 | P8~P10（RAG/并行工具/规划-执行） |
-| 第四轮 | 规模化与体验 | P12~P14（异步长任务/多 Agent/Web UI） |
-| 第五轮 | 运营与工程纵深 | P16~P18（反馈闭环/结构化输出/配置热更新） |
-| 第六轮 | 检索与交付纵深 | P20~P23（混合检索/影子评测/记忆画像/文档图表产出） |
-| 第七轮 | 交互与规模纵深 | P25~P28（语音交互/影子灰度切换/画像 LLM 抽取/Redis 水平扩展） |
+| 第一轮 | 企业骨架（Enterprise Skeleton） | A~E（服务化/可靠性/安全/可观测） |
+| 第二轮 | Agent 能力补全（Agent Capabilities） | P1~P6（技能/本地执行/质量闭环/主动出站/成本治理/安全加固） |
+| 第三轮 | 智能体纵深（Agent Depth） | P8~P10（RAG/并行工具/规划-执行） |
+| 第四轮 | 规模化与体验（Scale & Experience） | P12~P14（异步长任务/多 Agent/Web UI） |
+| 第五轮 | 运营与工程纵深（Operations & Engineering） | P16~P18（反馈闭环/结构化输出/配置热更新） |
+| 第六轮 | 检索与交付纵深（Retrieval & Delivery） | P20~P23（混合检索/影子评测/记忆画像/文档图表产出） |
+| 第七轮 | 交互与规模纵深（Interaction & Scale） | P25~P28（语音交互/影子灰度切换/画像 LLM 抽取/Redis 水平扩展） |
 
 ---
 
@@ -64,18 +64,18 @@
 
 | 能力域 | 已交付能力（里程碑） |
 |---|---|
-| 服务化与访问 | HTTP API/SSE、会话管理、API Key+RBAC、多租户隔离（A1~A4） |
-| 可靠性工程 | 可观测、限流配额、熔断降级、健康检查/优雅停机、错误恢复（B5~B9） |
-| Agent 能力 | 流式输出、上下文工程、分层记忆、结构化输出、多模态、多模型路由、Prompt 管理（C10~C16） |
-| 安全与合规 | 注入防护、内容审核、敏感数据治理、工具安全边界（D17~D20） |
-| 技能与执行 | 技能体系（P1）、本地执行沙箱（P2）、文档/图表产出（P23） |
-| 质量与评测 | LLM-as-Judge（P3）、反馈闭环（P16）、影子评测与灰度切换（P21/P26） |
-| 知识接入 | RAG 知识库（P8）、BM25+向量混合检索（P20） |
-| 编排与协作 | 并行工具（P9）、规划-执行（P10）、多 Agent Supervisor（P13） |
-| 规模化与体验 | 异步长任务（P12）、Web UI（P14）、Redis 水平扩展骨架（P28） |
-| 运营治理 | 成本归因与语义缓存（P5）、安全加固（P6）、结构化输出强约束（P17）、配置热更新（P18）、记忆画像与遗忘（P22/P27） |
-| 多模态交互 | 语音 ASR/TTS 与语音对话链路（P25） |
-| 学习与可观测 | 启动能力清单 + 执行痕迹（工具/技能调用日志，P31） |
+| 服务化与访问（Service & Access） | HTTP API/SSE、会话管理、API Key+RBAC、多租户隔离（A1~A4） |
+| 可靠性工程（Reliability Engineering） | 可观测、限流配额、熔断降级、健康检查/优雅停机、错误恢复（B5~B9） |
+| Agent 能力（Agent Capabilities） | 流式输出、上下文工程、分层记忆、结构化输出、多模态、多模型路由、Prompt 管理（C10~C16） |
+| 安全与合规（Security & Compliance） | 注入防护、内容审核、敏感数据治理、工具安全边界（D17~D20） |
+| 技能与执行（Skills & Execution） | 技能体系（P1）、本地执行沙箱（P2）、文档/图表产出（P23） |
+| 质量与评测（Quality & Evaluation） | LLM-as-Judge（P3）、反馈闭环（P16）、影子评测与灰度切换（P21/P26） |
+| 知识接入（Knowledge & RAG） | RAG 知识库（P8）、BM25+向量混合检索（P20） |
+| 编排与协作（Orchestration & Collaboration） | 并行工具（P9）、规划-执行（P10）、多 Agent Supervisor（P13） |
+| 规模化与体验（Scale & Experience） | 异步长任务（P12）、Web UI（P14）、Redis 水平扩展骨架（P28） |
+| 运营治理（Operations & Governance） | 成本归因与语义缓存（P5）、安全加固（P6）、结构化输出强约束（P17）、配置热更新（P18）、记忆画像与遗忘（P22/P27） |
+| 多模态交互（Multimodal Interaction） | 语音 ASR/TTS 与语音对话链路（P25） |
+| 学习与可观测（Observability & Learning） | 启动能力清单 + 执行痕迹（工具/技能调用日志，P31） |
 
 详细里程碑见 [8. 交付路线图](#8-交付路线图)。
 
@@ -116,9 +116,9 @@
 
 ### 3.2 设计原则
 
-- **分层依赖倒置**：下层不依赖上层，上层通过接口依赖下层；`cmd/server/main.go` 是唯一做装配的地方，每个组件均可替换。
-- **接口驱动**：`SessionStore`、`Memory`、`Moderator`、`Embedder`、`Extractor` 等均为接口，注释标注生产实现方向。
-- **横切集中**：鉴权、限流、日志、恢复、审计作为中间件/回调统一挂载，业务代码不感知。
+- **分层依赖倒置（Layered Dependency Inversion）**：下层不依赖上层，上层通过接口依赖下层；`cmd/server/main.go` 是唯一做装配的地方，每个组件均可替换。
+- **接口驱动（Interface-Driven Design）**：`SessionStore`、`Memory`、`Moderator`、`Embedder`、`Extractor` 等均为接口，注释标注生产实现方向。
+- **横切集中（Cross-cutting Concerns）**：鉴权、限流、日志、恢复、审计作为中间件/回调统一挂载，业务代码不感知。
 
 ### 3.3 目录结构
 
@@ -348,41 +348,41 @@ curl -X POST :8080/v1/user/profile/forget -H "Authorization: Bearer user-key" \
 
 | # | 能力 | 代码 | 说明 |
 |---|---|---|---|
-| A1 | HTTP API Server | `internal/server/server.go` `chat.go` | `/v1/chat`(JSON) + `/v1/chat/stream`(SSE)；生产加 gRPC/网关/版本化路由 |
-| A2 | 会话管理 | `internal/server/session.go` `redis_session.go` | 内存 + Redis 双实现：TTL 过期 + `Touch` 续期；`SessionStore` 接口可插拔 |
-| A3 | 认证鉴权 | `internal/server/auth.go` `middleware.go` | Bearer API Key + admin/user 两级 RBAC；生产接 OAuth2/OIDC/企业 SSO |
-| A4 | 多租户隔离 | `session.go` `memory/qdrant.go` `tool/registry.go` | 每会话独立历史；记忆按租户分 collection；工具按角色白名单 |
+| A1 | HTTP API 服务（HTTP API Server） | `internal/server/server.go` `chat.go` | `/v1/chat`(JSON) + `/v1/chat/stream`(SSE)；生产加 gRPC/网关/版本化路由 |
+| A2 | 会话管理（Session Management） | `internal/server/session.go` `redis_session.go` | 内存 + Redis 双实现：TTL 过期 + `Touch` 续期；`SessionStore` 接口可插拔 |
+| A3 | 认证鉴权（Authentication & RBAC） | `internal/server/auth.go` `middleware.go` | Bearer API Key + admin/user 两级 RBAC；生产接 OAuth2/OIDC/企业 SSO |
+| A4 | 多租户隔离（Multi-tenancy Isolation） | `session.go` `memory/qdrant.go` `tool/registry.go` | 每会话独立历史；记忆按租户分 collection；工具按角色白名单 |
 
 ### 7.2 可靠性工程
 
 | # | 能力 | 代码 | 说明 |
 |---|---|---|---|
-| B5 | 可观测性 | `middleware.go` `health.go` | slog 结构化日志 + 请求 ID + `/metrics`(Prometheus 文本)；生产加 OTel 链路追踪 |
-| B6 | 限流与配额 | `auth.go`(TokenBucket/RateLimiter) | 按用户分桶限流，429 拒绝；配额计量挂在 Metrics |
-| B7 | 熔断/降级/容错 | `provider/http.go` `router.go` `agent.go` | 超时→指数退避重试→熔断；多模型 fallback；Qdrant 不可用自动降级 |
-| B8 | 健康检查/优雅停机 | `health.go` `server.go` | `/healthz` `/readyz`；`signal.NotifyContext` + `srv.Shutdown` 平滑退出 |
-| B9 | 错误恢复 | `middleware.go`(panic恢复) `agent.go`(ctx传播) | 请求级 panic 兜底；LLM 调用全程可取消；记忆落库失败不阻塞对话 |
+| B5 | 可观测性（Observability） | `middleware.go` `health.go` | slog 结构化日志 + 请求 ID + `/metrics`(Prometheus 文本)；生产加 OTel 链路追踪 |
+| B6 | 限流与配额（Rate Limiting & Quota） | `auth.go`(TokenBucket/RateLimiter) | 按用户分桶限流，429 拒绝；配额计量挂在 Metrics |
+| B7 | 熔断/降级/容错（Circuit Breaker / Fallback / Fault Tolerance） | `provider/http.go` `router.go` `agent.go` | 超时→指数退避重试→熔断；多模型 fallback；Qdrant 不可用自动降级 |
+| B8 | 健康检查/优雅停机（Health Check / Graceful Shutdown） | `health.go` `server.go` | `/healthz` `/readyz`；`signal.NotifyContext` + `srv.Shutdown` 平滑退出 |
+| B9 | 错误恢复（Error Recovery） | `middleware.go`(panic恢复) `agent.go`(ctx传播) | 请求级 panic 兜底；LLM 调用全程可取消；记忆落库失败不阻塞对话 |
 
 ### 7.3 Agent 能力补全
 
 | # | 能力 | 代码 | 说明 |
 |---|---|---|---|
-| C10 | 流式输出 | `provider/*.go` `agent/stream.go` `server/chat.go` | Ollama/OpenAI 真流式；Anthropic 非流式回退；SSE 逐字推送 |
-| C11 | 上下文工程 | `agent/context.go` | 启发式 token 估算 + 滑动窗口裁剪 + `Summarizer` 摘要压缩接口 |
-| C12 | 记忆系统升级 | `memory/*.go` | 分层：工作记忆 + 长期记忆(Qdrant)；画像 + 遗忘策略（P22） |
-| C13 | 结构化输出 | `tool/tool.go` `schema/` | 工具参数 schema 校验 + 通用 JSON Schema 校验器（P17） |
-| C14 | 多模态 | `provider/provider.go` `openai.go` `anthropic.go` | `ContentParts` 支持 text/image_url；语音链路（P25） |
-| C15 | 多模型路由 | `provider/router.go` | 顺序 fallback + `Promote` 灰度切换（P26） |
-| C16 | Prompt 管理 | `prompt/prompt.go` | 模板注册表 + 版本化 + 灰度切换 + 文件化热更新（P18） |
+| C10 | 流式输出（Streaming） | `provider/*.go` `agent/stream.go` `server/chat.go` | Ollama/OpenAI 真流式；Anthropic 非流式回退；SSE 逐字推送 |
+| C11 | 上下文工程（Context Engineering） | `agent/context.go` | 启发式 token 估算 + 滑动窗口裁剪 + `Summarizer` 摘要压缩接口 |
+| C12 | 记忆系统升级（Layered Memory） | `memory/*.go` | 分层：工作记忆 + 长期记忆(Qdrant)；画像 + 遗忘策略（P22） |
+| C13 | 结构化输出（Structured Output） | `tool/tool.go` `schema/` | 工具参数 schema 校验 + 通用 JSON Schema 校验器（P17） |
+| C14 | 多模态（Multimodal） | `provider/provider.go` `openai.go` `anthropic.go` | `ContentParts` 支持 text/image_url；语音链路（P25） |
+| C15 | 多模型路由（Multi-Model Routing） | `provider/router.go` | 顺序 fallback + `Promote` 灰度切换（P26） |
+| C16 | Prompt 管理（Prompt Management） | `prompt/prompt.go` | 模板注册表 + 版本化 + 灰度切换 + 文件化热更新（P18） |
 
 ### 7.4 安全与合规
 
 | # | 能力 | 代码 | 说明 |
 |---|---|---|---|
-| D17 | Prompt 注入防护 | `safety/safety.go` | 工具结果强制包隔离标记 `【工具数据】` + 注入特征检测 |
-| D18 | 内容安全审核 | `safety/safety.go` | `Moderator` 接口：输入/输出双端审核；生产接外部审核模型 |
-| D19 | 敏感数据治理 | `safety/safety.go` | 日志/审计强制 `Redact`；`SecretStore` 接口替代 `.env` 明文 |
-| D20 | 工具安全边界 | `tool/registry.go` `safety/audit.go` `server/auditor.go` | 角色白名单 + 高危工具二次确认 + 全量调用审计 |
+| D17 | Prompt 注入防护（Prompt Injection Defense） | `safety/safety.go` | 工具结果强制包隔离标记 `【工具数据】` + 注入特征检测 |
+| D18 | 内容安全审核（Content Moderation） | `safety/safety.go` | `Moderator` 接口：输入/输出双端审核；生产接外部审核模型 |
+| D19 | 敏感数据治理（Sensitive Data Governance） | `safety/safety.go` | 日志/审计强制 `Redact`；`SecretStore` 接口替代 `.env` 明文 |
+| D20 | 工具安全边界（Tool Safety Boundary） | `tool/registry.go` `safety/audit.go` `server/auditor.go` | 角色白名单 + 高危工具二次确认 + 全量调用审计 |
 
 ### 7.5 工程化与测试
 
@@ -404,36 +404,36 @@ curl -X POST :8080/v1/user/profile/forget -H "Authorization: Bearer user-key" \
 |---|---|---|---|
 | ✅ P0 | 基线：差距分析汇总 + 基线提交 | `README.md` | 可编译、可测试、可运行 |
 | ✅ P1 | 技能体系 Skill（程序性知识包） | `internal/skill/` `skills/` | Agent 命中技能自动注入 SOP |
-| ✅ P2 | 本地执行（文件读写 + 命令沙箱） | `internal/tool/exec*.go` | Agent 真实建文件 + 执行命令 |
-| ✅ P3 | LLM 质量闭环（Judge + 工具成功率指标） | `internal/eval/` | Judge 自动打分 + `/metrics` |
-| ✅ P4 | 主动出站（Webhook 通知 + 定时调度） | `internal/notify/` `schedule/` | 对话完成自动推送 |
-| ✅ P5 | 成本治理（成本归因 + 语义缓存） | `internal/cost/` `cache/` | 同问题 23.8s → 21ms |
-| ✅ P6 | 安全加固（SSRF/租户凭据/被遗忘权） | `safety/ssrf.go` `tool/fetch.go` `server/forget.go` | DELETE 后旧会话 401 |
+| ✅ P2 | 本地执行（Local Execution：文件读写 + 命令沙箱） | `internal/tool/exec*.go` | Agent 真实建文件 + 执行命令 |
+| ✅ P3 | LLM 质量闭环（Quality Loop：LLM-as-a-Judge + 工具成功率指标） | `internal/eval/` | Judge 自动打分 + `/metrics` |
+| ✅ P4 | 主动出站（Outbound Actions：Webhook 通知 + 定时调度） | `internal/notify/` `schedule/` | 对话完成自动推送 |
+| ✅ P5 | 成本治理（Cost Governance：成本归因 + 语义缓存） | `internal/cost/` `cache/` | 同问题 23.8s → 21ms |
+| ✅ P6 | 安全加固（Security Hardening：SSRF/租户凭据/被遗忘权） | `safety/ssrf.go` `tool/fetch.go` `server/forget.go` | DELETE 后旧会话 401 |
 | ✅ P7 | 第一轮收尾（docs） | README 能力地图 | 全量验证 |
-| ✅ P8 | RAG 知识库（分块/向量/检索/注入/引用） | `internal/rag/` `docs/` | 基于资料准确回答，无幻觉 |
-| ✅ P9 | 并行工具调用（fan-out/fan-in） | `internal/agent/agent.go` | 并发执行、结果有序 |
+| ✅ P8 | RAG 知识库（RAG Knowledge Base：分块/向量/检索/注入/引用） | `internal/rag/` `docs/` | 基于资料准确回答，无幻觉 |
+| ✅ P9 | 并行工具调用（Parallel Tool Calls：fan-out/fan-in） | `internal/agent/agent.go` | 并发执行、结果有序 |
 | ✅ P10 | 规划-执行编排（Plan-then-Execute） | `internal/agent/plan.go` | `mode=plan` 拆解→执行→汇总 |
 | ✅ P11 | 第二轮收尾（docs） | README 第二轮章节 | 全量验证 |
-| ✅ P12 | 异步长任务 + 检查点 | `internal/task/` `server/tasks.go` | 提交即返 id，轮询到 done，断点续跑 |
+| ✅ P12 | 异步长任务 + 检查点（Async Tasks & Checkpoints） | `internal/task/` `server/tasks.go` | 提交即返 id，轮询到 done，断点续跑 |
 | ✅ P13 | 多 Agent Supervisor | `internal/supervisor/` `cmd/server/workers.go` | 数据/知识/常规 worker 自动路由 |
 | ✅ P14 | 前端 Web UI（零构建 SSE 聊天） | `internal/server/ui.go` | GET / 返回 HTML 200 |
 | ✅ P15 | 第三轮收尾（docs） | README 更新 | 全量验证 |
-| ✅ P16 | 用户反馈闭环（赞/踩→存储+指标+审计+回流） | `internal/feedback/` `server/feedback.go` | counts {positive:1, negative:1} |
-| ✅ P17 | 结构化输出强约束（schema 校验 + response_format） | `internal/schema/` `provider/structured.go` | 强约束规划 JSON |
-| ✅ P18 | 配置热更新（技能/提示词/知识库不重启） | `prompt.LoadDir` `server/reload.go` | 重载后 v2 生效 |
+| ✅ P16 | 用户反馈闭环（User Feedback Loop：赞/踩→存储+指标+审计+回流） | `internal/feedback/` `server/feedback.go` | counts {positive:1, negative:1} |
+| ✅ P17 | 结构化输出强约束（Structured Output：schema 校验 + response_format） | `internal/schema/` `provider/structured.go` | 强约束规划 JSON |
+| ✅ P18 | 配置热更新（Hot Reload：技能/提示词/知识库不重启） | `prompt.LoadDir` `server/reload.go` | 重载后 v2 生效 |
 | ✅ P19 | 第五轮收尾（docs） | TODO/README 更新 | 全量验证 |
-| ✅ P20 | RAG 混合检索（BM25 + 向量 z-score 融合） | `internal/rag/bm25.go` `index.go` | 专有名词精确命中 |
-| ✅ P21 | 在线评测/影子模式（shadow traffic 双评） | `internal/eval/shadow.go` `server/shadow.go` | verdict=candidate_better |
-| ✅ P22 | 记忆画像/遗忘机制（对话学习 + TTL + 容量治理） | `memory/profile.go` `forget.go` | 画像可见可遗忘，TTL 自动隐藏 |
-| ✅ P23 | 文档/图表产出（docx/PDF/SVG） | `internal/docgen/` `tool/docgen.go` | 文件落盘可打开 |
+| ✅ P20 | RAG 混合检索（Hybrid Retrieval：BM25 + 向量 z-score 融合） | `internal/rag/bm25.go` `index.go` | 专有名词精确命中 |
+| ✅ P21 | 在线评测/影子模式（Shadow Evaluation：shadow traffic 双评） | `internal/eval/shadow.go` `server/shadow.go` | verdict=candidate_better |
+| ✅ P22 | 记忆画像/遗忘机制（User Profile & Forgetting：对话学习 + TTL + 容量治理） | `memory/profile.go` `forget.go` | 画像可见可遗忘，TTL 自动隐藏 |
+| ✅ P23 | 文档/图表产出（Document & Chart Generation：docx/PDF/SVG） | `internal/docgen/` `tool/docgen.go` | 文件落盘可打开 |
 | ✅ P24 | 第六轮收尾（docs） | TODO/README 更新 | 全量验证 |
-| ✅ P25 | 语音交互（OpenAI 兼容 ASR/TTS） | `provider/voice.go` `server/voice.go` | 音频进→文本→Agent→音频出 |
-| ✅ P26 | 影子评测看板 + 灰度切换 | `eval/stats.go` `router.Promote` | win-rate 统计 + 一键 promote |
-| ✅ P27 | 画像 LLM 抽取升级（语义抽取 + 规则回退） | `memory/extract.go` | LLM 失败自动回退规则 |
-| ✅ P28 | 水平扩展骨架（RESP 客户端 + Redis 会话存储） | `internal/redis/` `server/redis_session.go` | REDIS_URL 后多副本共享会话 |
+| ✅ P25 | 语音交互（Voice Interaction：OpenAI 兼容 ASR/TTS） | `provider/voice.go` `server/voice.go` | 音频进→文本→Agent→音频出 |
+| ✅ P26 | 影子评测看板 + 灰度切换（Shadow Dashboard & Canary Switch） | `eval/stats.go` `router.Promote` | win-rate 统计 + 一键 promote |
+| ✅ P27 | 画像 LLM 抽取升级（LLM-based Profile Extraction：语义抽取 + 规则回退） | `memory/extract.go` | LLM 失败自动回退规则 |
+| ✅ P28 | 水平扩展骨架（Horizontal Scaling：RESP 客户端 + Redis 会话存储） | `internal/redis/` `server/redis_session.go` | REDIS_URL 后多副本共享会话 |
 | ✅ P29 | 第七轮收尾（docs） | TODO/README 更新 | 全量验证 |
-| ✅ P30 | 配置加载（零依赖 .env 加载器） | `internal/config/` `cmd/server/main.go` | 启动自动加载 .env，真实环境变量优先 |
-| ✅ P31 | 学习可观测（启动能力清单 + 执行痕迹） | `cmd/server/startup.go` `agent.OnTool/OnSkill` `tool.Registry.Names` | 启动打印工具/MCP/技能清单；执行打印工具调用与技能注入 |
+| ✅ P30 | 配置加载（Config Loading：零依赖 .env 加载器） | `internal/config/` `cmd/server/main.go` | 启动自动加载 .env，真实环境变量优先 |
+| ✅ P31 | 学习可观测（Observability for Learning：启动能力清单 + 执行痕迹） | `cmd/server/startup.go` `agent.OnTool/OnSkill` `tool.Registry.Names` | 启动打印工具/MCP/技能清单；执行打印工具调用与技能注入 |
 
 **内置工具**：`calculator` / `get_current_datetime` / `generate_random_number` / `convert_units` / `translate_text` /
 `web_search` / `fetch_url`（SSRF 防护） / `list_dir` / `read_file` / `write_file` / `run_command` /
@@ -451,12 +451,12 @@ curl -X POST :8080/v1/user/profile/forget -H "Authorization: Bearer user-key" \
 
 | 优先级 | 项目 | 说明 |
 |---|---|---|
-| 高 | 语音流式 ASR / 实时语音对话 | 现为请求-响应式；实时对话需 WebSocket 半双工 |
-| 高 | Redis 任务队列与记忆存储深化 | 会话已迁 Redis；任务队列与长期记忆仍为内存/Qdrant |
-| 高 | 影子评测自动金丝雀回滚 | promote 后质量回退自动切回主模型（现为手动） |
-| 中 | 反思 / 自一致性 | LLM 推理深度：CoT、自一致性、采样治理 |
-| 中 | RAG 重排（Reranker）与知识图谱 | 混合检索后二次精排；实体关系检索 |
-| 中 | 插件动态加载 / 浏览器自动化 | 工具生态扩展（现为编译期注册） |
+| 高 | 语音流式 ASR / 实时语音对话（Streaming ASR / Realtime Voice） | 现为请求-响应式；实时对话需 WebSocket 半双工 |
+| 高 | Redis 任务队列与记忆存储深化（Task Queue & Memory Store） | 会话已迁 Redis；任务队列与长期记忆仍为内存/Qdrant |
+| 高 | 影子评测自动金丝雀回滚（Canary Auto-rollback） | promote 后质量回退自动切回主模型（现为手动） |
+| 中 | 反思 / 自一致性（Reflection / Self-Consistency） | LLM 推理深度：CoT、自一致性、采样治理 |
+| 中 | RAG 重排（Reranker）与知识图谱（Knowledge Graph） | 混合检索后二次精排；实体关系检索 |
+| 中 | 插件动态加载 / 浏览器自动化（Plugin Loading / Browser Automation） | 工具生态扩展（现为编译期注册） |
 
 #### B. 需决策项（与"零第三方依赖"约束冲突，或需外部工具链）
 
@@ -466,7 +466,7 @@ curl -X POST :8080/v1/user/profile/forget -H "Authorization: Bearer user-key" \
 | 前端工程化（React/Vue + WebSocket） | 现为零构建 SSE 单页；工程化需引入 Node 工具链 |
 | OIDC/SSO 企业登录 | 现为 API Key + RBAC；接企业 SSO 需 OAuth2/OIDC 客户端 |
 | 配置中心 / 特性开关 / 数据库迁移 | 现为环境变量 + 热更新；规模化需配置中心与 DB 迁移 |
-| 模型级注入检测 / 外部审核模型 | 现为关键词审核；生产接外部审核模型 |
+| 模型级注入检测（Model-level Injection Detection）/ 外部审核模型（External Moderation Model） | 现为关键词审核；生产接外部审核模型 |
 | 密钥 KMS/Vault | 现为环境变量注入；生产接密钥管理服务 |
 | 精确 token 计费（tiktoken 级） | 现为启发式估算 + 单价表 |
 | 评测平台化 / SLO 告警 | 现为 golden 用例 + 指标；平台化需看板与告警规则 |
@@ -476,10 +476,10 @@ curl -X POST :8080/v1/user/profile/forget -H "Authorization: Bearer user-key" \
 
 | 阶段 | 重点 |
 |---|---|
-| 阶段一：单机可用（已完成） | 企业骨架 + Agent 能力补全，可演示、可学习 |
-| 阶段二：质量与运营（已完成） | 评测闭环、反馈、结构化输出、热更新、画像、影子评测 |
-| 阶段三：水平扩展（进行中） | Redis 会话共享（P28）→ 任务队列 → 记忆存储 → 无状态多副本 |
-| 阶段四：商业化（待启动） | 精确计费、额度账单、OIDC/SSO、SLO 告警、K8s 部署 |
+| 阶段一：单机可用（Standalone，已完成） | 企业骨架 + Agent 能力补全，可演示、可学习 |
+| 阶段二：质量与运营（Quality & Operations，已完成） | 评测闭环、反馈、结构化输出、热更新、画像、影子评测 |
+| 阶段三：水平扩展（Horizontal Scaling，进行中） | Redis 会话共享（P28）→ 任务队列 → 记忆存储 → 无状态多副本 |
+| 阶段四：商业化（Commercialization，待启动） | 精确计费、额度账单、OIDC/SSO、SLO 告警、K8s 部署 |
 
 ---
 
@@ -496,16 +496,16 @@ curl -X POST :8080/v1/user/profile/forget -H "Authorization: Bearer user-key" \
 
 | 符号 | 类别 |
 |---|---|
-| ── | 标题分隔 |
-| ◆ | 模型 |
-| ▲ | 工具 |
-| ■ | 技能 |
-| ● | MCP |
-| ▣ | 记忆 |
-| ▤ | 知识库 |
-| ♪ | 语音 |
-| ◐ | 影子评测 |
-| ◎ | Redis |
+| ── | 标题分隔（Title） |
+| ◆ | 模型（Model） |
+| ▲ | 工具（Tool） |
+| ■ | 技能（Skill） |
+| ● | MCP（Model Context Protocol，模型上下文协议） |
+| ▣ | 记忆（Memory） |
+| ▤ | 知识库（RAG Knowledge Base） |
+| ♪ | 语音（Voice：ASR / TTS） |
+| ◐ | 影子评测（Shadow Evaluation） |
+| ◎ | Redis（会话存储） |
 
 执行痕迹与对话循环的符号：
 
