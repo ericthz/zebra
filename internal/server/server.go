@@ -119,6 +119,7 @@ func (s *APIServer) Handler() http.Handler {
 		mux.HandleFunc("GET /v1/tasks", s.handleListTasks)    // P12 任务列表
 		mux.HandleFunc("GET /v1/tasks/", s.handleGetTask)     // P12 任务查询
 	}
+	mux.HandleFunc("/", uiHandler()) // P14 前端 Web UI（公开）
 	mux.HandleFunc("/healthz", HealthzHandler())
 	mux.HandleFunc("/readyz", ReadyzHandler(s.deps.Logger, map[string]func() error{
 		"llm":   func() error { return s.toolsReadyCheck() },
@@ -134,7 +135,7 @@ func (s *APIServer) Handler() http.Handler {
 	h = Recover(s.deps.Logger)(h)
 	h = AccessLog(s.deps.Logger, s.deps.Metrics)(h)
 	h = RateLimit(s.deps.Rate)(h)
-	h = Auth(s.deps.Keys, "/healthz", "/readyz", "/metrics", "/metrics/cost")(h)
+	h = Auth(s.deps.Keys, "/", "/healthz", "/readyz", "/metrics", "/metrics/cost")(h)
 	h = RequestID(h)
 	return h
 }
