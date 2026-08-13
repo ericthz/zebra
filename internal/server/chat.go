@@ -15,17 +15,19 @@ import (
 
 // ChatRequest 请求体。
 type ChatRequest struct {
-	SessionID     string `json:"session_id,omitempty"`     // 空则新建会话
-	Message       string `json:"message"`                  // 用户输入
-	Stream        bool   `json:"stream,omitempty"`         // 是否流式
-	ConfirmRisky  bool   `json:"confirm_risky,omitempty"`  // D20 高危工具二次确认授权
-	Mode          string `json:"mode,omitempty"`           // "plan"=规划-执行编排(P10)；空=普通执行
+	SessionID    string `json:"session_id,omitempty"`    // 空则新建会话
+	Message      string `json:"message"`                 // 用户输入
+	Stream       bool   `json:"stream,omitempty"`        // 是否流式
+	ConfirmRisky bool   `json:"confirm_risky,omitempty"` // D20 高危工具二次确认授权
+	Mode         string `json:"mode,omitempty"`          // "plan"=规划-执行编排(P10)；空=普通执行
+	Shadow       bool   `json:"shadow,omitempty"`        // P21 显式触发影子评测（默认按采样率）
 }
 
 // ChatResponse 非流式响应。
 type ChatResponse struct {
 	SessionID string `json:"session_id"`
 	Reply     string `json:"reply"`
+	Shadow    bool   `json:"shadow_sampled,omitempty"` // P21 是否进了影子对比
 }
 
 // handleChat 非流式对话。
@@ -73,7 +75,18 @@ func (s *APIServer) handleChat(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	json.NewEncoder(w).Encode(ChatResponse{SessionID: sess.ID, Reply: reply})
+	resp := ChatResponse{SessionID: sess.ID, Reply: reply}
+
+	// P21 影子模式：真实流量按采样率（或显式请求）复制给候选模型对比。
+	// 异步执行，不阻塞用户响应；结论落影子记录，供换模型前的回归评估。
+	if s.deps.Shadow != nil && s.deps.Shadow.WantSample(req.Shadow) {
+		resp.Shadow = true
+		go func() {
+			res := s.deps.Shadow.Run(context.Background(), sess.User, sess.ID, req.Message, reply, s.deps.Model)
+			s.deps.Logger.Info("shadow sampled", "id", res.ID, "verdict", res.Verdict)
+		}()
+	}
+	json.NewEncoder(w).Encode(resp)
 
 	// P4 主动出站：任务完成异步通知业务系统（不阻塞响应）
 	if s.deps.Notifier != nil {

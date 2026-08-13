@@ -25,6 +25,7 @@ import (
 	"github.com/ericthz/zebra/internal/agent"
 	"github.com/ericthz/zebra/internal/cache"
 	"github.com/ericthz/zebra/internal/cost"
+	"github.com/ericthz/zebra/internal/eval"
 	"github.com/ericthz/zebra/internal/feedback"
 	"github.com/ericthz/zebra/internal/mcp"
 	"github.com/ericthz/zebra/internal/memory"
@@ -34,9 +35,9 @@ import (
 	"github.com/ericthz/zebra/internal/rag"
 	"github.com/ericthz/zebra/internal/safety"
 	"github.com/ericthz/zebra/internal/server"
-	"github.com/ericthz/zebra/internal/task"
 	"github.com/ericthz/zebra/internal/skill"
 	"github.com/ericthz/zebra/internal/supervisor"
+	"github.com/ericthz/zebra/internal/task"
 	"github.com/ericthz/zebra/internal/tool"
 )
 
@@ -258,6 +259,34 @@ func main() {
 		}
 	}
 
+	// ---- P21 在线评测/影子模式：候选模型 + 评审器（可选）----
+	// ZEBRA_SHADOW_MODEL 开启；候选默认走 Ollama 同后端，ZEBRA_SHADOW_OPENAI=1
+	// 则走 OpenAI 兼容（可用 FALLBACK 网关/新模型做对比）。
+	// ZEBRA_SHADOW_SAMPLE 为自动采样率百分比（0~100），0 表示仅显式触发。
+	var shadowEval *eval.ShadowEvaluator
+	if shadowModel := os.Getenv("ZEBRA_SHADOW_MODEL"); shadowModel != "" {
+		var candidate provider.Provider
+		if os.Getenv("ZEBRA_SHADOW_OPENAI") == "1" {
+			candidate = &provider.OpenAIProvider{
+				BaseURL: envOr("ZEBRA_SHADOW_BASE_URL", envOr("FALLBACK_BASE_URL", "https://api.openai.com/v1")),
+				Model:   shadowModel,
+				APIKey:  os.Getenv("OPENAI_API_KEY"),
+				Client:  httpCli,
+			}
+		} else {
+			candidate = &provider.OllamaProvider{
+				BaseURL: envOr("ZEBRA_SHADOW_BASE_URL", envOr("OLLAMA_BASE_URL", "http://localhost:11434")),
+				Model:   shadowModel,
+				Client:  httpCli,
+			}
+		}
+		sample := float64(atoiDefault(os.Getenv("ZEBRA_SHADOW_SAMPLE"), 10)) / 100
+		shadowEval = eval.NewShadowEvaluator(candidate, eval.NewJudge(router), eval.NewShadowStore(200), sample)
+		shadowEval.Metrics = metrics.Inc
+		shadowEval.Log = logger
+		logger.Info("已启用影子评测", "candidate", shadowModel, "sample_rate", sample)
+	}
+
 	api := server.NewAPIServer(server.Deps{
 		Router:     router,
 		Tools:      reg,
@@ -283,6 +312,7 @@ func main() {
 		Supervisor: supervisorInst,
 		Feedback:   fbStore,
 		Reload:     reload,
+		Shadow:     shadowEval,
 	})
 
 	addr := envOr("ADDR", ":8080")

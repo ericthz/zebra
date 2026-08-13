@@ -14,6 +14,7 @@ import (
 	"github.com/ericthz/zebra/internal/agent"
 	"github.com/ericthz/zebra/internal/cache"
 	"github.com/ericthz/zebra/internal/cost"
+	"github.com/ericthz/zebra/internal/eval"
 	"github.com/ericthz/zebra/internal/feedback"
 	"github.com/ericthz/zebra/internal/memory"
 	"github.com/ericthz/zebra/internal/notify"
@@ -29,30 +30,31 @@ import (
 
 // Deps 服务依赖（全部可替换，方便测试与生产替换实现）。
 type Deps struct {
-	Router     *provider.Router    // C15 多模型路由
-	Tools      *tool.Registry      // D20 工具权限
-	Prompts    *prompt.Registry    // C16 提示词
-	Mem        *memory.Manager     // C12 记忆
+	Router     *provider.Router     // C15 多模型路由
+	Tools      *tool.Registry       // D20 工具权限
+	Prompts    *prompt.Registry     // C16 提示词
+	Mem        *memory.Manager      // C12 记忆
 	Window     *agent.ContextWindow // C11 上下文工程
-	Moderator  safety.Moderator    // D18 内容审核
-	Audit      safety.AuditLog     // D20 审计
-	Sessions   SessionStore        // A2 会话
-	Keys       *KeyStore           // A3 API Key
-	Rate       *RateLimiter        // B6 限流
-	Logger     *slog.Logger        // B5 日志
-	Metrics    *Metrics            // B5 指标
+	Moderator  safety.Moderator     // D18 内容审核
+	Audit      safety.AuditLog      // D20 审计
+	Sessions   SessionStore         // A2 会话
+	Keys       *KeyStore            // A3 API Key
+	Rate       *RateLimiter         // B6 限流
+	Logger     *slog.Logger         // B5 日志
+	Metrics    *Metrics             // B5 指标
 	MaxTurns   int
 	PromptName string
-	Skills     *skill.Registry // P1 技能注册表（nil 关闭技能检索）
-	Notifier   notify.Notifier // P4 主动出站：任务完成通知（nil 关闭）
-	Cost       *cost.Tracker   // P5 成本归因（nil 关闭）
-	Cache      *cache.SemanticCache // P5 语义缓存（nil 关闭）
-	RAG        *rag.Index      // P8 知识库检索（nil 关闭）
-	Model      string          // 主模型名（成本归因用）
-	TaskStore  task.Store      // P12 异步任务存储（nil 关闭异步 API）
-	Supervisor *supervisor.Supervisor // P13 多 Agent（nil 关闭 supervisor 模式）
+	Skills     *skill.Registry         // P1 技能注册表（nil 关闭技能检索）
+	Notifier   notify.Notifier         // P4 主动出站：任务完成通知（nil 关闭）
+	Cost       *cost.Tracker           // P5 成本归因（nil 关闭）
+	Cache      *cache.SemanticCache    // P5 语义缓存（nil 关闭）
+	RAG        *rag.Index              // P8 知识库检索（nil 关闭）
+	Model      string                  // 主模型名（成本归因用）
+	TaskStore  task.Store              // P12 异步任务存储（nil 关闭异步 API）
+	Supervisor *supervisor.Supervisor  // P13 多 Agent（nil 关闭 supervisor 模式）
 	Feedback   *feedback.InMemoryStore // P16 反馈闭环（nil 关闭反馈 API）
-	Reload     func() error        // P18 配置热更新（nil 关闭重载端点）
+	Reload     func() error            // P18 配置热更新（nil 关闭重载端点）
+	Shadow     *eval.ShadowEvaluator   // P21 在线评测/影子模式（nil 关闭）
 }
 
 // APIServer HTTP 服务。
@@ -118,9 +120,9 @@ func (s *APIServer) Handler() http.Handler {
 	mux.HandleFunc("/v1/chat/stream", s.handleChatStream)
 	mux.HandleFunc("DELETE /v1/user/data", s.handleForget) // P6 被遗忘权
 	if s.tasks != nil {
-		mux.HandleFunc("POST /v1/tasks", s.handleSubmitTask)   // P12 异步任务
-		mux.HandleFunc("GET /v1/tasks", s.handleListTasks)    // P12 任务列表
-		mux.HandleFunc("GET /v1/tasks/", s.handleGetTask)     // P12 任务查询
+		mux.HandleFunc("POST /v1/tasks", s.handleSubmitTask) // P12 异步任务
+		mux.HandleFunc("GET /v1/tasks", s.handleListTasks)   // P12 任务列表
+		mux.HandleFunc("GET /v1/tasks/", s.handleGetTask)    // P12 任务查询
 	}
 	if s.deps.Feedback != nil {
 		mux.HandleFunc("POST /v1/feedback", s.handleSubmitFeedback) // P16 反馈
@@ -128,6 +130,10 @@ func (s *APIServer) Handler() http.Handler {
 	}
 	if s.deps.Reload != nil {
 		mux.HandleFunc("POST /v1/admin/reload", s.handleReload) // P18 热更新（仅 admin）
+	}
+	if s.deps.Shadow != nil {
+		mux.HandleFunc("POST /v1/eval/shadow", s.handleRunShadow) // P21 影子评测
+		mux.HandleFunc("GET /v1/eval/shadow", s.handleListShadow) // P21 影子记录
 	}
 	mux.HandleFunc("/", uiHandler()) // P14 前端 Web UI（公开）
 	mux.HandleFunc("/healthz", HealthzHandler())
