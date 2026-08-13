@@ -68,19 +68,45 @@ func (a *Agent) PlanAndExecute(ctx context.Context, userInput string, opts RunOp
 }
 
 // plan 阶段 1：让 LLM 输出 JSON 步骤列表。
+// P17 结构化输出强约束：用 StructuredChat（优先 response_format 强约束，
+// 回退普通调用 + schema 校验），保证拿到合法规划 JSON。
 func (a *Agent) plan(ctx context.Context, userInput string) (*Plan, error) {
 	prompt := fmt.Sprintf(`你是一个任务规划器。请把下面的用户请求拆解为 2~5 个有序的执行步骤。
 只输出 JSON，不要其它内容：
 {"summary":"一句话总结计划","steps":[{"title":"步骤标题","task":"给执行器的具体子任务描述"}]}
 用户请求：%s`, userInput)
 
-	msg, _, err := a.cfg.Router.ChatWithFallback(ctx, []provider.Message{
+	data, err := provider.StructuredChat(ctx, a.cfg.Router, []provider.Message{
 		{Role: "user", Content: prompt},
-	}, nil)
+	}, planSchema)
 	if err != nil {
 		return nil, err
 	}
-	return parsePlan(msg.Content)
+	var p Plan
+	if err := json.Unmarshal(data, &p); err != nil {
+		return nil, err
+	}
+	return &p, nil
+}
+
+// planSchema 规划输出的 JSON Schema（P17 强约束）。
+var planSchema = map[string]interface{}{
+	"type": "object",
+	"properties": map[string]interface{}{
+		"summary": map[string]interface{}{"type": "string"},
+		"steps": map[string]interface{}{
+			"type":  "array",
+			"items": map[string]interface{}{
+				"type":       "object",
+				"properties": map[string]interface{}{
+					"title": map[string]interface{}{"type": "string"},
+					"task":  map[string]interface{}{"type": "string"},
+				},
+				"required": []interface{}{"title", "task"},
+			},
+		},
+	},
+	"required": []interface{}{"summary", "steps"},
 }
 
 // parsePlan 从模型回复中稳健抽取并解析规划 JSON。

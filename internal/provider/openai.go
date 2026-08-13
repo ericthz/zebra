@@ -114,6 +114,53 @@ func (p *OpenAIProvider) ChatStream(ctx context.Context, messages []Message, too
 	return ch, nil
 }
 
+// ChatJSON 结构化输出强约束（P17）：
+// 通过 OpenAI 的 response_format=json_schema 让模型【生成前】就按 schema 输出，
+// 显著降低"生成后解析失败"的概率。这是"强约束"在 provider 层的落地。
+// 仅 OpenAI 兼容接口支持；其他 provider 走 StructuredChat 的回退路径。
+func (p *OpenAIProvider) ChatJSON(ctx context.Context, messages []Message, jsonSchema map[string]interface{}) (Message, error) {
+	payload, err := p.buildPayload(messages, nil, false)
+	if err != nil {
+		return Message{}, err
+	}
+	// 在 payload 上附加 response_format
+	var body map[string]interface{}
+	if err := json.Unmarshal(payload, &body); err != nil {
+		return Message{}, err
+	}
+	body["response_format"] = map[string]interface{}{
+		"type":        "json_schema",
+		"json_schema": jsonSchema,
+	}
+	payload, _ = json.Marshal(body)
+
+	url := strings.TrimRight(p.BaseURL, "/") + "/v1/chat/completions"
+	resp, err := p.Client.Do(ctx, http.MethodPost, url, payload, p.setAuth)
+	if err != nil {
+		return Message{}, err
+	}
+	defer resp.Body.Close()
+
+	var result struct {
+		Choices []struct {
+			Message Message `json:"message"`
+		} `json:"choices"`
+		Error *struct {
+			Message string `json:"message"`
+		} `json:"error"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return Message{}, err
+	}
+	if result.Error != nil {
+		return Message{}, fmt.Errorf("openai: %s", result.Error.Message)
+	}
+	if len(result.Choices) == 0 {
+		return Message{}, fmt.Errorf("openai: 空 choices")
+	}
+	return result.Choices[0].Message, nil
+}
+
 func (p *OpenAIProvider) setAuth(req *http.Request) {
 	if p.APIKey != "" {
 		req.Header.Set("Authorization", "Bearer "+p.APIKey)
