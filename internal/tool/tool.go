@@ -121,6 +121,41 @@ func StringArg(args map[string]interface{}, key string) string {
 	return strings.TrimSpace(s)
 }
 
+// StringSliceArg 读取字符串切片参数（模型 JSON 解码后是 []interface{}）。
+func StringSliceArg(args map[string]interface{}, key string) []string {
+	raw, ok := args[key].([]interface{})
+	if !ok {
+		return nil
+	}
+	out := make([]string, 0, len(raw))
+	for _, v := range raw {
+		if s, ok := v.(string); ok {
+			out = append(out, s)
+		}
+	}
+	return out
+}
+
+// FloatSliceArg 读取浮点切片参数（JSON number 统一解为 float64）。
+func FloatSliceArg(args map[string]interface{}, key string) []float64 {
+	raw, ok := args[key].([]interface{})
+	if !ok {
+		return nil
+	}
+	out := make([]float64, 0, len(raw))
+	for _, v := range raw {
+		switch n := v.(type) {
+		case float64:
+			out = append(out, n)
+		case int:
+			out = append(out, float64(n))
+		case int64:
+			out = append(out, float64(n))
+		}
+	}
+	return out
+}
+
 // FloatArg 安全读取数值参数。
 func FloatArg(args map[string]interface{}, key string) (float64, bool) {
 	f, ok := args[key].(float64)

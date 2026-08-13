@@ -116,6 +116,9 @@ func main() {
 	reg.Register(&tool.ReadFileTool{Sandbox: execSandbox})
 	reg.Register(&tool.WriteFileTool{Sandbox: execSandbox})
 	reg.Register(&tool.RunCommandTool{Sandbox: execSandbox})
+	// ---- P23 文档/图表产出：Word/PDF/SVG 图表（沙箱内落盘，admin-only）----
+	reg.Register(&tool.GenerateDocxTool{Sandbox: execSandbox})
+	reg.Register(&tool.GenerateChartTool{Sandbox: execSandbox})
 
 	// ---- P1 技能体系：扫描 skills/ 目录注册技能（技能检索与注入由 Agent 完成）----
 	skillReg := skill.NewRegistry()
