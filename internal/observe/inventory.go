@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	"github.com/ericthz/zebra/internal/console"
+	"github.com/ericthz/zebra/internal/mcp"
 	"github.com/ericthz/zebra/internal/skill"
 	"github.com/ericthz/zebra/internal/tool"
 )
@@ -22,6 +23,24 @@ const labelWidth = 12
 // 父行 "├── "(4 格) 后图标在第 5 列，故子项前缀 "│"(第 1 列树干) + 3 个空格，
 // 分支起点在第 5 列，与图标垂直对齐。
 var childTrunkIcon = "│" + strings.Repeat(" ", 3)
+
+// Item 子项（如 MCP 工具）名称 + 描述。
+type Item struct {
+	Name        string
+	Description string
+}
+
+// FromMCP 把 MCP 工具定义转为清单子项（供两端共用）。
+func FromMCP(defs []mcp.ToolDef) []Item {
+	if len(defs) == 0 {
+		return nil
+	}
+	out := make([]Item, 0, len(defs))
+	for _, d := range defs {
+		out = append(out, Item{Name: d.Name, Description: d.Description})
+	}
+	return out
+}
 
 // branch 返回树形分支：非末项用 ├─，末项用 └─。
 func branch(i, total int) string {
@@ -39,6 +58,7 @@ type Info struct {
 	Skills          []*skill.Skill // 已加载技能（可能为空）
 	MCPMode         string         // "stdio"/"http"/空
 	MCPCount        int            // 已连接的 MCP 工具数
+	MCPTools        []Item         // MCP 已注册工具（名称+描述，供子项展示）
 	MemMode         string         // 记忆模式说明（如 "工作记忆 + Qdrant"）
 	RAGDocs         int            // 已摄入文档数
 	RAGChunks       int            // 知识库分块数
@@ -77,11 +97,20 @@ func PrintInventory(w io.Writer, info Info) {
 		}
 	}
 
-	// 3. MCP 状态（是否支持 / 是否就绪）
+	// 3. MCP 状态（父级：模式与连接数；子项：每个 MCP 工具逐行展示，与工具一致）
 	if info.MCPMode == "" {
 		fmt.Fprintf(w, "├── %s: 未启用（MCP_MODE 未设置）\n", lbl("●", console.ColorMCP, "MCP"))
 	} else {
 		fmt.Fprintf(w, "├── %s: 模式=%s · 已连接 %d 个工具\n", lbl("●", console.ColorMCP, "MCP"), info.MCPMode, info.MCPCount)
+		maxName := 0
+		for _, t := range info.MCPTools {
+			if w := console.Width(t.Name); w > maxName {
+				maxName = w
+			}
+		}
+		for i, t := range info.MCPTools {
+			fmt.Fprintf(w, "%s%s%s: %s\n", childTrunkIcon, branch(i, len(info.MCPTools)), console.Pad(t.Name, maxName+2), t.Description)
+		}
 	}
 
 	// 4. 技能（父级：数量；子项：树形分支逐行，名称 — 描述）

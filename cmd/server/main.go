@@ -132,7 +132,7 @@ func main() {
 	reg.DenyTool("user", "web_search") // 示例：收回搜索权限
 
 	// 可选：挂载 MCP 远端工具（保持与既有能力一致）
-	mcpMode, mcpCount := mcp.RegisterTools(reg, logger)
+	mcpMode, mcpDefs := mcp.RegisterTools(reg, logger)
 
 	reg.Register(&tool.FetchURLTool{}) // P6 SSRF 防护的抓取工具
 	// ---- P2 本地执行：文件读写 + 命令执行（沙箱隔离 + 高危二次确认）----
@@ -409,7 +409,8 @@ func main() {
 		Tools:           reg,
 		Skills:          skillsList,
 		MCPMode:         mcpMode,
-		MCPCount:        mcpCount,
+		MCPCount:        len(mcpDefs),
+		MCPTools:        observe.FromMCP(mcpDefs),
 		MemMode:         memMode,
 		RAGDocs:         docsCount,
 		RAGChunks:       ragChunks,

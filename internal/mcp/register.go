@@ -20,12 +20,13 @@ import (
 	"github.com/ericthz/zebra/internal/tool"
 )
 
-// RegisterTools 挂载 MCP 远端工具，返回（模式, 已注册工具数）。
-// 未配置 MCP_MODE 或连接失败时返回 0 并告警。
-func RegisterTools(reg *tool.Registry, logger *slog.Logger) (string, int) {
+// RegisterTools 挂载 MCP 远端工具，返回（模式, 已注册的工具定义）。
+// 未配置 MCP_MODE 或连接失败时返回 nil 并告警；返回的 defs 供启动清单
+// 像本地工具一样逐项展示子项（名称 + 描述）。
+func RegisterTools(reg *tool.Registry, logger *slog.Logger) (string, []ToolDef) {
 	mode := strings.ToLower(os.Getenv("MCP_MODE"))
 	if mode == "" {
-		return mode, 0
+		return mode, nil
 	}
 	// 握手超时放宽到 10s：stdio 子进程常是 `go run`（如 cmd/mcp），首启编译
 	// 可能数秒；http 模式下连接失败是即时拒绝，不受此超时影响。
@@ -37,13 +38,13 @@ func RegisterTools(reg *tool.Registry, logger *slog.Logger) (string, int) {
 	case "stdio":
 		cmd := os.Getenv("MCP_COMMAND")
 		if cmd == "" {
-			return mode, 0
+			return mode, nil
 		}
 		parts := strings.Fields(cmd)
 		tr, err := NewStdioClient(parts[0], parts[1:]...)
 		if err != nil {
 			logger.Warn("MCP stdio 启动失败", "err", err)
-			return mode, 0
+			return mode, nil
 		}
 		client = NewClient(tr)
 	case "http":
@@ -51,23 +52,23 @@ func RegisterTools(reg *tool.Registry, logger *slog.Logger) (string, int) {
 		client = NewClient(tr)
 	default:
 		logger.Warn("MCP_MODE 不支持，已忽略", "mode", mode)
-		return mode, 0
+		return mode, nil
 	}
 
 	if err := client.Initialize(ctx); err != nil { // 握手（官方规范）
 		logger.Warn("MCP initialize 失败", "err", err)
-		return mode, 0
+		return mode, nil
 	}
 	defs, err := client.ListTools(ctx)
 	if err != nil {
 		logger.Warn("MCP tools/list 失败", "err", err)
-		return mode, 0
+		return mode, nil
 	}
 	for _, def := range defs {
 		reg.Register(NewMCPToolAdapter(client, def))
 		logger.Info("已注册 MCP 工具", "name", def.Name)
 	}
-	return mode, len(defs)
+	return mode, defs
 }
 
 func envOr(k, def string) string {

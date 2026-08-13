@@ -18,18 +18,18 @@ func discardLogger() *slog.Logger {
 func TestRegisterToolsDisabled(t *testing.T) {
 	t.Setenv("MCP_MODE", "")
 	reg := tool.NewRegistry()
-	mode, n := RegisterTools(reg, discardLogger())
-	if mode != "" || n != 0 || len(reg.Names()) != 0 {
-		t.Fatalf("未配置 MCP 应返回 (\"\", 0): mode=%q n=%d", mode, n)
+	mode, defs := RegisterTools(reg, discardLogger())
+	if mode != "" || len(defs) != 0 || len(reg.Names()) != 0 {
+		t.Fatalf("未配置 MCP 应返回 (\"\", nil): mode=%q defs=%d", mode, len(defs))
 	}
 }
 
 func TestRegisterToolsBadMode(t *testing.T) {
 	t.Setenv("MCP_MODE", "weird")
 	reg := tool.NewRegistry()
-	_, n := RegisterTools(reg, discardLogger())
-	if n != 0 {
-		t.Fatalf("非法模式不应注册工具: %d", n)
+	_, defs := RegisterTools(reg, discardLogger())
+	if len(defs) != 0 {
+		t.Fatalf("非法模式不应注册工具: %d", len(defs))
 	}
 }
 
@@ -68,9 +68,12 @@ func TestRegisterToolsHTTP(t *testing.T) {
 	t.Setenv("MCP_HTTP_URL", ts.URL)
 
 	reg := tool.NewRegistry()
-	mode, n := RegisterTools(reg, discardLogger())
-	if mode != "http" || n != 1 {
-		t.Fatalf("应注册 1 个 MCP 工具: mode=%q n=%d", mode, n)
+	mode, defs := RegisterTools(reg, discardLogger())
+	if mode != "http" || len(defs) != 1 {
+		t.Fatalf("应注册 1 个 MCP 工具: mode=%q defs=%d", mode, len(defs))
+	}
+	if defs[0].Name != "mcp_echo" || defs[0].Description != "echo tool" {
+		t.Fatalf("MCP 定义返回异常: %+v", defs[0])
 	}
 	names := reg.Names()
 	if len(names) != 1 || names[0] != "mcp_echo" {

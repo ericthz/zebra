@@ -86,7 +86,7 @@ func main() {
 	reg.Register(&tool.WriteFileTool{Sandbox: execSandbox})
 	reg.Register(&tool.RunCommandTool{Sandbox: execSandbox})
 	// ---- P32 MCP 远端工具：与 cmd/server 同一装配（MCP_MODE 设置即启用）----
-	mcpMode, mcpCount := mcp.RegisterTools(reg, logger)
+	mcpMode, mcpDefs := mcp.RegisterTools(reg, logger)
 
 	// ---- P1 技能体系：加载 skills/ 目录 ----
 	skillReg := skill.NewRegistry()
@@ -177,7 +177,8 @@ func main() {
 		Tools:        reg,
 		Skills:       skills,
 		MCPMode:      mcpMode,
-		MCPCount:     mcpCount,
+		MCPCount:     len(mcpDefs),
+		MCPTools:     observe.FromMCP(mcpDefs),
 		MemMode:      memMode,
 		RAGDocs:      docsCount,
 		RAGChunks:    ragChunks,
