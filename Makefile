@@ -9,7 +9,7 @@ build:
 run: ## 启动企业版服务
 	go run ./cmd/server
 
-zebra: ## 单机 CLI 学习入口
+zebra: ## 本地 CLI 客户端
 	go run ./cmd/zebra
 
 mcp: ## 独立 MCP 服务器 (HTTP)

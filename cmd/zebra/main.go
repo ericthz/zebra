@@ -1,4 +1,4 @@
-// cmd/zebra —— 单机 CLI 版 Agent（学习入口，企业能力走 cmd/server）。
+// cmd/zebra —— 本地命令行 Agent 客户端（交互式终端；企业能力走 cmd/server）。
 //
 // 用法：
 //
@@ -34,7 +34,7 @@ import (
 
 func main() {
 	// ---- P37 终端 banner ----
-	observe.PrintBanner(os.Stdout, "zebra CLI — AI Agent 单机学习入口（输入 exit 退出）")
+	observe.PrintBanner(os.Stdout, "zebra CLI — 本地命令行 Agent 客户端（输入 exit 退出）")
 
 	// ---- P30 配置加载：先读 .env（决定日志去向与全部配置）----
 	envN, envErr := config.LoadDefault()

@@ -161,7 +161,7 @@
 - Go 1.21+（纯标准库，无第三方依赖）
 - Ollama（本地 LLM 与嵌入，可选；也可用 OpenAI 兼容网关）
 
-### 4.2 单机 CLI（最快体验 Agent 本体）
+### 4.2 本地 CLI（Agent 命令行客户端）
 
 ```bash
 ollama pull qwen3.5:0.8b-mlx

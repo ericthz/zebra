@@ -224,7 +224,7 @@ func main() {
 
 	// ---- 会话 / 限流 / 异步任务 ----
 	// P28 水平扩展：REDIS_URL 配置后会话存储切 Redis（多副本共享状态）；
-	// 否则用内存实现（单机演示）。
+	// 否则用内存实现（单机部署）。
 	var sessions server.SessionStore
 	if rurl := os.Getenv("REDIS_URL"); rurl != "" {
 		sessions = server.NewRedisSessionStore(&redis.Client{
