@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/ericthz/zebra/internal/agent"
+	"github.com/ericthz/zebra/internal/console"
 	"github.com/ericthz/zebra/internal/memory"
 	"github.com/ericthz/zebra/internal/prompt"
 	"github.com/ericthz/zebra/internal/provider"
@@ -99,20 +100,29 @@ func main() {
 
 	// ---- P31 启动清单：一眼看清这台 Agent 有什么 ----
 	fmt.Println("🤖 zebra CLI Agent（输入 exit 退出）")
-	fmt.Printf("  ⚙️  模型   : %s\n", router.Primary().Name())
+	label := func(s string) string { return console.Pad(s, 12) } // 标签列定宽，冒号对齐
+	fmt.Printf("  %s: %s\n", label("🤖 模型"), router.Primary().Name())
 	toolNames := reg.Names()
-	fmt.Printf("  🛠  工具   : %d 个 —— %s\n", len(toolNames), strings.Join(toolNames, ", "))
-	if len(skills) == 0 {
-		fmt.Println("  📚 技能   : 无")
-	} else {
-		names := make([]string, 0, len(skills))
-		for _, sk := range skills {
-			names = append(names, fmt.Sprintf("%s(%s)", sk.Name, sk.Description))
-		}
-		fmt.Printf("  📚 技能   : %d 个 —— %s\n", len(skills), strings.Join(names, ", "))
+	fmt.Printf("  %s: %d 个\n", label("🛠 工具"), len(toolNames))
+	for _, row := range console.Columns(toolNames, 4) {
+		fmt.Printf("     %s\n", row)
 	}
-	fmt.Println("  🔌 MCP    : demo 未启用（企业版 cmd/server 支持）")
-	fmt.Println("  🧠 记忆   : 工作记忆（单机）")
+	if len(skills) == 0 {
+		fmt.Printf("  %s: 无\n", label("📚 技能"))
+	} else {
+		fmt.Printf("  %s: %d 个\n", label("📚 技能"), len(skills))
+		maxName := 0
+		for _, sk := range skills {
+			if n := len(sk.Name); n > maxName {
+				maxName = n
+			}
+		}
+		for _, sk := range skills {
+			fmt.Printf("     %s  %s\n", console.Pad(sk.Name, maxName+2), sk.Description)
+		}
+	}
+	fmt.Printf("  %s: demo 未启用（企业版 cmd/server 支持）\n", label("🔌 MCP"))
+	fmt.Printf("  %s: 工作记忆（单机）\n", label("🧠 记忆"))
 	fmt.Println(strings.Repeat("─", 60))
 	sc := bufio.NewScanner(os.Stdin)
 	for {

@@ -47,15 +47,17 @@ func TestPrintStartupInventory(t *testing.T) {
 	out := buf.String()
 	for _, want := range []string{
 		"zebra 启动清单",
-		"工具      : 2 个",
-		"calculator, fetch_url",
-		"MCP       : 模式=http · 已连接 3 个工具",
-		"技能      : 2 个",
-		"report-sop(写研究报告)",
-		"知识库    : 2 篇文档 / 12 块",
-		"语音      : 已启用",
+		": 2 个",
+		"calculator",
+		"fetch_url",
+		"模式=http · 已连接 3 个工具",
+		"技能",
+		"report-sop",
+		"写研究报告",
+		": 2 篇文档 / 12 块",
+		": 已启用（ASR/TTS）",
 		"candidate=qwen2.5:7b",
-		"Redis     : 127.0.0.1:6379",
+		": 127.0.0.1:6379（会话共享）",
 	} {
 		if !strings.Contains(out, want) {
 			t.Fatalf("启动清单缺少 %q\n%s", want, out)
@@ -67,7 +69,11 @@ func TestPrintStartupInventoryDisabled(t *testing.T) {
 	var buf bytes.Buffer
 	printStartupInventory(&buf, startupInfo{MCPMode: "", RedisURL: "", ShadowCandidate: ""})
 	out := buf.String()
-	for _, want := range []string{"MCP       : 未启用", "Redis     : 未启用", "影子评测  : 未启用"} {
+	for _, want := range []string{
+		": 未启用（MCP_MODE 未设置）",
+		": 未启用（内存会话，单机）",
+		": 未启用（ZEBRA_SHADOW_MODEL 未设置）",
+	} {
 		if !strings.Contains(out, want) {
 			t.Fatalf("未启用状态缺少 %q\n%s", want, out)
 		}
