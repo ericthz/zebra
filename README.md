@@ -1,13 +1,14 @@
 # zebra — AI Agent 企业架构参考实现
 
 > 一个把 **企业级 AI Agent 的全部横切能力** 落到代码里的学习项目。
-> 纯 Go 标准库（零第三方运行时依赖），覆盖**六轮架构**：
+> 纯 Go 标准库（零第三方运行时依赖），覆盖**七轮架构**：
 > 第一轮 A~E 企业骨架（服务化/可靠性/安全/可观测）；
 > 第二轮 P1~P6 对标成熟 Agent 的能力补全（技能/本地执行/质量闭环/主动出站/成本治理/安全加固）；
 > 第三轮 P8~P10 智能体纵深（RAG 知识库 / 并行工具调用 / 规划-执行编排）；
 > 第四轮 P12~P14 规模化与体验（异步长任务 / 多 Agent 协作 / 前端 Web UI）；
 > 第五轮 P16~P18 运营与工程纵深（反馈闭环 / 结构化输出 / 配置热更新）；
-> 第六轮 P20~P23 检索与交付纵深（混合检索 / 影子评测 / 记忆画像 / 文档图表产出）。
+> 第六轮 P20~P23 检索与交付纵深（混合检索 / 影子评测 / 记忆画像 / 文档图表产出）；
+> 第七轮 P25~P28 交互与规模纵深（语音交互 / 影子灰度切换 / 画像 LLM 抽取 / Redis 水平扩展）。
 > **每个能力都有真实可运行的最小实现 + 详细中文注释 + 端到端验证**，刻意保持精简、可逐行读懂。
 
 这不是一个"能直接上线的产品"，而是一张**可对照学习的架构地图**：
@@ -191,11 +192,12 @@ curl :8080/metrics
 ## 代码规模
 
 ```
-107 个 .go 文件（含 35 个测试），约 1.2 万行，纯 Go 标准库
+120 个 .go 文件（含 42 个测试），约 1.4 万行，纯 Go 标准库
 ├── cmd/         3 个入口（server / demo / mcp）
 ├── internal/
 │   ├── agent/    核心编排 + 上下文工程 + 规划-执行 + 画像注入
 │   ├── provider/ LLM 多协议适配 + 路由 + 超时重试熔断 + 结构化输出
+│   │            + 语音 ASR/TTS（OpenAI 兼容）
 │   ├── tool/     工具 + 权限 + 校验 + 审计 + 本地执行沙箱 + 文档工具
 │   ├── memory/   分层记忆 + 用户画像 + 遗忘策略
 │   ├── docgen/   Word/PDF/SVG 图表产出（零依赖文件生成）
@@ -208,12 +210,13 @@ curl :8080/metrics
 │   ├── feedback/ 反馈闭环
 │   ├── task/     异步长任务 + 检查点
 │   ├── supervisor/ 多 Agent 路由
+│   ├── redis/    纯标准库 RESP 客户端（水平扩展）
 │   └── notify/ schedule/ cost/ cache/ schema/ 出站/调度/成本/缓存/校验
 └── test/eval/    LLM 黄金评测骨架
 ```
 
 对比：重构前 25 个文件 3274 行，覆盖的却是"单机 CLI Demo"能力。
-**相近量级的代码，现在覆盖了 25 项企业能力** —— 这就是"架构设计"的杠杆。
+**相近量级的代码，现在覆盖了 29 项企业能力** —— 这就是"架构设计"的杠杆。
 并且：`go build` / `go vet` 零警告，`go test ./...` 全绿。
 
 ---
@@ -264,12 +267,17 @@ curl :8080/metrics
 | ✅ P21 | **在线评测/影子模式**（真实流量复制给候选模型双评） | `internal/eval/shadow.go` `internal/server/shadow.go` | POST /v1/eval/shadow → verdict 对比 |
 | ✅ P22 | **记忆画像/遗忘机制**（对话学习画像 + TTL 保鲜 + 容量治理） | `internal/memory/profile.go` `forget.go` | 说"我叫小明"→画像可见；TTL 过期自动隐藏 |
 | ✅ P23 | **文档/图表产出**（docx/PDF/SVG 图表） | `internal/docgen/` `internal/tool/docgen.go` | generate_docx / generate_chart 落盘可打开 |
+| ✅ P25 | **语音交互**（OpenAI 兼容 ASR/TTS） | `internal/provider/voice.go` `internal/server/voice.go` | /v1/voice/chat 音频进→文本→Agent→音频出 |
+| ✅ P26 | **影子评测看板 + 灰度切换** | `internal/eval/stats.go` `router.Promote` | win-rate 统计/建议 + admin 一键 promote 候选 |
+| ✅ P27 | **画像 LLM 抽取升级**（语义抽取 + 规则回退） | `internal/memory/extract.go` | LLM 结构化输出抽画像，失败自动回退规则 |
+| ✅ P28 | **水平扩展骨架**（纯标准库 RESP + Redis 会话存储） | `internal/redis/` `internal/server/redis_session.go` | REDIS_URL 后多副本共享会话/历史 |
 
 **新增工具**：`list_dir` / `read_file` / `write_file` / `run_command`（本地执行，P2）、`fetch_url`（SSRF 防护，P6）、
 `generate_docx` / `generate_chart`（文档/图表产出，P23）。
 
 **新增环境变量**：见 `.env.example`（`EXEC_WORKDIR` / `EXEC_READONLY` / `WEBHOOK_URL` / `WEBHOOK_SECRET` /
-`ZEBRA_SHADOW_MODEL` / `ZEBRA_SHADOW_OPENAI` / `ZEBRA_SHADOW_SAMPLE` / `PROFILE_TTL_HOURS` 等）。
+`ZEBRA_SHADOW_MODEL` / `ZEBRA_SHADOW_OPENAI` / `ZEBRA_SHADOW_SAMPLE` / `PROFILE_TTL_HOURS` /
+`VOICE_BASE_URL` / `REDIS_URL` / `PROFILE_LLM` 等）。
 
 ---
 
@@ -284,6 +292,11 @@ curl :8080/metrics
 | POST | /v1/user/profile/forget | 删除一条画像事实（P22） |
 | POST | /v1/eval/shadow | 触发一次影子评测（P21，仅 admin） |
 | GET | /v1/eval/shadow | 影子评测记录（P21，仅 admin） |
+| GET | /v1/eval/shadow/stats | 影子评测看板 + 灰度建议（P26，仅 admin） |
+| POST | /v1/eval/shadow/promote | 候选模型提升为主模型（P26，仅 admin） |
+| POST | /v1/voice/chat | 语音对话全链路（P25：音频→文本→Agent→音频 base64） |
+| POST | /v1/voice/transcribe | 语音转写（P25） |
+| POST | /v1/voice/synthesize | 文本合成语音（P25） |
 | GET | /healthz /readyz | 存活/就绪探针（免鉴权） |
 | GET | /metrics | 通用指标（免鉴权） |
 | GET | /metrics/cost | 成本归因：按用户/会话 token 用量（P5，免鉴权） |

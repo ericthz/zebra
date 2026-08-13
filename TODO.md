@@ -180,6 +180,28 @@
 - [x] 工具：generate_docx / generate_chart（沙箱落盘 + 高危二次确认 + admin-only）
 - [x] 单测 + 端到端（docx 可解包、PDF 头/xref/startxref、SVG 元素校验）
 
+### ✅ P25 — 语音交互（ASR/TTS）
+- [x] `internal/provider/voice.go`：OpenAI 兼容 Transcribe（multipart）+ Synthesize（JSON→音频流）
+- [x] API：POST /v1/voice/transcribe、/v1/voice/synthesize、/v1/voice/chat（音频→Agent→音频 base64）
+- [x] 单测 + 端到端（mock 语音网关断言请求格式；全链路音频回传）
+
+### ✅ P26 — 影子评测看板 + 灰度切换
+- [x] `internal/eval/stats.go`：ShadowStats 聚合 + RecommendSwitch（样本数/胜率阈值）
+- [x] `router.Promote`：候选模型提升为主模型（即时生效）
+- [x] API：GET /v1/eval/shadow/stats（看板+建议）、POST /v1/eval/shadow/promote（仅 admin，审计留痕）
+- [x] 单测 + 端到端（win-rate 统计；promote 后 primary 切换）
+
+### ✅ P27 — 画像 LLM 抽取升级
+- [x] `internal/memory/extract.go`：Extractor 接口 + LLMExtractor（P17 结构化输出）+ RuleExtractor 回退
+- [x] Agent/Server 接线：Extractor 可注入，默认 LLM 抽取（PROFILE_LLM=0 退回纯规则）
+- [x] 单测 + 端到端（LLM 抽取入库；失败/空结果自动回退规则）
+
+### ✅ P28 — 水平扩展骨架（Redis 会话存储）
+- [x] `internal/redis/`：纯标准库 RESP 客户端（SET/GET/DEL/EXPIRE/KEYS + AUTH/SELECT）
+- [x] `RedisSessionStore`：SessionStore + HistoryPersister（历史写回），TTL 由 Redis 原生负责
+- [x] 接线：REDIS_URL 开启；chat 请求结束自动写回历史（多轮不丢）
+- [x] 单测 + 端到端（假 Redis 服务器验证协议；创建/续期/遗忘/历史写回）
+
 ## 3. 设计基调（每个功能都必须遵守）
 
 1. **纯 Go 标准库**，零第三方运行时依赖
