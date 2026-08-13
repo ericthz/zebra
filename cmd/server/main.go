@@ -27,6 +27,7 @@ import (
 	"github.com/ericthz/zebra/internal/cost"
 	"github.com/ericthz/zebra/internal/eval"
 	"github.com/ericthz/zebra/internal/feedback"
+	"github.com/ericthz/zebra/internal/kg"
 	"github.com/ericthz/zebra/internal/mcp"
 	"github.com/ericthz/zebra/internal/memory"
 	"github.com/ericthz/zebra/internal/notify"
@@ -208,6 +209,17 @@ func main() {
 		} else {
 			logger.Warn("docs/ 目录无文档，RAG 知识库为空（仍可用，检索无命中）")
 		}
+	}
+
+	// ---- P52 知识图谱：从 docs/ 规则抽取实体关系（独立于嵌入器）----
+	kgGraph := kg.NewGraph()
+	if docs, err := rag.LoadDocs("docs"); err == nil {
+		for _, content := range docs {
+			for _, tr := range kg.ExtractTriples(content) {
+				kgGraph.Add(tr)
+			}
+		}
+		logger.Info("知识图谱已构建", "triples", kgGraph.Size())
 	}
 
 	// ---- P4 主动出站：Webhook 通知器（可选，WEBHOOK_URL 为空则关闭）----
@@ -395,6 +407,7 @@ func main() {
 		ProfileTTL: profilePolicy.TTL,
 		Extractor:  profileExtractor,
 		Voice:      voice,
+		KG:         kgGraph,
 	})
 
 	// ---- P31 启动能力清单：把"这台服务有什么"打成一目了然的终端清单 ----

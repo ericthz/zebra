@@ -19,6 +19,7 @@ import (
 	"github.com/ericthz/zebra/internal/cost"
 	"github.com/ericthz/zebra/internal/eval"
 	"github.com/ericthz/zebra/internal/feedback"
+	"github.com/ericthz/zebra/internal/kg"
 	"github.com/ericthz/zebra/internal/memory"
 	"github.com/ericthz/zebra/internal/notify"
 	"github.com/ericthz/zebra/internal/prompt"
@@ -62,6 +63,7 @@ type Deps struct {
 	ProfileTTL time.Duration           // P22 画像事实保鲜期（<=0 永不过期）
 	Extractor  memory.Extractor        // P27 画像抽取器（nil 用规则抽取）
 	Voice      *provider.VoiceClient   // P25 语音交互（nil 关闭语音 API）
+	KG         *kg.Graph               // P52 知识图谱（nil 关闭图谱 API）
 }
 
 // APIServer HTTP 服务。
@@ -173,6 +175,9 @@ func (s *APIServer) Handler() http.Handler {
 		mux.HandleFunc("POST /v1/voice/transcribe", s.handleVoiceTranscribe) // P25 ASR
 		mux.HandleFunc("POST /v1/voice/synthesize", s.handleVoiceSynthesize) // P25 TTS
 		mux.HandleFunc("POST /v1/voice/chat", s.handleVoiceChat)             // P25 语音对话
+	}
+	if s.deps.KG != nil {
+		mux.HandleFunc("GET /v1/knowledge", s.handleKnowledge) // P52 知识图谱查询
 	}
 	mux.HandleFunc("/", uiHandler()) // P14 前端 Web UI（公开）
 	mux.HandleFunc("/healthz", HealthzHandler())
