@@ -1,0 +1,67 @@
+// 流式运行器（C10）：Agent 层事件模型 + SSE 语义。
+package agent
+
+import (
+	"context"
+
+	"github.com/ericthz/zebra/internal/provider"
+)
+
+// EventType Agent 层事件类型。
+type EventType string
+
+const (
+	EventDelta EventType = "delta"     // 文本增量
+	EventTool  EventType = "tool_call" // 模型调用工具
+	EventDone  EventType = "done"      // 本轮完成
+	EventError EventType = "error"     // 出错
+)
+
+// Event Agent 层事件。
+type Event struct {
+	Type    EventType              `json:"type"`
+	Content string                 `json:"content,omitempty"`
+	Name    string                 `json:"tool_name,omitempty"`
+	Args    map[string]interface{} `json:"tool_args,omitempty"`
+	Message string                 `json:"message,omitempty"` // error 时携带错误文本
+	Err     error                  `json:"-"`
+}
+
+// RunStream 流式执行一轮对话：返回事件通道，调用方逐条消费（如转 SSE）。
+func (a *Agent) RunStream(ctx context.Context, userInput string, opts RunOptions) (<-chan Event, error) {
+	ch := make(chan Event, 32)
+	go func() {
+		defer close(ch)
+		_, err := a.run(ctx, userInput, opts, func(ev Event) { ch <- ev })
+		if err != nil {
+			ch <- Event{Type: EventError, Message: err.Error(), Err: err}
+		}
+		ch <- Event{Type: EventDone}
+	}()
+	return ch, nil
+}
+
+// collectStream 消费 provider 流式事件，聚合成完整回复，同时转发增量。
+func collectStream(ch <-chan provider.StreamEvent, emit func(Event)) (provider.Message, error) {
+	var msg provider.Message
+	msg.Role = "assistant"
+	for ev := range ch {
+		switch ev.Type {
+		case provider.StreamEventDelta:
+			msg.Content += ev.Content
+			emit(Event{Type: EventDelta, Content: ev.Content})
+		case provider.StreamEventTool:
+			if ev.ToolCall != nil {
+				msg.ToolCalls = append(msg.ToolCalls, *ev.ToolCall)
+				emit(Event{Type: EventTool, Name: ev.ToolCall.Function.Name})
+			}
+		case provider.StreamEventDone:
+			return msg, nil
+		case provider.StreamEventError:
+			if ev.Err != nil {
+				return msg, ev.Err
+			}
+		}
+	}
+	return msg, nil
+}

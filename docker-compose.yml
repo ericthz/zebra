@@ -1,0 +1,23 @@
+# 本地一键起企业版依赖：LLM(Ollama) + 向量库(Qdrant) + zebra 服务
+services:
+  ollama:
+    image: ollama/ollama:latest
+    ports: ["11434:11434"]
+    volumes: [ollama:/root/.ollama]
+
+  qdrant:
+    image: qdrant/qdrant:latest
+    ports: ["6333:6333"]
+
+  zebra:
+    build: .
+    depends_on: [ollama, qdrant]
+    environment:
+      OLLAMA_BASE_URL: http://ollama:11434
+      QDRANT_URL: http://qdrant:6333
+      ADMIN_KEY: ${ADMIN_KEY:-admin-key}
+      USER_KEY: ${USER_KEY:-user-key}
+    ports: ["8080:8080"]
+
+volumes:
+  ollama:
