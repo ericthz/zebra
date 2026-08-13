@@ -3,6 +3,8 @@ package tool
 import (
 	"context"
 	"encoding/json"
+	"reflect"
+	"sort"
 	"testing"
 )
 
@@ -92,5 +94,20 @@ func TestToolsForRoleFiltering(t *testing.T) {
 		if len(tools) == 0 {
 			t.Fatalf("%s 至少可见 fake", role)
 		}
+	}
+}
+
+// TestRegistryNames P31：启动清单需要"全部工具名"（排序）。
+func TestRegistryNames(t *testing.T) {
+	r := NewRegistry()
+	r.Register(fakeTool{})  // "fake"
+	r.Register(riskyTool{}) // "risky"
+	names := r.Names()
+	want := []string{"fake", "risky"}
+	if !reflect.DeepEqual(names, want) || !sort.StringsAreSorted(names) {
+		t.Fatalf("Names 应排序且完整: %v", names)
+	}
+	if len(names) != 2 {
+		t.Fatalf("Names 数量错误: %v", names)
 	}
 }

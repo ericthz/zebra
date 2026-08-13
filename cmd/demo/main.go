@@ -9,6 +9,7 @@ package main
 import (
 	"bufio"
 	"context"
+	"encoding/json"
 	"fmt"
 	"log/slog"
 	"os"
@@ -60,6 +61,7 @@ func main() {
 	if loaded, err := skill.LoadDir("skills"); err == nil {
 		skillReg.LoadAll(loaded)
 	}
+	skills := skillReg.List()
 
 	// ---- 记忆：仅工作记忆（单机演示不依赖 Qdrant）----
 	mem := memory.NewManager(memory.NewWorkingMemory(10), nil)
@@ -78,12 +80,40 @@ func main() {
 		MaxTurns:   5,
 		PromptName: "assistant",
 		Skills:     skillReg,
+		// P31 执行痕迹：工具调用与技能注入在终端可见，学习 Agent 行为
+		OnTool: func(name string, args map[string]interface{}, ok bool, err error) {
+			detail, _ := json.Marshal(args)
+			if ok {
+				fmt.Printf("  🛠 工具调用: %s(%s) ✓\n", name, detail)
+			} else {
+				fmt.Printf("  🛠 工具调用: %s(%s) ❌ %v\n", name, detail, err)
+			}
+		},
+		OnSkill: func(names []string) {
+			fmt.Printf("  📚 技能注入: %s\n", strings.Join(names, ", "))
+		},
 	})
 
 	history := make([]provider.Message, 0)
 	ag.Bind("demo", "admin", "local", &history)
 
+	// ---- P31 启动清单：一眼看清这台 Agent 有什么 ----
 	fmt.Println("🤖 zebra CLI Agent（输入 exit 退出）")
+	fmt.Printf("  ⚙️  模型   : %s\n", router.Primary().Name())
+	toolNames := reg.Names()
+	fmt.Printf("  🛠  工具   : %d 个 —— %s\n", len(toolNames), strings.Join(toolNames, ", "))
+	if len(skills) == 0 {
+		fmt.Println("  📚 技能   : 无")
+	} else {
+		names := make([]string, 0, len(skills))
+		for _, sk := range skills {
+			names = append(names, fmt.Sprintf("%s(%s)", sk.Name, sk.Description))
+		}
+		fmt.Printf("  📚 技能   : %d 个 —— %s\n", len(skills), strings.Join(names, ", "))
+	}
+	fmt.Println("  🔌 MCP    : demo 未启用（企业版 cmd/server 支持）")
+	fmt.Println("  🧠 记忆   : 工作记忆（单机）")
+	fmt.Println(strings.Repeat("─", 60))
 	sc := bufio.NewScanner(os.Stdin)
 	for {
 		fmt.Print("👤 ")

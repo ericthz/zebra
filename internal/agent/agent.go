@@ -25,22 +25,24 @@ import (
 
 // Config Agent 构造参数。
 type Config struct {
-	Router     *provider.Router                            // C15 多模型路由（含 fallback）
-	Tools      *tool.Registry                              // D20 工具权限白名单所在
-	Prompts    *prompt.Registry                            // C16 系统提示模板
-	Mem        *memory.Manager                             // C12 分层记忆
-	Window     *ContextWindow                              // C11 上下文工程（nil 则关闭预算控制）
-	Moderator  safety.Moderator                            // D18 内容审核（nil 则跳过）
-	MaxTurns   int                                         // 工具调用最大轮数
-	PromptName string                                      // 使用的系统提示模板名
-	Model      string                                      // 当前模型名（用于成本归因 P5）
-	OnUsage    func(model string, inTokens, outTokens int) // B5/P5 用量与成本钩子
-	Skills     *skill.Registry                             // 技能注册表（P1，nil 则关闭技能检索）
-	Cache      *cache.SemanticCache                        // 语义缓存（P5，nil 则关闭）
-	RAG        *rag.Index                                  // 知识库检索（P8，nil 则关闭 RAG）
-	Profile    *memory.ProfileStore                        // 用户画像（P22，nil 则关闭）
-	ProfileTTL time.Duration                               // 画像事实保鲜期（P22，<=0 永不过期）
-	Extractor  memory.Extractor                            // 画像抽取器（P27，nil 用规则抽取）
+	Router     *provider.Router                                                   // C15 多模型路由（含 fallback）
+	Tools      *tool.Registry                                                     // D20 工具权限白名单所在
+	Prompts    *prompt.Registry                                                   // C16 系统提示模板
+	Mem        *memory.Manager                                                    // C12 分层记忆
+	Window     *ContextWindow                                                     // C11 上下文工程（nil 则关闭预算控制）
+	Moderator  safety.Moderator                                                   // D18 内容审核（nil 则跳过）
+	MaxTurns   int                                                                // 工具调用最大轮数
+	PromptName string                                                             // 使用的系统提示模板名
+	Model      string                                                             // 当前模型名（用于成本归因 P5）
+	OnUsage    func(model string, inTokens, outTokens int)                        // B5/P5 用量与成本钩子
+	Skills     *skill.Registry                                                    // 技能注册表（P1，nil 则关闭技能检索）
+	Cache      *cache.SemanticCache                                               // 语义缓存（P5，nil 则关闭）
+	RAG        *rag.Index                                                         // 知识库检索（P8，nil 则关闭 RAG）
+	Profile    *memory.ProfileStore                                               // 用户画像（P22，nil 则关闭）
+	ProfileTTL time.Duration                                                      // 画像事实保鲜期（P22，<=0 永不过期）
+	Extractor  memory.Extractor                                                   // 画像抽取器（P27，nil 用规则抽取）
+	OnSkill    func(names []string)                                               // 技能注入钩子（P31，nil 则关闭）
+	OnTool     func(name string, args map[string]interface{}, ok bool, err error) // 工具调用钩子（P31）
 }
 
 // Agent 单个会话的 Agent 实例。
@@ -268,6 +270,9 @@ func (a *Agent) execTool(ctx context.Context, tc provider.ToolCall, opts RunOpti
 	}
 
 	result, terr := a.cfg.Tools.Execute(ctx, tc.Function.Name, args, a.user, a.role, opts.Confirm != nil)
+	if a.cfg.OnTool != nil { // P31：上报一次真实工具执行（参数由调用方脱敏）
+		a.cfg.OnTool(tc.Function.Name, args, terr == nil, terr)
+	}
 	if terr != nil {
 		result = fmt.Sprintf("工具执行错误: %v", terr)
 	}
@@ -320,6 +325,13 @@ func (a *Agent) buildMessages(ctx context.Context, userInput string) []provider.
 	// 生产演化：技能检索换向量匹配；命中技能后可进一步按需读取其 scripts/ 资源。
 	if a.cfg.Skills != nil {
 		if hits := a.cfg.Skills.Match(userInput, 2); len(hits) > 0 {
+			if a.cfg.OnSkill != nil { // P31：对外上报"本次注入了哪些技能"（学习/可观测）
+				names := make([]string, 0, len(hits))
+				for _, sk := range hits {
+					names = append(names, sk.Name)
+				}
+				a.cfg.OnSkill(names)
+			}
 			for _, sk := range hits {
 				msgs = append(msgs, provider.Message{
 					Role:    "system",

@@ -3,11 +3,13 @@ package server
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"log/slog"
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
@@ -104,6 +106,19 @@ func (s *APIServer) buildAgent(user, role, sessionID string, hist *[]provider.Me
 		ProfileTTL: s.deps.ProfileTTL,
 		Extractor:  s.deps.Extractor,
 		Model:      s.deps.Model,
+		OnSkill: func(names []string) { // P31：技能注入可观测
+			s.deps.Logger.Info("skill.inject", "session", sessionID, "user", user,
+				"skills", strings.Join(names, ","))
+		},
+		OnTool: func(name string, args map[string]interface{}, ok bool, err error) { // P31：工具调用可观测
+			detail, _ := json.Marshal(args)
+			msg := "ok"
+			if err != nil {
+				msg = err.Error()
+			}
+			s.deps.Logger.Info("tool.call", "session", sessionID, "user", user,
+				"tool", name, "args", safety.Redact(string(detail)), "ok", ok, "err", msg)
+		},
 		OnUsage: func(model string, in, out int) { // B5 用量指标 + P5 成本归因
 			s.deps.Metrics.Inc("tokens_in:" + itoa(in/100))
 			s.deps.Metrics.Inc("tokens_out:" + itoa(out/100))

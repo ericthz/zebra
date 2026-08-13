@@ -117,7 +117,7 @@ func main() {
 	reg.DenyTool("user", "web_search") // 示例：收回搜索权限
 
 	// 可选：挂载 MCP 远端工具（保持与既有能力一致）
-	registerMCPTools(reg, logger)
+	mcpMode, mcpCount := registerMCPTools(reg, logger)
 
 	reg.Register(&tool.FetchURLTool{}) // P6 SSRF 防护的抓取工具
 	// ---- P2 本地执行：文件读写 + 命令执行（沙箱隔离 + 高危二次确认）----
@@ -164,6 +164,7 @@ func main() {
 	// ---- C12 记忆：工作记忆 + 可选 Qdrant 长期记忆 ----
 	working := memory.NewWorkingMemory(10)
 	var mem *memory.Manager
+	longMem := false
 	mem = memory.NewManager(working, nil) // 先只启工作记忆
 
 	if q := os.Getenv("QDRANT_URL"); q != "" {
@@ -173,6 +174,7 @@ func main() {
 		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 		if _, err := qmem.Retrieve(ctx, "ping", 1); err == nil {
 			mem = memory.NewManager(working, qmem)
+			longMem = true
 			logger.Info("长期记忆已启用", "qdrant", q)
 		} else {
 			logger.Warn("Qdrant 不可用，降级为仅工作记忆", "err", err)
@@ -189,6 +191,7 @@ func main() {
 	// ---- P5 语义缓存：复用嵌入器做语义相似度命中（相似问题直接回答案省钱）----
 	var semanticCache *cache.SemanticCache
 	var ragIndex *rag.Index
+	docsCount := 0
 	if emb := embedder(); emb != nil {
 		semanticCache = cache.New(emb, 0.92, 200)
 
@@ -201,6 +204,7 @@ func main() {
 					logger.Warn("RAG 文档摄入失败", "doc", name, "err", derr)
 					continue
 				}
+				docsCount++
 				logger.Info("已摄入知识文档", "doc", name)
 			}
 			cancel()
@@ -378,6 +382,45 @@ func main() {
 		Voice:      voice,
 	})
 
+	// ---- P31 启动能力清单：把"这台服务有什么"打成一目了然的终端清单 ----
+	var skillsList []*skill.Skill
+	if skillReg != nil {
+		skillsList = skillReg.List()
+	}
+	var models []string
+	for _, p := range router.Chain() {
+		if p != nil {
+			models = append(models, p.Name())
+		}
+	}
+	shadowCandidate, shadowSample := "", 0.0
+	if shadowEval != nil {
+		shadowCandidate = shadowEval.Candidate.Name()
+		shadowSample = shadowEval.SampleRate
+	}
+	memMode := "工作记忆"
+	if longMem {
+		memMode = "工作记忆 + Qdrant"
+	}
+	ragChunks := 0
+	if ragIndex != nil {
+		ragChunks = ragIndex.Len()
+	}
+	printStartupInventory(os.Stdout, startupInfo{
+		Models:          models,
+		Tools:           reg,
+		Skills:          skillsList,
+		MCPMode:         mcpMode,
+		MCPCount:        mcpCount,
+		MemMode:         memMode,
+		RAGDocs:         docsCount,
+		RAGChunks:       ragChunks,
+		VoiceEnabled:    voice != nil,
+		ShadowCandidate: shadowCandidate,
+		ShadowSample:    shadowSample,
+		RedisURL:        os.Getenv("REDIS_URL"),
+	})
+
 	addr := envOr("ADDR", ":8080")
 	if err := api.Serve(context.Background(), addr); err != nil {
 		logger.Error("server exited", "err", err)
@@ -398,10 +441,11 @@ func embedder() memory.Embedder {
 	return &memory.OllamaEmbedder{BaseURL: base, Model: model, Client: &http.Client{Timeout: 10 * time.Second}}
 }
 
-func registerMCPTools(reg *tool.Registry, logger *slog.Logger) {
+// registerMCPTools 挂载 MCP 远端工具，返回（模式, 已注册工具数）。
+func registerMCPTools(reg *tool.Registry, logger *slog.Logger) (string, int) {
 	mode := strings.ToLower(os.Getenv("MCP_MODE"))
 	if mode == "" {
-		return
+		return mode, 0
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
@@ -411,13 +455,13 @@ func registerMCPTools(reg *tool.Registry, logger *slog.Logger) {
 	case "stdio":
 		cmd := os.Getenv("MCP_COMMAND")
 		if cmd == "" {
-			return
+			return mode, 0
 		}
 		parts := strings.Fields(cmd)
 		tr, err := mcp.NewStdioClient(parts[0], parts[1:]...)
 		if err != nil {
 			logger.Warn("MCP stdio 启动失败", "err", err)
-			return
+			return mode, 0
 		}
 		client = mcp.NewClient(tr)
 	case "http":
@@ -425,21 +469,22 @@ func registerMCPTools(reg *tool.Registry, logger *slog.Logger) {
 		client = mcp.NewClient(tr)
 	}
 	if client == nil {
-		return
+		return mode, 0
 	}
 	if err := client.Initialize(ctx); err != nil { // 握手（官方规范）
 		logger.Warn("MCP initialize 失败", "err", err)
-		return
+		return mode, 0
 	}
 	defs, err := client.ListTools(ctx)
 	if err != nil {
 		logger.Warn("MCP tools/list 失败", "err", err)
-		return
+		return mode, 0
 	}
 	for _, def := range defs {
 		reg.Register(mcp.NewMCPToolAdapter(client, def))
 		logger.Info("已注册 MCP 工具", "name", def.Name)
 	}
+	return mode, len(defs)
 }
 
 func envOr(key, def string) string {

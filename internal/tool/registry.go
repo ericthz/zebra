@@ -9,6 +9,7 @@ package tool
 import (
 	"context"
 	"fmt"
+	"sort"
 	"sync"
 
 	"github.com/ericthz/zebra/internal/provider"
@@ -41,6 +42,18 @@ func (r *Registry) Register(t Tool) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.tools[t.Name()] = t
+}
+
+// Names 返回全部已注册工具名（排序，供启动清单/审计盘点使用）。
+func (r *Registry) Names() []string {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	out := make([]string, 0, len(r.tools))
+	for n := range r.tools {
+		out = append(out, n)
+	}
+	sort.Strings(out)
+	return out
 }
 
 // AllowTool 授予某角色使用某工具的权限。默认仅 admin 全开。
