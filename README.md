@@ -38,7 +38,7 @@
 
 | 维度 | 现状 |
 |---|---|
-| 代码规模 | 169 个 `.go` 文件（含 65 个测试），约 1.8 万行 |
+| 代码规模 | 171 个 `.go` 文件（含 67 个测试），约 1.8 万行 |
 | 包数量 | 31 个（`cmd/` 3 个入口 + `internal/` 27 个 + `test/` 评测） |
 | 运行时依赖 | 零第三方，纯 Go 标准库 |
 | 质量门禁 | `go build` / `go vet` 零警告，`go test ./...` 全绿 |
@@ -471,6 +471,9 @@ curl -X POST :8080/v1/user/profile/forget -H "Authorization: Bearer user-key" \
 | ✓ P51 | Redis 长期记忆（关键词检索 + 租户隔离） | `internal/memory/redis_mem.go` | 无 Qdrant 时 REDIS_URL 即启用 |
 | ✓ P52 | 知识图谱（三元组抽取/查询 + API） | `internal/kg/` `server/knowledge.go` | GET /v1/knowledge?entity=xx |
 | ✓ P53 | 插件动态加载（plugins/ JSON 定义 HTTP 工具 + 热重载） | `internal/plugin/` `tool.Registry.Remove` | 放 JSON 即注册，reload 可卸载 |
+| ✓ P55 | 反馈回流评测集（负面反馈自动追加用例） | `internal/eval/dataset.go` `server/feedback.go` | 踩 → Q&A 对进 feedback.json，回归纳入 |
+| ✓ P56 | 红队/对抗性评测（注入/越狱用例 + 安全分门槛） | `test/eval/cases/redteam.json` `test/eval/redteam_test.go` | ZEBRA_EVAL=1 跑红队，安全分不达标即失败 |
+| ✓ P57 | 画像冲突消解/合并（冲突记录 + 裁决 + 归一化合并） | `internal/memory/profile.go` `server/profile.go` | 同 key 异值可查可裁决；吃火锅/火锅自动合并 |
 
 **内置工具**：`calculator` / `get_current_datetime` / `generate_random_number` / `convert_units` / `translate_text` /
 `web_search` / `fetch_url`（SSRF 防护） / `list_dir` / `read_file` / `write_file` / `run_command` /
@@ -494,7 +497,8 @@ curl -X POST :8080/v1/user/profile/forget -H "Authorization: Bearer user-key" \
 > 已闭环：反思/自一致性（P40）、RAG 重排（P41）、金丝雀自动回滚（P42）、
 > Redis 任务队列（P43）、ReAct 轨迹（P45）、多 Agent 辩论（P46）、LLM 摘要压缩（P47）、
 > 查询改写（P48）、评测数据集管理（P49）、Redis 长期记忆（P51）、知识图谱（P52）、
-> 插件动态加载（P53）——详见 [8. 交付路线图](#8-交付路线图)。
+> 插件动态加载（P53）、反馈回流（P55）、红队评测（P56）、画像冲突消解/合并（P57）
+> ——详见 [8. 交付路线图](#8-交付路线图)。
 
 #### B. 需决策项（与"零第三方依赖"约束冲突，或需外部工具链）
 
