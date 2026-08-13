@@ -38,7 +38,7 @@
 
 | 维度 | 现状 |
 |---|---|
-| 代码规模 | 151 个 `.go` 文件（含 56 个测试），约 1.6 万行 |
+| 代码规模 | 161 个 `.go` 文件（含 61 个测试），约 1.7 万行 |
 | 包数量 | 29 个（`cmd/` 3 个入口 + `internal/` 25 个 + `test/` 评测） |
 | 运行时依赖 | 零第三方，纯 Go 标准库 |
 | 质量门禁 | `go build` / `go vet` 零警告，`go test ./...` 全绿 |
@@ -463,6 +463,11 @@ curl -X POST :8080/v1/user/profile/forget -H "Authorization: Bearer user-key" \
 | ✓ P41 | RAG 重排（LLM 精排候选片段，失败回退原序） | `internal/rag/rerank.go` | RetrieveReranked 二次精排提升 topK 质量 |
 | ✓ P42 | 金丝雀自动回滚（promote 后胜率不达标自动切回原主） | `internal/eval/stats.go` `server/shadow.go` | 回滚含审计与指标，观察期自动清空 |
 | ✓ P43 | Redis 任务队列（RedisTaskStore + 共享 redistest） | `internal/task/redis_store.go` `internal/redistest/` | REDIS_URL 时任务存储切 Redis，多副本共享 |
+| ✓ P45 | ReAct 轨迹（显式思考→行动→观察循环） | `internal/agent/react.go` | `mode=react` 推理-行动轨迹，工具执行复用 registry |
+| ✓ P46 | 多 Agent 辩论（左右立场→交换观点→评审选优） | `internal/agent/debate.go` | `mode=debate`，评审失败回退左方立场 |
+| ✓ P47 | LLM 摘要压缩（语义摘要替代截断） | `internal/agent/summarize.go` | ZEBRA_SUMMARIZER=llm；Trim 保留 2 条触发摘要 |
+| ✓ P48 | 查询改写（结构化改写，提升检索与回答） | `internal/agent/rewrite.go` | ZEBRA_QUERY_REWRITE=1 时检索与消息均用改写后问题 |
+| ✓ P49 | 评测数据集管理（用例目录化 + 回归对比） | `internal/eval/dataset.go` `test/eval/cases/` | LoadCases / RunCases / BaselineDiff |
 
 **内置工具**：`calculator` / `get_current_datetime` / `generate_random_number` / `convert_units` / `translate_text` /
 `web_search` / `fetch_url`（SSRF 防护） / `list_dir` / `read_file` / `write_file` / `run_command` /
@@ -485,8 +490,9 @@ curl -X POST :8080/v1/user/profile/forget -H "Authorization: Bearer user-key" \
 | 中 | Redis 长期记忆存储深化（Memory Store） | 会话与任务队列已迁 Redis（P28/P43）；长期记忆仍为 Qdrant |
 | 中 | 插件动态加载 / 浏览器自动化（Plugin Loading / Browser Automation） | 工具生态扩展（现为编译期注册） |
 
-> 本轮已闭环：反思/自一致性（P40）、RAG 重排（P41）、金丝雀自动回滚（P42）、
-> Redis 任务队列（P43）——详见 [8. 交付路线图](#8-交付路线图)。
+> 已闭环：反思/自一致性（P40）、RAG 重排（P41）、金丝雀自动回滚（P42）、
+> Redis 任务队列（P43）、ReAct 轨迹（P45）、多 Agent 辩论（P46）、LLM 摘要压缩（P47）、
+> 查询改写（P48）、评测数据集管理（P49）——详见 [8. 交付路线图](#8-交付路线图)。
 
 #### B. 需决策项（与"零第三方依赖"约束冲突，或需外部工具链）
 
