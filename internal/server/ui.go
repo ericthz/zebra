@@ -29,7 +29,7 @@ const chatUI = `<!DOCTYPE html>
 </style>
 </head>
 <body>
-<h1>🦓 zebra AI Agent</h1>
+<h1>◆ zebra AI Agent</h1>
 <div class="bar">
   <input id="key" placeholder="API Key (Bearer)" style="flex:1">
 </div>
@@ -63,7 +63,7 @@ async function send() {
   const text = document.getElementById('msg').value.trim();
   if (!text) return;
   document.getElementById('msg').value = '';
-  append('👤 ' + text, 'user');
+  append('> ' + text, 'user');
 
   const body = { message: text, stream: true, confirm_risky: true, session_id: sessionID, mode: modeEl.value };
   const resp = await fetch('/v1/chat/stream', {
@@ -92,11 +92,11 @@ async function send() {
       if (!data) continue;
       try {
         const ev = JSON.parse(data);
-        if (type === 'session') { sessionID = ev; localStorage.setItem('zebra_sid', sessionID); append('🔑 session: ' + sessionID, 'meta'); }
+        if (type === 'session') { sessionID = ev; localStorage.setItem('zebra_sid', sessionID); append('# session: ' + sessionID, 'meta'); }
         else if (type === 'delta') { if (!answerEl) { answerEl = document.createElement('div'); answerEl.className = 'assistant'; log.appendChild(answerEl); } answerEl.textContent += ev.content; }
-        else if (type === 'tool_call') { append('🔧 工具: ' + (ev.tool_name||''), 'tool'); }
+        else if (type === 'tool_call') { append('▲ 工具: ' + (ev.tool_name||''), 'tool'); }
         else if (type === 'done') append('', 'meta');
-        else if (type === 'error') append('❌ ' + (ev.message||''), 'err');
+        else if (type === 'error') append('✗ ' + (ev.message||''), 'err');
       } catch(e) { /* 忽略半包 */ }
     }
   }

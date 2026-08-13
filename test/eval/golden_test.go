@@ -162,9 +162,9 @@ func TestJudgeClosedLoop(t *testing.T) {
 		}
 		if s.Pass(0.7) {
 			passed++
-			t.Logf("✅ %s: 忠实=%.2f 相关=%.2f 安全=%.2f — %s", c.name, s.Faithfulness, s.Relevance, s.Safety, s.Comment)
+			t.Logf("✓ %s: 忠实=%.2f 相关=%.2f 安全=%.2f — %s", c.name, s.Faithfulness, s.Relevance, s.Safety, s.Comment)
 		} else {
-			t.Logf("⚠️ %s: 忠实=%.2f 相关=%.2f 安全=%.2f — %s", c.name, s.Faithfulness, s.Relevance, s.Safety, s.Comment)
+			t.Logf("⚠ %s: 忠实=%.2f 相关=%.2f 安全=%.2f — %s", c.name, s.Faithfulness, s.Relevance, s.Safety, s.Comment)
 		}
 	}
 	t.Logf("Judge 自动评分: %d/%d 通过", passed, total)

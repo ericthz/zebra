@@ -413,46 +413,46 @@ curl -X POST :8080/v1/user/profile/forget -H "Authorization: Bearer user-key" \
 ## 8. 交付路线图
 
 > 实施原则：**以功能为单位实现，完成一个提交一个**。
-> ✅ = 已完成并提交（含对应收尾 docs 提交）；每个里程碑均含实现 + 单元测试 + 端到端验证。
+> ✓ = 已完成并提交（含对应收尾 docs 提交）；每个里程碑均含实现 + 单元测试 + 端到端验证。
 
 | 里程碑 | 能力 | 关键落点 | 端到端验收 |
 |---|---|---|---|
-| ✅ P0 | 基线：差距分析汇总 + 基线提交 | `README.md` | 可编译、可测试、可运行 |
-| ✅ P1 | 技能体系 Skill（程序性知识包） | `internal/skill/` `skills/` | Agent 命中技能自动注入 SOP |
-| ✅ P2 | 本地执行（Local Execution：文件读写 + 命令沙箱） | `internal/tool/exec*.go` | Agent 真实建文件 + 执行命令 |
-| ✅ P3 | LLM 质量闭环（Quality Loop：LLM-as-a-Judge + 工具成功率指标） | `internal/eval/` | Judge 自动打分 + `/metrics` |
-| ✅ P4 | 主动出站（Outbound Actions：Webhook 通知 + 定时调度） | `internal/notify/` `schedule/` | 对话完成自动推送 |
-| ✅ P5 | 成本治理（Cost Governance：成本归因 + 语义缓存） | `internal/cost/` `cache/` | 同问题 23.8s → 21ms |
-| ✅ P6 | 安全加固（Security Hardening：SSRF/租户凭据/被遗忘权） | `safety/ssrf.go` `tool/fetch.go` `server/forget.go` | DELETE 后旧会话 401 |
-| ✅ P7 | 第一轮收尾（docs） | README 能力地图 | 全量验证 |
-| ✅ P8 | RAG 知识库（RAG Knowledge Base：分块/向量/检索/注入/引用） | `internal/rag/` `docs/` | 基于资料准确回答，无幻觉 |
-| ✅ P9 | 并行工具调用（Parallel Tool Calls：fan-out/fan-in） | `internal/agent/agent.go` | 并发执行、结果有序 |
-| ✅ P10 | 规划-执行编排（Plan-then-Execute） | `internal/agent/plan.go` | `mode=plan` 拆解→执行→汇总 |
-| ✅ P11 | 第二轮收尾（docs） | README 第二轮章节 | 全量验证 |
-| ✅ P12 | 异步长任务 + 检查点（Async Tasks & Checkpoints） | `internal/task/` `server/tasks.go` | 提交即返 id，轮询到 done，断点续跑 |
-| ✅ P13 | 多 Agent Supervisor | `internal/supervisor/` `cmd/server/workers.go` | 数据/知识/常规 worker 自动路由 |
-| ✅ P14 | 前端 Web UI（零构建 SSE 聊天） | `internal/server/ui.go` | GET / 返回 HTML 200 |
-| ✅ P15 | 第三轮收尾（docs） | README 更新 | 全量验证 |
-| ✅ P16 | 用户反馈闭环（User Feedback Loop：赞/踩→存储+指标+审计+回流） | `internal/feedback/` `server/feedback.go` | counts {positive:1, negative:1} |
-| ✅ P17 | 结构化输出强约束（Structured Output：schema 校验 + response_format） | `internal/schema/` `provider/structured.go` | 强约束规划 JSON |
-| ✅ P18 | 配置热更新（Hot Reload：技能/提示词/知识库不重启） | `prompt.LoadDir` `server/reload.go` | 重载后 v2 生效 |
-| ✅ P19 | 第五轮收尾（docs） | TODO/README 更新 | 全量验证 |
-| ✅ P20 | RAG 混合检索（Hybrid Retrieval：BM25 + 向量 z-score 融合） | `internal/rag/bm25.go` `index.go` | 专有名词精确命中 |
-| ✅ P21 | 在线评测/影子模式（Shadow Evaluation：shadow traffic 双评） | `internal/eval/shadow.go` `server/shadow.go` | verdict=candidate_better |
-| ✅ P22 | 记忆画像/遗忘机制（User Profile & Forgetting：对话学习 + TTL + 容量治理） | `memory/profile.go` `forget.go` | 画像可见可遗忘，TTL 自动隐藏 |
-| ✅ P23 | 文档/图表产出（Document & Chart Generation：docx/PDF/SVG） | `internal/docgen/` `tool/docgen.go` | 文件落盘可打开 |
-| ✅ P24 | 第六轮收尾（docs） | TODO/README 更新 | 全量验证 |
-| ✅ P25 | 语音交互（Voice Interaction：OpenAI 兼容 ASR/TTS） | `provider/voice.go` `server/voice.go` | 音频进→文本→Agent→音频出 |
-| ✅ P26 | 影子评测看板 + 灰度切换（Shadow Dashboard & Canary Switch） | `eval/stats.go` `router.Promote` | win-rate 统计 + 一键 promote |
-| ✅ P27 | 画像 LLM 抽取升级（LLM-based Profile Extraction：语义抽取 + 规则回退） | `memory/extract.go` | LLM 失败自动回退规则 |
-| ✅ P28 | 水平扩展骨架（Horizontal Scaling：RESP 客户端 + Redis 会话存储） | `internal/redis/` `server/redis_session.go` | REDIS_URL 后多副本共享会话 |
-| ✅ P29 | 第七轮收尾（docs） | TODO/README 更新 | 全量验证 |
-| ✅ P30 | 配置加载（Config Loading：零依赖 .env 加载器） | `internal/config/` `cmd/server/main.go` | 启动自动加载 .env，真实环境变量优先 |
-| ✅ P31 | 学习可观测（Observability for Learning：启动能力清单 + 执行痕迹） | `cmd/server/startup.go` `agent.OnTool/OnSkill` `tool.Registry.Names` | 启动打印工具/MCP/技能清单；执行打印工具调用与技能注入 |
-| ✅ P32 | 入口装配一致（CLI/Server 共享 .env/MCP/记忆） | `memory.SetupManager` `mcp.RegisterTools` | zebra CLI 与 server 同一套装配逻辑，状态如实显示 |
-| ✅ P33 | 终端配色（256 色符号，TTY/NO_COLOR 自动开关） | `internal/console/color.go` | TTY 下符号按类别着色；管道/CI 自动无色、对齐不变 |
-| ✅ P34 | zebra 诊断日志落盘（默认 zebra.log，ZEBRA_LOG=off 回退 stderr） | `cmd/zebra/main.go` | 终端无探测告警刷屏；依赖降级原因可查日志 |
-| ✅ P35 | server 日志双写落盘（默认 server.log，LOG_FILE=off 仅 stdout） | `cmd/server/main.go` `config.OpenLogFile` | JSON 日志同时输出 stdout 与文件，采集与排查两不误 |
+| ✓ P0 | 基线：差距分析汇总 + 基线提交 | `README.md` | 可编译、可测试、可运行 |
+| ✓ P1 | 技能体系 Skill（程序性知识包） | `internal/skill/` `skills/` | Agent 命中技能自动注入 SOP |
+| ✓ P2 | 本地执行（Local Execution：文件读写 + 命令沙箱） | `internal/tool/exec*.go` | Agent 真实建文件 + 执行命令 |
+| ✓ P3 | LLM 质量闭环（Quality Loop：LLM-as-a-Judge + 工具成功率指标） | `internal/eval/` | Judge 自动打分 + `/metrics` |
+| ✓ P4 | 主动出站（Outbound Actions：Webhook 通知 + 定时调度） | `internal/notify/` `schedule/` | 对话完成自动推送 |
+| ✓ P5 | 成本治理（Cost Governance：成本归因 + 语义缓存） | `internal/cost/` `cache/` | 同问题 23.8s → 21ms |
+| ✓ P6 | 安全加固（Security Hardening：SSRF/租户凭据/被遗忘权） | `safety/ssrf.go` `tool/fetch.go` `server/forget.go` | DELETE 后旧会话 401 |
+| ✓ P7 | 第一轮收尾（docs） | README 能力地图 | 全量验证 |
+| ✓ P8 | RAG 知识库（RAG Knowledge Base：分块/向量/检索/注入/引用） | `internal/rag/` `docs/` | 基于资料准确回答，无幻觉 |
+| ✓ P9 | 并行工具调用（Parallel Tool Calls：fan-out/fan-in） | `internal/agent/agent.go` | 并发执行、结果有序 |
+| ✓ P10 | 规划-执行编排（Plan-then-Execute） | `internal/agent/plan.go` | `mode=plan` 拆解→执行→汇总 |
+| ✓ P11 | 第二轮收尾（docs） | README 第二轮章节 | 全量验证 |
+| ✓ P12 | 异步长任务 + 检查点（Async Tasks & Checkpoints） | `internal/task/` `server/tasks.go` | 提交即返 id，轮询到 done，断点续跑 |
+| ✓ P13 | 多 Agent Supervisor | `internal/supervisor/` `cmd/server/workers.go` | 数据/知识/常规 worker 自动路由 |
+| ✓ P14 | 前端 Web UI（零构建 SSE 聊天） | `internal/server/ui.go` | GET / 返回 HTML 200 |
+| ✓ P15 | 第三轮收尾（docs） | README 更新 | 全量验证 |
+| ✓ P16 | 用户反馈闭环（User Feedback Loop：赞/踩→存储+指标+审计+回流） | `internal/feedback/` `server/feedback.go` | counts {positive:1, negative:1} |
+| ✓ P17 | 结构化输出强约束（Structured Output：schema 校验 + response_format） | `internal/schema/` `provider/structured.go` | 强约束规划 JSON |
+| ✓ P18 | 配置热更新（Hot Reload：技能/提示词/知识库不重启） | `prompt.LoadDir` `server/reload.go` | 重载后 v2 生效 |
+| ✓ P19 | 第五轮收尾（docs） | TODO/README 更新 | 全量验证 |
+| ✓ P20 | RAG 混合检索（Hybrid Retrieval：BM25 + 向量 z-score 融合） | `internal/rag/bm25.go` `index.go` | 专有名词精确命中 |
+| ✓ P21 | 在线评测/影子模式（Shadow Evaluation：shadow traffic 双评） | `internal/eval/shadow.go` `server/shadow.go` | verdict=candidate_better |
+| ✓ P22 | 记忆画像/遗忘机制（User Profile & Forgetting：对话学习 + TTL + 容量治理） | `memory/profile.go` `forget.go` | 画像可见可遗忘，TTL 自动隐藏 |
+| ✓ P23 | 文档/图表产出（Document & Chart Generation：docx/PDF/SVG） | `internal/docgen/` `tool/docgen.go` | 文件落盘可打开 |
+| ✓ P24 | 第六轮收尾（docs） | TODO/README 更新 | 全量验证 |
+| ✓ P25 | 语音交互（Voice Interaction：OpenAI 兼容 ASR/TTS） | `provider/voice.go` `server/voice.go` | 音频进→文本→Agent→音频出 |
+| ✓ P26 | 影子评测看板 + 灰度切换（Shadow Dashboard & Canary Switch） | `eval/stats.go` `router.Promote` | win-rate 统计 + 一键 promote |
+| ✓ P27 | 画像 LLM 抽取升级（LLM-based Profile Extraction：语义抽取 + 规则回退） | `memory/extract.go` | LLM 失败自动回退规则 |
+| ✓ P28 | 水平扩展骨架（Horizontal Scaling：RESP 客户端 + Redis 会话存储） | `internal/redis/` `server/redis_session.go` | REDIS_URL 后多副本共享会话 |
+| ✓ P29 | 第七轮收尾（docs） | TODO/README 更新 | 全量验证 |
+| ✓ P30 | 配置加载（Config Loading：零依赖 .env 加载器） | `internal/config/` `cmd/server/main.go` | 启动自动加载 .env，真实环境变量优先 |
+| ✓ P31 | 学习可观测（Observability for Learning：启动能力清单 + 执行痕迹） | `cmd/server/startup.go` `agent.OnTool/OnSkill` `tool.Registry.Names` | 启动打印工具/MCP/技能清单；执行打印工具调用与技能注入 |
+| ✓ P32 | 入口装配一致（CLI/Server 共享 .env/MCP/记忆） | `memory.SetupManager` `mcp.RegisterTools` | zebra CLI 与 server 同一套装配逻辑，状态如实显示 |
+| ✓ P33 | 终端配色（256 色符号，TTY/NO_COLOR 自动开关） | `internal/console/color.go` | TTY 下符号按类别着色；管道/CI 自动无色、对齐不变 |
+| ✓ P34 | zebra 诊断日志落盘（默认 zebra.log，ZEBRA_LOG=off 回退 stderr） | `cmd/zebra/main.go` | 终端无探测告警刷屏；依赖降级原因可查日志 |
+| ✓ P35 | server 日志双写落盘（默认 server.log，LOG_FILE=off 仅 stdout） | `cmd/server/main.go` `config.OpenLogFile` | JSON 日志同时输出 stdout 与文件，采集与排查两不误 |
 
 **内置工具**：`calculator` / `get_current_datetime` / `generate_random_number` / `convert_units` / `translate_text` /
 `web_search` / `fetch_url`（SSRF 防护） / `list_dir` / `read_file` / `write_file` / `run_command` /
@@ -534,7 +534,7 @@ curl -X POST :8080/v1/user/profile/forget -H "Authorization: Bearer user-key" \
 |---|---|
 | `>` / `»` | 对话输入提示 / 回复前缀（CLI） |
 | `▲ 工具调用` / `■ 技能注入` | 执行阶段痕迹 |
-| `✓` / `❌` | 工具调用成功 / 失败 |
+| `✓` / `✗` | 工具调用成功 / 失败 |
 
 示例（server）：
 
@@ -563,7 +563,7 @@ curl -X POST :8080/v1/user/profile/forget -H "Authorization: Bearer user-key" \
 4. **每个功能 ≤ 300 行**，超出则拆文件。
 5. **以功能为单位提交**，commit message 标注功能名。
 6. **新增代码必须有单元测试**。
-7. **终端行首标识统一使用单字符几何符号**（◆▲■●▣▤♪◐◎，每类别唯一），不使用 emoji 以免宽度错位；Web UI 等浏览器场景除外。
+7. **行首标识统一使用符号**（终端：◆▲■●▣▤♪◐◎ 等单字符几何符号，每类别唯一；Web UI 同步使用同一套符号），不使用 emoji。
 
 ---
 

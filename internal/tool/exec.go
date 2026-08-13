@@ -89,9 +89,9 @@ func (t *ListDirTool) Execute(_ context.Context, args map[string]interface{}) (s
 	}
 	var b strings.Builder
 	for _, e := range entries {
-		kind := "📄"
+		kind := "[F]" // 文件标识（符号化，避免 emoji 污染工具输出）
 		if e.IsDir() {
-			kind = "📁"
+			kind = "[D]" // 目录标识
 		}
 		fmt.Fprintf(&b, "%s %s\n", kind, e.Name())
 	}

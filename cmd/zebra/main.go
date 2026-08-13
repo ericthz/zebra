@@ -113,7 +113,7 @@ func main() {
 			if ok {
 				fmt.Printf("  %s 工具调用: %s(%s) ✓\n", sym, name, detail)
 			} else {
-				fmt.Printf("  %s 工具调用: %s(%s) ❌ %v\n", sym, name, detail, err)
+				fmt.Printf("  %s 工具调用: %s(%s) ✗ %v\n", sym, name, detail, err)
 			}
 		},
 		OnSkill: func(names []string) {
@@ -168,7 +168,7 @@ func main() {
 		ctx := context.Background()
 		answer, err := ag.Run(ctx, in, agent.RunOptions{})
 		if err != nil {
-			fmt.Printf("❌ %v\n", err)
+			fmt.Printf("✗ %v\n", err)
 			continue
 		}
 		fmt.Println(console.Symbol("»", console.ColorModel), answer)

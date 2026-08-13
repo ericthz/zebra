@@ -18,7 +18,8 @@ func TestPadAlignment(t *testing.T) {
 		t.Fatalf("宽度计算错误: 中文=%d ab=%d", displayWidth("中文"), displayWidth("ab"))
 	}
 	// emoji 分支仍按 2 格（保留对 U+1F000+ 的处理覆盖）
-	if displayWidth("🤖") != 2 {
-		t.Fatalf("emoji 应按 2 格: %d", displayWidth("🤖"))
+	emojiSample := string(rune(0x1F916)) // 用码点构造，源码不落 emoji 字形
+	if displayWidth(emojiSample) != 2 {
+		t.Fatalf("emoji 应按 2 格: %d", displayWidth(emojiSample))
 	}
 }
