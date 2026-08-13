@@ -12,8 +12,11 @@ import (
 	"encoding/json"
 	"net/http"
 	"strconv"
+	"time"
 
 	"github.com/ericthz/zebra/internal/agent"
+	"github.com/ericthz/zebra/internal/eval"
+	"github.com/ericthz/zebra/internal/safety"
 )
 
 // ShadowRequest 触发一次影子评测。
@@ -87,4 +90,61 @@ func (s *APIServer) handleListShadow(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	jsonOK(w, map[string]interface{}{"runs": s.deps.Shadow.Store.Recent("", limit)})
+}
+
+// handleShadowStats 影子评测看板：聚合统计 + 灰度切换建议（P26）。
+func (s *APIServer) handleShadowStats(w http.ResponseWriter, r *http.Request) {
+	p, ok := principal(r.Context())
+	if !ok {
+		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		return
+	}
+	if p.Role != "admin" {
+		http.Error(w, "仅 admin 可查看影子看板", http.StatusForbidden)
+		return
+	}
+	if s.deps.Shadow == nil {
+		http.Error(w, "影子评测未启用", http.StatusNotImplemented)
+		return
+	}
+	stats := s.deps.Shadow.Store.Stats("")
+	// 默认策略：样本 >= 10、候选胜率 >= 60% 才建议切换（可配置化扩展）
+	rec := eval.RecommendSwitch(stats, 10, 60)
+	jsonOK(w, map[string]interface{}{
+		"stats":          stats,
+		"recommendation": rec,
+		"candidate":      s.deps.Shadow.Candidate.Name(),
+		"primary":        s.deps.Router.Primary().Name(),
+	})
+}
+
+// handleShadowPromote 灰度切换：把候选模型提升为主模型（仅 admin，即时生效）。
+func (s *APIServer) handleShadowPromote(w http.ResponseWriter, r *http.Request) {
+	p, ok := principal(r.Context())
+	if !ok {
+		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		return
+	}
+	if p.Role != "admin" {
+		http.Error(w, "仅 admin 可切换主模型", http.StatusForbidden)
+		return
+	}
+	if s.deps.Shadow == nil {
+		http.Error(w, "影子评测未启用", http.StatusNotImplemented)
+		return
+	}
+	name := s.deps.Shadow.Candidate.Name()
+	if !s.deps.Router.Promote(name) {
+		http.Error(w, "候选模型未在路由链中: "+name, http.StatusNotFound)
+		return
+	}
+	// 切换是重要运维动作，必须审计留痕
+	if s.deps.Audit != nil {
+		s.deps.Audit.Log(safety.AuditEvent{
+			Time: time.Now(), User: p.User, Role: p.Role,
+			Action: "shadow.promote", Target: name, Risk: 2, Success: true,
+		})
+	}
+	s.deps.Logger.Info("影子候选已提升为主模型", "user", p.User, "model", name)
+	jsonOK(w, map[string]interface{}{"status": "promoted", "primary": name})
 }

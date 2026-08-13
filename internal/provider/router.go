@@ -32,6 +32,28 @@ func (r *Router) Primary() Provider {
 	return r.chain[0]
 }
 
+// Promote 灰度切换（P26）：把指定名称的候选 Provider 提升为主模型。
+// 已位于主位返回 true；未找到返回 false。切换即时生效，后续请求走新主。
+func (r *Router) Promote(name string) bool {
+	idx := -1
+	for i, p := range r.chain {
+		if p != nil && p.Name() == name {
+			idx = i
+			break
+		}
+	}
+	if idx < 0 {
+		return false
+	}
+	if idx == 0 {
+		return true // 候选已是主模型
+	}
+	p := r.chain[idx]
+	r.chain = append(r.chain[:idx], r.chain[idx+1:]...)
+	r.chain = append([]Provider{p}, r.chain...)
+	return true
+}
+
 // ChatWithFallback 依次尝试每个候选，直到成功；返回命中的 Provider 供上层观测。
 // 这同时实现了 B7 的"降级"：主模型故障 → 自动切备选，而不是把错误抛给用户。
 func (r *Router) ChatWithFallback(ctx context.Context, messages []Message, tools []Tool) (Message, Provider, error) {

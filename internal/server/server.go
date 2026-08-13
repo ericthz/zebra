@@ -137,8 +137,10 @@ func (s *APIServer) Handler() http.Handler {
 		mux.HandleFunc("POST /v1/admin/reload", s.handleReload) // P18 热更新（仅 admin）
 	}
 	if s.deps.Shadow != nil {
-		mux.HandleFunc("POST /v1/eval/shadow", s.handleRunShadow) // P21 影子评测
-		mux.HandleFunc("GET /v1/eval/shadow", s.handleListShadow) // P21 影子记录
+		mux.HandleFunc("POST /v1/eval/shadow", s.handleRunShadow)             // P21 影子评测
+		mux.HandleFunc("GET /v1/eval/shadow", s.handleListShadow)             // P21 影子记录
+		mux.HandleFunc("GET /v1/eval/shadow/stats", s.handleShadowStats)      // P26 影子看板
+		mux.HandleFunc("POST /v1/eval/shadow/promote", s.handleShadowPromote) // P26 灰度切换
 	}
 	if s.deps.Profile != nil {
 		mux.HandleFunc("GET /v1/user/profile", s.handleGetProfile)            // P22 画像查看

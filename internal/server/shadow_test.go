@@ -18,10 +18,18 @@ import (
 	"github.com/ericthz/zebra/internal/tool"
 )
 
-// staticProvider 固定回答的模型（Agent 主模型 / 候选模型共用）。
-type staticProvider struct{ reply string }
+// staticProvider 固定回答的模型（Agent 主模型 / 候选模型共用；name 可区分）。
+type staticProvider struct {
+	reply string
+	name  string
+}
 
-func (p *staticProvider) Name() string { return "static" }
+func (p *staticProvider) Name() string {
+	if p.name != "" {
+		return p.name
+	}
+	return "static"
+}
 func (p *staticProvider) Chat(_ context.Context, _ []provider.Message, _ []provider.Tool) (provider.Message, error) {
 	return provider.Message{Role: "assistant", Content: p.reply}, nil
 }
@@ -56,13 +64,16 @@ func newShadowServer(t *testing.T) (http.Handler, *eval.ShadowStore) {
 
 	store := eval.NewShadowStore(10)
 	shadow := eval.NewShadowEvaluator(
-		&staticProvider{reply: "候选回答：北京多云转晴。"},
+		&staticProvider{reply: "候选回答：北京多云转晴。", name: "candidate-model"},
 		eval.NewJudge(provider.NewRouter(judgeProvider{})),
 		store, 1.0, // 采样率 100%：方便端到端断言
 	)
 
 	api := NewAPIServer(Deps{
-		Router:     provider.NewRouter(&staticProvider{reply: "主回答：北京 25 度，晴朗。"}),
+		Router: provider.NewRouter(
+			&staticProvider{reply: "主回答：北京 25 度，晴朗。", name: "primary-model"},
+			&staticProvider{reply: "候选回答：北京多云转晴。", name: "candidate-model"},
+		),
 		Tools:      tool.NewRegistry(),
 		Prompts:    prompts,
 		Sessions:   NewInMemoryStore(time.Minute),
@@ -124,5 +135,49 @@ func TestShadowAPI(t *testing.T) {
 	rr = do("GET", "/v1/eval/shadow", "admin-key", "")
 	if rr.Code != http.StatusOK || !strings.Contains(rr.Body.String(), "candidate_better") {
 		t.Fatalf("影子记录列表异常: %d %s", rr.Code, rr.Body.String())
+	}
+}
+
+// TestShadowDashboardAndPromote 看板统计 + 灰度切换（P26）。
+func TestShadowDashboardAndPromote(t *testing.T) {
+	h, _ := newShadowServer(t)
+	do := func(method, path, key string) *httptest.ResponseRecorder {
+		req := httptest.NewRequest(method, path, bytes.NewBufferString(""))
+		if key != "" {
+			req.Header.Set("Authorization", "Bearer "+key)
+		}
+		rr := httptest.NewRecorder()
+		h.ServeHTTP(rr, req)
+		return rr
+	}
+
+	// 跑一次影子（产生 candidate_better 记录）
+	req := httptest.NewRequest("POST", "/v1/eval/shadow", bytes.NewBufferString(`{"message":"北京天气"}`))
+	req.Header.Set("Authorization", "Bearer admin-key")
+	rr := httptest.NewRecorder()
+	h.ServeHTTP(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("影子评测失败: %d %s", rr.Code, rr.Body.String())
+	}
+
+	// 看板：统计含 1 条 candidate_better
+	rr = do("GET", "/v1/eval/shadow/stats", "admin-key")
+	if rr.Code != http.StatusOK || !strings.Contains(rr.Body.String(), `"candidate_better":1`) {
+		t.Fatalf("看板统计异常: %d %s", rr.Code, rr.Body.String())
+	}
+	// user 无权限
+	if rr := do("GET", "/v1/eval/shadow/stats", "user-key"); rr.Code != http.StatusForbidden {
+		t.Fatalf("user 看板应 403，实际 %d", rr.Code)
+	}
+
+	// 灰度切换：候选提升为主模型
+	rr = do("POST", "/v1/eval/shadow/promote", "admin-key")
+	if rr.Code != http.StatusOK || !strings.Contains(rr.Body.String(), "candidate-model") {
+		t.Fatalf("promote 异常: %d %s", rr.Code, rr.Body.String())
+	}
+	// 切换后看板 primary 应为候选模型
+	rr = do("GET", "/v1/eval/shadow/stats", "admin-key")
+	if !strings.Contains(rr.Body.String(), `"primary":"candidate-model"`) {
+		t.Fatalf("切换后主模型应为候选: %s", rr.Body.String())
 	}
 }
