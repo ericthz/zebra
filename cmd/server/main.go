@@ -96,6 +96,14 @@ func main() {
 	// 可选：挂载 MCP 远端工具（保持与既有能力一致）
 	registerMCPTools(reg, logger)
 
+	// ---- P2 本地执行：文件读写 + 命令执行（沙箱隔离 + 高危二次确认）----
+	// 工作目录白名单：默认 ./workspace；只读模式默认开启（写文件/命令需显式放开）。
+	execSandbox := tool.NewExecSandbox(envOr("EXEC_WORKDIR", "workspace"), envOr("EXEC_READONLY", "1") == "1")
+	reg.Register(&tool.ListDirTool{Sandbox: execSandbox})
+	reg.Register(&tool.ReadFileTool{Sandbox: execSandbox})
+	reg.Register(&tool.WriteFileTool{Sandbox: execSandbox})
+	reg.Register(&tool.RunCommandTool{Sandbox: execSandbox})
+
 	// ---- P1 技能体系：扫描 skills/ 目录注册技能（技能检索与注入由 Agent 完成）----
 	skillReg := skill.NewRegistry()
 	if loaded, err := skill.LoadDir("skills"); err == nil && len(loaded) > 0 {

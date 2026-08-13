@@ -47,6 +47,13 @@ func main() {
 	reg.Register(&tool.TranslateTool{})
 	reg.Register(&tool.IPInfoTool{})
 
+	// ---- P2 本地执行：文件读写 + 命令执行（demo 默认可写，便于演示 Agentic 能力）----
+	execSandbox := tool.NewExecSandbox("workspace", false)
+	reg.Register(&tool.ListDirTool{Sandbox: execSandbox})
+	reg.Register(&tool.ReadFileTool{Sandbox: execSandbox})
+	reg.Register(&tool.WriteFileTool{Sandbox: execSandbox})
+	reg.Register(&tool.RunCommandTool{Sandbox: execSandbox})
+
 	// ---- P1 技能体系：加载 skills/ 目录 ----
 	skillReg := skill.NewRegistry()
 	if loaded, err := skill.LoadDir("skills"); err == nil {
