@@ -103,23 +103,15 @@ func main() {
 	label := func(s string) string { return console.Pad(s, 12) } // 标签列定宽，冒号对齐
 	fmt.Printf("  %s: %s\n", label("🤖 模型"), router.Primary().Name())
 	toolNames := reg.Names()
-	fmt.Printf("  %s: %d 个\n", label("🛠 工具"), len(toolNames))
-	for _, row := range console.Columns(toolNames, 4) {
-		fmt.Printf("     %s\n", row)
-	}
+	fmt.Printf("  %s: %d 个 —— %s\n", label("🛠 工具"), len(toolNames), strings.Join(toolNames, ", "))
 	if len(skills) == 0 {
 		fmt.Printf("  %s: 无\n", label("📚 技能"))
 	} else {
-		fmt.Printf("  %s: %d 个\n", label("📚 技能"), len(skills))
-		maxName := 0
+		names := make([]string, 0, len(skills))
 		for _, sk := range skills {
-			if n := len(sk.Name); n > maxName {
-				maxName = n
-			}
+			names = append(names, fmt.Sprintf("%s(%s)", sk.Name, sk.Description))
 		}
-		for _, sk := range skills {
-			fmt.Printf("     %s  %s\n", console.Pad(sk.Name, maxName+2), sk.Description)
-		}
+		fmt.Printf("  %s: %d 个 —— %s\n", label("📚 技能"), len(skills), strings.Join(names, ", "))
 	}
 	fmt.Printf("  %s: demo 未启用（企业版 cmd/server 支持）\n", label("🔌 MCP"))
 	fmt.Printf("  %s: 工作记忆（单机）\n", label("🧠 记忆"))

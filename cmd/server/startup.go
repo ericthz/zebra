@@ -42,14 +42,12 @@ func printStartupInventory(w io.Writer, info startupInfo) {
 		fmt.Fprintf(w, "├── %s: %s\n", label("🤖 模型"), strings.Join(info.Models, " → "))
 	}
 
-	// 2. 工具（数量 + 多列网格，避免一行长串）
+	// 2. 工具（数量 + 逗号连接的名称列表）
 	if info.Tools != nil {
 		names := info.Tools.Names()
 		fmt.Fprintf(w, "├── %s: %d 个\n", label("🛠 工具"), len(names))
 		if len(names) > 0 {
-			for _, row := range console.Columns(names, 4) {
-				fmt.Fprintf(w, "│     %s\n", row)
-			}
+			fmt.Fprintf(w, "│     %s\n", strings.Join(names, ", "))
 		}
 	}
 
@@ -60,20 +58,15 @@ func printStartupInventory(w io.Writer, info startupInfo) {
 		fmt.Fprintf(w, "├── %s: 模式=%s · 已连接 %d 个工具\n", label("🔌 MCP"), info.MCPMode, info.MCPCount)
 	}
 
-	// 4. 技能列表（名称 + 描述逐行，一眼看懂"会什么"）
+	// 4. 技能列表（名称(描述) 逗号连接）
 	if len(info.Skills) == 0 {
 		fmt.Fprintf(w, "├── %s: 无（skills/ 目录为空或加载失败）\n", label("📚 技能"))
 	} else {
-		fmt.Fprintf(w, "├── %s: %d 个\n", label("📚 技能"), len(info.Skills))
-		maxName := 0
+		names := make([]string, 0, len(info.Skills))
 		for _, sk := range info.Skills {
-			if n := len(sk.Name); n > maxName {
-				maxName = n
-			}
+			names = append(names, fmt.Sprintf("%s(%s)", sk.Name, sk.Description))
 		}
-		for _, sk := range info.Skills {
-			fmt.Fprintf(w, "│     %s  %s\n", console.Pad(sk.Name, maxName+2), sk.Description)
-		}
+		fmt.Fprintf(w, "├── %s: %d 个 —— %s\n", label("📚 技能"), len(info.Skills), strings.Join(names, ", "))
 	}
 
 	// 5. 记忆 / 知识库

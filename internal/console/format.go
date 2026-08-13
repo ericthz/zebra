@@ -41,30 +41,3 @@ func Pad(s string, width int) string {
 		return s + strings.Repeat(" ", width-w)
 	}
 }
-
-// Columns 把 items 排成 cols 列的多行文本（每行一个字符串，已按显示宽度对齐）。
-// 典型用途：工具名列表避免"一行长串"，改为网格布局。
-func Columns(items []string, cols int) []string {
-	if len(items) == 0 {
-		return nil
-	}
-	if cols <= 0 {
-		cols = 4
-	}
-	max := 0
-	for _, it := range items {
-		if w := displayWidth(it); w > max {
-			max = w
-		}
-	}
-	cell := max + 2
-	rows := (len(items) + cols - 1) / cols
-	out := make([]string, rows)
-	for i, it := range items {
-		out[i/cols] += Pad(it, cell) // 行优先填充，按显示宽度对齐
-	}
-	for i := range out {
-		out[i] = strings.TrimRight(out[i], " ")
-	}
-	return out
-}
