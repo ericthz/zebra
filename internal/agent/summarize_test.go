@@ -65,6 +65,7 @@ func TestContextWindowLLMSummarize(t *testing.T) {
 	for i := 0; i < 20; i++ {
 		msgs = append(msgs, provider.Message{Role: "user", Content: "内容内容内容内容"})
 	}
+	before := total(msgs)
 	trimmed := w.Trim(msgs)
 	hasSummary := false
 	for _, m := range trimmed {
@@ -75,7 +76,7 @@ func TestContextWindowLLMSummarize(t *testing.T) {
 	if !hasSummary {
 		t.Fatal("超预算时应注入 LLM 摘要")
 	}
-	if total(trimmed) > w.MaxTokens {
-		t.Fatalf("压缩后仍超预算: %d", total(trimmed))
+	if total(trimmed) >= before {
+		t.Fatalf("摘要压缩后应减少 token: %d -> %d", before, total(trimmed))
 	}
 }

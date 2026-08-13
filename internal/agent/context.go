@@ -86,7 +86,9 @@ func (w *ContextWindow) Trim(msgs []provider.Message) []provider.Message {
 	if w == nil || w.MaxTokens <= 0 {
 		return msgs
 	}
-	for total(msgs) > w.MaxTokens && len(msgs) > 1 {
+	// 至少保留 2 条消息：给摘要器留"可压缩的旧消息 + 最新消息"（P47 修复：
+	// 此前一路删到预算内，摘要阶段永远不触发，属死代码）。
+	for total(msgs) > w.MaxTokens && len(msgs) > 2 {
 		// 找到第一条可裁剪的非 system 消息
 		i := 0
 		for ; i < len(msgs); i++ {
@@ -100,7 +102,7 @@ func (w *ContextWindow) Trim(msgs []provider.Message) []provider.Message {
 		msgs = append(msgs[:i], msgs[i+1:]...)
 	}
 
-	if w.Summarizer != nil && total(msgs) > w.MaxTokens {
+	if w.Summarizer != nil && total(msgs) > w.MaxTokens && len(msgs) >= 2 {
 		// 压最旧一半为摘要（保留最新消息的完整性）
 		half := len(msgs) / 2
 		old := msgs[:half]
