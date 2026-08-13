@@ -26,6 +26,7 @@ import (
 	"github.com/ericthz/zebra/internal/provider"
 	"github.com/ericthz/zebra/internal/safety"
 	"github.com/ericthz/zebra/internal/server"
+	"github.com/ericthz/zebra/internal/skill"
 	"github.com/ericthz/zebra/internal/tool"
 )
 
@@ -95,6 +96,17 @@ func main() {
 	// 可选：挂载 MCP 远端工具（保持与既有能力一致）
 	registerMCPTools(reg, logger)
 
+	// ---- P1 技能体系：扫描 skills/ 目录注册技能（技能检索与注入由 Agent 完成）----
+	skillReg := skill.NewRegistry()
+	if loaded, err := skill.LoadDir("skills"); err == nil && len(loaded) > 0 {
+		skillReg.LoadAll(loaded)
+		for _, sk := range loaded {
+			logger.Info("已加载技能", "name", sk.Name, "version", sk.Version)
+		}
+	} else if err != nil {
+		logger.Warn("技能目录加载失败（继续运行，技能检索关闭）", "err", err)
+	}
+
 	// ---- C16 系统提示模板（版本化）----
 	prompts := prompt.NewRegistry("zebra")
 	prompts.Register(&prompt.Template{Name: "assistant", Version: "v1", Text: `你是 zebra 企业级 AI 助手。
@@ -145,6 +157,7 @@ func main() {
 		Logger:     logger,
 		MaxTurns:   5,
 		PromptName: "assistant",
+		Skills:     skillReg,
 	})
 
 	addr := envOr("ADDR", ":8080")

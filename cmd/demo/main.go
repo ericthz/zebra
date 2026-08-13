@@ -20,6 +20,7 @@ import (
 	"github.com/ericthz/zebra/internal/prompt"
 	"github.com/ericthz/zebra/internal/provider"
 	"github.com/ericthz/zebra/internal/safety"
+	"github.com/ericthz/zebra/internal/skill"
 	"github.com/ericthz/zebra/internal/tool"
 )
 
@@ -46,6 +47,12 @@ func main() {
 	reg.Register(&tool.TranslateTool{})
 	reg.Register(&tool.IPInfoTool{})
 
+	// ---- P1 技能体系：加载 skills/ 目录 ----
+	skillReg := skill.NewRegistry()
+	if loaded, err := skill.LoadDir("skills"); err == nil {
+		skillReg.LoadAll(loaded)
+	}
+
 	// ---- 记忆：仅工作记忆（单机演示不依赖 Qdrant）----
 	mem := memory.NewManager(memory.NewWorkingMemory(10), nil)
 
@@ -62,6 +69,7 @@ func main() {
 		Moderator:  safety.NewKeywordModerator(),
 		MaxTurns:   5,
 		PromptName: "assistant",
+		Skills:     skillReg,
 	})
 
 	history := make([]provider.Message, 0)

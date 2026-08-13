@@ -16,6 +16,7 @@ import (
 	"github.com/ericthz/zebra/internal/prompt"
 	"github.com/ericthz/zebra/internal/provider"
 	"github.com/ericthz/zebra/internal/safety"
+	"github.com/ericthz/zebra/internal/skill"
 	"github.com/ericthz/zebra/internal/tool"
 )
 
@@ -35,6 +36,7 @@ type Deps struct {
 	Metrics    *Metrics            // B5 指标
 	MaxTurns   int
 	PromptName string
+	Skills     *skill.Registry // P1 技能注册表（nil 关闭技能检索）
 }
 
 // APIServer HTTP 服务。
@@ -64,6 +66,7 @@ func (s *APIServer) agentFor(sess *Session) *agent.Agent {
 		Moderator:  s.deps.Moderator,
 		MaxTurns:   s.deps.MaxTurns,
 		PromptName: s.deps.PromptName,
+		Skills:     s.deps.Skills,
 		OnUsage: func(in, out int) { // B5 用量指标
 			s.deps.Metrics.Inc("tokens_in:" + itoa(in/100))
 			s.deps.Metrics.Inc("tokens_out:" + itoa(out/100))

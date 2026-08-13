@@ -15,6 +15,7 @@ import (
 	"github.com/ericthz/zebra/internal/prompt"
 	"github.com/ericthz/zebra/internal/provider"
 	"github.com/ericthz/zebra/internal/safety"
+	"github.com/ericthz/zebra/internal/skill"
 	"github.com/ericthz/zebra/internal/tool"
 )
 
@@ -29,6 +30,7 @@ type Config struct {
 	MaxTurns   int                 // 工具调用最大轮数
 	PromptName string              // 使用的系统提示模板名
 	OnUsage    func(inTokens, outTokens int) // B5 用量指标钩子
+	Skills     *skill.Registry     // 技能注册表（P1，nil 则关闭技能检索）
 }
 
 // Agent 单个会话的 Agent 实例。
@@ -231,6 +233,21 @@ func (a *Agent) buildMessages(ctx context.Context, userInput string) []provider.
 	if a.cfg.Mem != nil {
 		if items := a.cfg.Mem.Recall(ctx, a.sessionID, userInput, 3); len(items) > 0 {
 			msgs = append(msgs, provider.Message{Role: "system", Content: "相关记忆：\n" + strings.Join(items, "\n")})
+		}
+	}
+
+	// 技能检索与注入（P1 技能体系）：
+	// 按用户输入在技能库里命中相关技能（懒加载，只注入命中的，避免全量塞上下文），
+	// 把技能的 SOP 指令作为 system 消息告诉模型"遇到这类任务请按以下步骤执行"。
+	// 生产演化：技能检索换向量匹配；命中技能后可进一步按需读取其 scripts/ 资源。
+	if a.cfg.Skills != nil {
+		if hits := a.cfg.Skills.Match(userInput, 2); len(hits) > 0 {
+			for _, sk := range hits {
+				msgs = append(msgs, provider.Message{
+					Role:    "system",
+					Content: fmt.Sprintf("【已启用技能 %s v%s：%s】\n%s", sk.Name, sk.Version, sk.Description, sk.Instructions),
+				})
+			}
 		}
 	}
 
