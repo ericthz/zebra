@@ -41,6 +41,13 @@ type SessionStore interface {
 	ForgetUser(user string) []string // P6 被遗忘权：删该用户全部会话，返回被删 ID
 }
 
+// HistoryPersister 可选接口：会话存储需要"历史写回"时实现（P28 Redis）。
+// Agent 在对话中通过 History() 指针就地修改历史，内存实现天然同步；
+// Redis 等分布式存储必须在请求结束前把最新历史显式写回，否则多轮丢失。
+type HistoryPersister interface {
+	Save(s *Session) error
+}
+
 // InMemoryStore 内存会话存储：懒创建 + 定期清理过期会话。
 type InMemoryStore struct {
 	mu    sync.RWMutex

@@ -33,6 +33,7 @@ import (
 	"github.com/ericthz/zebra/internal/prompt"
 	"github.com/ericthz/zebra/internal/provider"
 	"github.com/ericthz/zebra/internal/rag"
+	"github.com/ericthz/zebra/internal/redis"
 	"github.com/ericthz/zebra/internal/safety"
 	"github.com/ericthz/zebra/internal/server"
 	"github.com/ericthz/zebra/internal/skill"
@@ -211,10 +212,22 @@ func main() {
 	reg.SetAuditor(server.NewToolAuditor(audit, metrics)) // D20 审计 + P3 工具成功率指标
 
 	// ---- 会话 / 限流 / 异步任务 ----
-	sessions := server.NewInMemoryStore(30 * time.Minute) // A2
-	rate := server.NewRateLimiter(2, 5)                   // B6：每用户每秒 2 次、突发 5 次
-	taskStore := task.NewInMemoryStore()                  // P12 异步任务存储（生产换 Redis/DB）
-	fbStore := feedback.NewInMemoryStore()                // P16 反馈闭环存储
+	// P28 水平扩展：REDIS_URL 配置后会话存储切 Redis（多副本共享状态）；
+	// 否则用内存实现（单机演示）。
+	var sessions server.SessionStore
+	if rurl := os.Getenv("REDIS_URL"); rurl != "" {
+		sessions = server.NewRedisSessionStore(&redis.Client{
+			Addr:     rurl,
+			Password: os.Getenv("REDIS_PASSWORD"),
+			DB:       atoiDefault(os.Getenv("REDIS_DB"), 0),
+		}, 30*time.Minute)
+		logger.Info("会话存储使用 Redis（水平扩展）", "addr", rurl)
+	} else {
+		sessions = server.NewInMemoryStore(30 * time.Minute) // A2
+	}
+	rate := server.NewRateLimiter(2, 5)    // B6：每用户每秒 2 次、突发 5 次
+	taskStore := task.NewInMemoryStore()   // P12 异步任务存储（生产换 Redis/DB）
+	fbStore := feedback.NewInMemoryStore() // P16 反馈闭环存储
 
 	// ---- P22 用户画像：对话自动学习 + 遗忘策略（TTL 保鲜 + 容量治理）----
 	profileStore := memory.NewProfileStore()

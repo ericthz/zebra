@@ -77,6 +77,10 @@ func (s *APIServer) handleChat(w http.ResponseWriter, r *http.Request) {
 
 	resp := ChatResponse{SessionID: sess.ID, Reply: reply}
 
+	// P28 水平扩展：Redis 会话存储需要把 Agent 修改后的历史写回，
+	// 否则下一轮请求打到其它副本时读不到多轮上下文。
+	s.persistHistory(sess)
+
 	// P21 影子模式：真实流量按采样率（或显式请求）复制给候选模型对比。
 	// 异步执行，不阻塞用户响应；结论落影子记录，供换模型前的回归评估。
 	if s.deps.Shadow != nil && s.deps.Shadow.WantSample(req.Shadow) {
@@ -145,6 +149,7 @@ func (s *APIServer) handleChatStream(w http.ResponseWriter, r *http.Request) {
 
 	evs, err := ag.RunStream(ctx, req.Message, opts)
 	if err != nil {
+		s.persistHistory(sess)
 		fmt.Fprintf(w, "event: error\ndata: %s\n\n", err)
 		return
 	}
@@ -153,6 +158,17 @@ func (s *APIServer) handleChatStream(w http.ResponseWriter, r *http.Request) {
 		fmt.Fprintf(w, "event: %s\ndata: %s\n\n", ev.Type, data)
 		if flusher != nil {
 			flusher.Flush()
+		}
+	}
+	// P28：流式对话结束后同样写回历史
+	s.persistHistory(sess)
+}
+
+// persistHistory 若会话存储实现了 HistoryPersister，把最新历史写回。
+func (s *APIServer) persistHistory(sess *Session) {
+	if hp, ok := s.deps.Sessions.(HistoryPersister); ok {
+		if err := hp.Save(sess); err != nil {
+			s.deps.Logger.Warn("会话历史写回失败", "session", sess.ID, "err", err)
 		}
 	}
 }
