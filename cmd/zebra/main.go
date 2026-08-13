@@ -7,7 +7,6 @@
 package main
 
 import (
-	"bufio"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -185,13 +184,14 @@ func main() {
 		VoiceEnabled: voice != nil,
 	})
 	fmt.Println(strings.Repeat("─", 60))
-	sc := bufio.NewScanner(os.Stdin)
 	for {
-		fmt.Print(console.Symbol(">", console.ColorTitle) + " ")
-		if !sc.Scan() {
-			break
+		// P38：raw 模式 + UTF-8 感知行编辑（中文退格不再残留字节残片）；
+		// 非 TTY 自动回退标准行读取。
+		in, err := console.ReadLine(console.Symbol(">", console.ColorTitle) + " ")
+		if err != nil {
+			break // EOF / Ctrl-C / 中断
 		}
-		in := strings.TrimSpace(sc.Text())
+		in = strings.TrimSpace(in)
 		if in == "" {
 			continue
 		}
