@@ -85,13 +85,13 @@ func main() {
 		OnTool: func(name string, args map[string]interface{}, ok bool, err error) {
 			detail, _ := json.Marshal(args)
 			if ok {
-				fmt.Printf("  🔧 工具调用: %s(%s) ✓\n", name, detail)
+				fmt.Printf("  ▲ 工具调用: %s(%s) ✓\n", name, detail)
 			} else {
-				fmt.Printf("  🔧 工具调用: %s(%s) ❌ %v\n", name, detail, err)
+				fmt.Printf("  ▲ 工具调用: %s(%s) ❌ %v\n", name, detail, err)
 			}
 		},
 		OnSkill: func(names []string) {
-			fmt.Printf("  📚 技能注入: %s\n", strings.Join(names, ", "))
+			fmt.Printf("  ■ 技能注入: %s\n", strings.Join(names, ", "))
 		},
 	})
 
@@ -99,26 +99,26 @@ func main() {
 	ag.Bind("zebra", "admin", "local", &history)
 
 	// ---- P31 启动清单：一眼看清这台 Agent 有什么 ----
-	fmt.Println("🤖 zebra CLI Agent（输入 exit 退出）")
+	fmt.Println("── zebra CLI Agent（输入 exit 退出）")
 	label := func(s string) string { return console.Pad(s, 12) } // 标签列定宽，冒号对齐
-	fmt.Printf("  %s: %s\n", label("🤖 模型"), router.Primary().Name())
+	fmt.Printf("  %s: %s\n", label("◆ 模型"), router.Primary().Name())
 	toolNames := reg.Names()
-	fmt.Printf("  %s: %d 个 —— %s\n", label("🔧 工具"), len(toolNames), strings.Join(toolNames, ", "))
+	fmt.Printf("  %s: %d 个 —— %s\n", label("▲ 工具"), len(toolNames), strings.Join(toolNames, ", "))
 	if len(skills) == 0 {
-		fmt.Printf("  %s: 无\n", label("📚 技能"))
+		fmt.Printf("  %s: 无\n", label("■ 技能"))
 	} else {
 		names := make([]string, 0, len(skills))
 		for _, sk := range skills {
 			names = append(names, fmt.Sprintf("%s(%s)", sk.Name, sk.Description))
 		}
-		fmt.Printf("  %s: %d 个 —— %s\n", label("📚 技能"), len(skills), strings.Join(names, ", "))
+		fmt.Printf("  %s: %d 个 —— %s\n", label("■ 技能"), len(skills), strings.Join(names, ", "))
 	}
-	fmt.Printf("  %s: 未启用（企业版 cmd/server 支持 MCP）\n", label("🔌 MCP"))
-	fmt.Printf("  %s: 工作记忆（单机）\n", label("🧠 记忆"))
+	fmt.Printf("  %s: 未启用（企业版 cmd/server 支持 MCP）\n", label("● MCP"))
+	fmt.Printf("  %s: 工作记忆（单机）\n", label("▣ 记忆"))
 	fmt.Println(strings.Repeat("─", 60))
 	sc := bufio.NewScanner(os.Stdin)
 	for {
-		fmt.Print("👤 ")
+		fmt.Print("> ")
 		if !sc.Scan() {
 			break
 		}
@@ -135,7 +135,7 @@ func main() {
 			fmt.Printf("❌ %v\n", err)
 			continue
 		}
-		fmt.Println("🤖", answer)
+		fmt.Println("»", answer)
 	}
 }
 
