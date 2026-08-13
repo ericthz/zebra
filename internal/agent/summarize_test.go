@@ -58,7 +58,8 @@ func TestLLMSummarizerTruncateAndError(t *testing.T) {
 
 // TestContextWindowLLMSummarize 集成：超预算时用 LLM 摘要压缩最旧一半。
 func TestContextWindowLLMSummarize(t *testing.T) {
-	w := &ContextWindow{MaxTokens: 40, Summarizer: LLMSummarizer{
+	// 预算小到"2 条消息即超预算"：裁剪保留 2 条后，摘要器才被触发
+	w := &ContextWindow{MaxTokens: 10, Summarizer: LLMSummarizer{
 		Router: provider.NewRouter(&summarizeProvider{reply: `{"summary":"早期对话摘要"}`}),
 	}}
 	msgs := make([]provider.Message, 0, 20)
