@@ -140,6 +140,23 @@
 - [x] API Key / 多轮会话续接 / 三模式切换 / 流式渲染 / 工具展示
 - [x] 验证：GET / 返回 HTML 200 免鉴权
 
+### ✅ P16 — 用户反馈闭环
+- [x] `internal/feedback/`：点赞/踩 + 评论 + 正负计数
+- [x] API：POST/GET /v1/feedback（落库 + /metrics + 审计）；回流评测真值
+- [x] 单测 + 端到端（counts {positive:1,negative:1}）
+
+### ✅ P17 — 结构化输出强约束
+- [x] `internal/schema/`：通用 JSON Schema 校验器（type/required/enum/items）
+- [x] provider：OpenAI ChatJSON（response_format=json_schema 生成前强约束）
+- [x] `provider.StructuredChat`：强约束→回退→校验 双保险；集成进 P10 规划器
+- [x] 单测（schema 多场景 / response_format 注入 / 回退路径）
+
+### ✅ P18 — 配置热更新
+- [x] prompt.LoadDir：prompts/ 文件化模板；rag.Index.Reset 重建
+- [x] API：POST /v1/admin/reload（仅 admin，RBAC）
+- [x] 重载 技能/提示词/知识库，不重启；单测 + 端到端（v2 生效）
+- [x] 样本模板 prompts/*.md
+
 ## 3. 设计基调（每个功能都必须遵守）
 
 1. **纯 Go 标准库**，零第三方运行时依赖

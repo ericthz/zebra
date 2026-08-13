@@ -5,7 +5,8 @@
 > 第一轮 A~E 企业骨架（服务化/可靠性/安全/可观测）；
 > 第二轮 P1~P6 对标成熟 Agent 的能力补全（技能/本地执行/质量闭环/主动出站/成本治理/安全加固）；
 > 第三轮 P8~P10 智能体纵深（RAG 知识库 / 并行工具调用 / 规划-执行编排）；
-> 第四轮 P12~P14 规模化与体验（异步长任务 / 多 Agent 协作 / 前端 Web UI）。
+> 第四轮 P12~P14 规模化与体验（异步长任务 / 多 Agent 协作 / 前端 Web UI）；
+> 第五轮 P16~P18 运营与工程纵深（反馈闭环 / 结构化输出 / 配置热更新）。
 > **每个能力都有真实可运行的最小实现 + 详细中文注释 + 端到端验证**，刻意保持精简、可逐行读懂。
 
 这不是一个"能直接上线的产品"，而是一张**可对照学习的架构地图**：
@@ -248,6 +249,9 @@ curl :8080/metrics
 | ✅ P12 | **异步长任务+检查点** | `internal/task/` `internal/server/tasks.go` | 提交即返回 id，后台执行可轮询，断点续跑 |
 | ✅ P13 | **多 Agent Supervisor** | `internal/supervisor/` `cmd/server/workers.go` | 数据/知识/常规 worker，自动路由 |
 | ✅ P14 | **前端 Web UI** | `internal/server/ui.go` | 零构建 SSE 聊天界面，浏览器直接用 |
+| ✅ P16 | **反馈闭环** | `internal/feedback/` `internal/server/feedback.go` | 赞/踩 → 指标+审计+回流评测 |
+| ✅ P17 | **结构化输出强约束** | `internal/schema/` `internal/provider/structured.go` | response_format 强约束 + schema 校验 |
+| ✅ P18 | **配置热更新** | `internal/server/reload.go` `prompt.LoadDir` | 技能/提示词/知识库不重启重载 |
 
 **新增工具**：`list_dir` / `read_file` / `write_file` / `run_command`（本地执行，P2）、`fetch_url`（SSRF 防护，P6）。
 
