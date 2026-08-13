@@ -277,10 +277,16 @@ func main() {
 	}
 
 	// ---- P13 多 Agent Supervisor：数据/知识/常规 三个专业 worker ----
+	// P47 摘要压缩器：ZEBRA_SUMMARIZER=llm 时用 LLM 语义摘要，否则截断式。
+	windowSummarizer := agent.Summarizer(agent.PrefixSummarizer{MaxChars: 600})
+	if os.Getenv("ZEBRA_SUMMARIZER") == "llm" && router != nil {
+		windowSummarizer = &agent.LLMSummarizer{Router: router, MaxChars: 600}
+		logger.Info("已启用 LLM 对话摘要压缩")
+	}
 	var supervisorInst *supervisor.Supervisor
 	if router != nil && prompts != nil {
 		supervisorInst = buildSupervisor(workerDeps{
-			router: router, prompts: prompts, mem: mem, window: &agent.ContextWindow{MaxTokens: 4000, Summarizer: agent.PrefixSummarizer{MaxChars: 600}},
+			router: router, prompts: prompts, mem: mem, window: &agent.ContextWindow{MaxTokens: 4000, Summarizer: windowSummarizer},
 			moderator: moderator, skills: skillReg, cache: semanticCache, rag: ragIndex,
 			model: envOr("OLLAMA_MODEL", "qwen3.5:0.8b-mlx"), maxTurns: 5, cost: costTracker,
 		}, reg)
@@ -355,7 +361,7 @@ func main() {
 		Tools:      reg,
 		Prompts:    prompts,
 		Mem:        mem,
-		Window:     &agent.ContextWindow{MaxTokens: 4000, Summarizer: agent.PrefixSummarizer{MaxChars: 600}}, // C11
+		Window:     &agent.ContextWindow{MaxTokens: 4000, Summarizer: windowSummarizer}, // C11/P47
 		Moderator:  moderator,
 		Audit:      audit,
 		Sessions:   sessions,
