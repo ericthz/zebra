@@ -38,8 +38,8 @@
 
 | 维度 | 现状 |
 |---|---|
-| 代码规模 | 144 个 `.go` 文件（含 53 个测试），约 1.6 万行 |
-| 包数量 | 28 个（`cmd/` 3 个入口 + `internal/` 24 个 + `test/` 评测） |
+| 代码规模 | 151 个 `.go` 文件（含 56 个测试），约 1.6 万行 |
+| 包数量 | 29 个（`cmd/` 3 个入口 + `internal/` 25 个 + `test/` 评测） |
 | 运行时依赖 | 零第三方，纯 Go 标准库 |
 | 质量门禁 | `go build` / `go vet` 零警告，`go test ./...` 全绿 |
 | 交付轮次 | 七轮（A~E 企业骨架 → P1~P28 能力里程碑） |
@@ -459,6 +459,10 @@ curl -X POST :8080/v1/user/profile/forget -H "Authorization: Bearer user-key" \
 | ✓ P37 | 终端启动 banner（ZEBRA ASCII 标题 + 副标题） | `internal/observe/banner.go` | zebra CLI 与 server 启动首屏打印 banner |
 | ✓ P38 | 命令行行编辑（raw 模式 + UTF-8 感知退格） | `internal/console/readline.go` `raw_*.go` | 中文输入删除不再残留字节残片；非 TTY 自动回退 |
 | ✓ P39 | MCP 子项展示（与工具一致：树形分支 + 名称: 描述） | `internal/observe/inventory.go` `mcp.RegisterTools` | 启动清单逐项列出已连接的 MCP 工具 |
+| ✓ P40 | 反思/自一致性（Reflect 批判改进 + SelfConsistent 采样择优） | `internal/agent/reflect.go` | `mode=reflect` 回答后自动改进一轮 |
+| ✓ P41 | RAG 重排（LLM 精排候选片段，失败回退原序） | `internal/rag/rerank.go` | RetrieveReranked 二次精排提升 topK 质量 |
+| ✓ P42 | 金丝雀自动回滚（promote 后胜率不达标自动切回原主） | `internal/eval/stats.go` `server/shadow.go` | 回滚含审计与指标，观察期自动清空 |
+| ✓ P43 | Redis 任务队列（RedisTaskStore + 共享 redistest） | `internal/task/redis_store.go` `internal/redistest/` | REDIS_URL 时任务存储切 Redis，多副本共享 |
 
 **内置工具**：`calculator` / `get_current_datetime` / `generate_random_number` / `convert_units` / `translate_text` /
 `web_search` / `fetch_url`（SSRF 防护） / `list_dir` / `read_file` / `write_file` / `run_command` /
@@ -477,11 +481,12 @@ curl -X POST :8080/v1/user/profile/forget -H "Authorization: Bearer user-key" \
 | 优先级 | 项目 | 说明 |
 |---|---|---|
 | 高 | 语音流式 ASR / 实时语音对话（Streaming ASR / Realtime Voice） | 现为请求-响应式；实时对话需 WebSocket 半双工 |
-| 高 | Redis 任务队列与记忆存储深化（Task Queue & Memory Store） | 会话已迁 Redis；任务队列与长期记忆仍为内存/Qdrant |
-| 高 | 影子评测自动金丝雀回滚（Canary Auto-rollback） | promote 后质量回退自动切回主模型（现为手动） |
-| 中 | 反思 / 自一致性（Reflection / Self-Consistency） | LLM 推理深度：CoT、自一致性、采样治理 |
-| 中 | RAG 重排（Reranker）与知识图谱（Knowledge Graph） | 混合检索后二次精排；实体关系检索 |
+| 中 | 知识图谱（Knowledge Graph） | RAG 重排（P41）已落地；实体关系检索仍缺 |
+| 中 | Redis 长期记忆存储深化（Memory Store） | 会话与任务队列已迁 Redis（P28/P43）；长期记忆仍为 Qdrant |
 | 中 | 插件动态加载 / 浏览器自动化（Plugin Loading / Browser Automation） | 工具生态扩展（现为编译期注册） |
+
+> 本轮已闭环：反思/自一致性（P40）、RAG 重排（P41）、金丝雀自动回滚（P42）、
+> Redis 任务队列（P43）——详见 [8. 交付路线图](#8-交付路线图)。
 
 #### B. 需决策项（与"零第三方依赖"约束冲突，或需外部工具链）
 
