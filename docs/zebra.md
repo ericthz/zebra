@@ -11,4 +11,4 @@ zebra 是一个企业级 AI Agent 参考实现，纯 Go 标准库编写。
 - 服务化：HTTP API、SSE 流式、会话管理、鉴权限流
 
 ## 技术栈
-Go 标准库、零第三方运行时依赖。三个入口：server（HTTP 服务）、demo（CLI）、mcp（MCP 服务器）。
+Go 标准库、零第三方运行时依赖。三个入口：server（HTTP 服务）、zebra（CLI）、mcp（MCP 服务器）。

@@ -1,15 +1,15 @@
 # E21 工程化常用命令
-.PHONY: build run test vet lint eval docker-up
+.PHONY: build run zebra test vet lint eval docker-up
 
 build:
 	go build -o bin/zebra-server ./cmd/server
-	go build -o bin/zebra-demo ./cmd/demo
+	go build -o bin/zebra ./cmd/zebra
 
 run: ## 启动企业版服务
 	go run ./cmd/server
 
-demo: ## 单机 CLI 学习入口
-	go run ./cmd/demo
+zebra: ## 单机 CLI 学习入口
+	go run ./cmd/zebra
 
 mcp: ## 独立 MCP 服务器 (HTTP)
 	go run ./cmd/mcp -http :9000

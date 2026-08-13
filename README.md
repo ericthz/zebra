@@ -88,7 +88,7 @@
 ```
                     ┌─────────────────────────────────────────────┐
                     │                 cmd/（3 个入口）              │
-                    │   server(企业API)   demo(CLI)   mcp(独立服务)  │
+                    │   server(企业API)   zebra(CLI)  mcp(独立服务)  │
                     └───────────────┬─────────────────────────────┘
                                     │
 ┌───────────────────────────────────▼───────────────────────────┐
@@ -123,7 +123,7 @@
 ### 3.3 目录结构
 
 ```
-├── cmd/                3 个入口（server / demo / mcp）
+├── cmd/                3 个入口（server / zebra / mcp）
 ├── internal/
 │   ├── agent/          核心编排 + 上下文工程 + 规划-执行 + 画像注入
 │   ├── provider/       LLM 多协议适配 + 路由 + 结构化输出 + 语音 ASR/TTS
@@ -163,7 +163,7 @@
 
 ```bash
 ollama pull qwen3.5:0.8b-mlx
-go run ./cmd/demo
+go run ./cmd/zebra
 # 输入：北京今天天气怎么样？ → 观察工具调用循环
 ```
 
@@ -487,7 +487,7 @@ curl -X POST :8080/v1/user/profile/forget -H "Authorization: Bearer user-key" \
 
 - **单元测试**：45 个测试文件，`go test ./...` 全绿；每个新增功能强制配套测试。
 - **静态检查**：`go vet ./...` 零警告；提交前 `gofmt` 全量格式化。
-- **学习可观测（P31）**：启动打印能力清单（模型/工具/MCP/技能/记忆/知识库/语音/影子/Redis）；执行阶段打印 `skill.inject` 与 `tool.call` 痕迹（demo 终端友好输出，server 结构化日志）。
+- **学习可观测（P31）**：启动打印能力清单（模型/工具/MCP/技能/记忆/知识库/语音/影子/Redis）；执行阶段打印 `skill.inject` 与 `tool.call` 痕迹（zebra CLI 终端友好输出，server 结构化日志）。
 - **LLM 评测**：`test/eval/golden_test.go` 黄金用例回归（`ZEBRA_EVAL=1` 开启真实模型），换模型/改 prompt 必跑。
 - **容器化与 CI**：Docker 多阶段构建 + distroless 最小镜像；GitHub Actions 提交自动 build+vet+test。
 - **端到端验证**：每个里程碑都以"真实运行 + 断言"收尾（如影子 verdict、语音音频回传、Redis 会话续期）。

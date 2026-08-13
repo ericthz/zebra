@@ -46,7 +46,7 @@ func TestGoldenEval(t *testing.T) {
 		t.Skip("跳过：设置 ZEBRA_EVAL=1 开启 LLM 评测")
 	}
 
-	// 与 cmd/demo 相同的装配（可抽公共函数复用）
+	// 与 cmd/zebra 相同的装配（可抽公共函数复用）
 	httpCli := provider.NewHTTPClient(20*time.Second, 2, 300*time.Millisecond)
 	router := provider.NewRouter(&provider.OllamaProvider{
 		BaseURL: envOr("OLLAMA_BASE_URL", "http://localhost:11434"),

@@ -1,8 +1,8 @@
-// cmd/demo —— 单机 CLI 版 Agent（学习入口，企业能力走 cmd/server）。
+// cmd/zebra —— 单机 CLI 版 Agent（学习入口，企业能力走 cmd/server）。
 //
 // 用法：
 //
-//	go run ./cmd/demo
+//	go run ./cmd/zebra
 //	go run ./cmd/server          # 企业版 HTTP 服务
 package main
 
@@ -38,7 +38,7 @@ func main() {
 		Client:  httpCli,
 	})
 
-	// ---- 工具（demo 全量开放）----
+	// ---- 工具（zebra CLI 全量开放）----
 	reg := tool.NewRegistry()
 	reg.Register(&tool.WeatherTool{})
 	reg.Register(&tool.CalculatorTool{})
@@ -50,7 +50,7 @@ func main() {
 	reg.Register(&tool.IPInfoTool{})
 
 	reg.Register(&tool.FetchURLTool{}) // P6 SSRF 防护的抓取工具
-	// ---- P2 本地执行：文件读写 + 命令执行（demo 默认可写，便于演示 Agentic 能力）----
+	// ---- P2 本地执行：文件读写 + 命令执行（zebra CLI 默认可写，便于演示 Agentic 能力）----
 	execSandbox := tool.NewExecSandbox("workspace", false)
 	reg.Register(&tool.ListDirTool{Sandbox: execSandbox})
 	reg.Register(&tool.ReadFileTool{Sandbox: execSandbox})
@@ -96,7 +96,7 @@ func main() {
 	})
 
 	history := make([]provider.Message, 0)
-	ag.Bind("demo", "admin", "local", &history)
+	ag.Bind("zebra", "admin", "local", &history)
 
 	// ---- P31 启动清单：一眼看清这台 Agent 有什么 ----
 	fmt.Println("🤖 zebra CLI Agent（输入 exit 退出）")
@@ -113,7 +113,7 @@ func main() {
 		}
 		fmt.Printf("  %s: %d 个 —— %s\n", label("📚 技能"), len(skills), strings.Join(names, ", "))
 	}
-	fmt.Printf("  %s: demo 未启用（企业版 cmd/server 支持）\n", label("🔌 MCP"))
+	fmt.Printf("  %s: 未启用（企业版 cmd/server 支持 MCP）\n", label("🔌 MCP"))
 	fmt.Printf("  %s: 工作记忆（单机）\n", label("🧠 记忆"))
 	fmt.Println(strings.Repeat("─", 60))
 	sc := bufio.NewScanner(os.Stdin)
