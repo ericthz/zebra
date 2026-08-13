@@ -25,6 +25,7 @@ import (
 	"github.com/ericthz/zebra/internal/agent"
 	"github.com/ericthz/zebra/internal/cache"
 	"github.com/ericthz/zebra/internal/cost"
+	"github.com/ericthz/zebra/internal/feedback"
 	"github.com/ericthz/zebra/internal/mcp"
 	"github.com/ericthz/zebra/internal/memory"
 	"github.com/ericthz/zebra/internal/notify"
@@ -203,6 +204,7 @@ func main() {
 	sessions := server.NewInMemoryStore(30 * time.Minute) // A2
 	rate := server.NewRateLimiter(2, 5)                   // B6：每用户每秒 2 次、突发 5 次
 	taskStore := task.NewInMemoryStore()                  // P12 异步任务存储（生产换 Redis/DB）
+	fbStore := feedback.NewInMemoryStore()                // P16 反馈闭环存储
 
 	// ---- P13 多 Agent Supervisor：数据/知识/常规 三个专业 worker ----
 	var supervisorInst *supervisor.Supervisor
@@ -237,6 +239,7 @@ func main() {
 		Model:      envOr("OLLAMA_MODEL", "qwen3.5:0.8b-mlx"),
 		TaskStore:  taskStore,
 		Supervisor: supervisorInst,
+		Feedback:   fbStore,
 	})
 
 	addr := envOr("ADDR", ":8080")

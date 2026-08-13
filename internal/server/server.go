@@ -14,6 +14,7 @@ import (
 	"github.com/ericthz/zebra/internal/agent"
 	"github.com/ericthz/zebra/internal/cache"
 	"github.com/ericthz/zebra/internal/cost"
+	"github.com/ericthz/zebra/internal/feedback"
 	"github.com/ericthz/zebra/internal/memory"
 	"github.com/ericthz/zebra/internal/notify"
 	"github.com/ericthz/zebra/internal/prompt"
@@ -50,6 +51,7 @@ type Deps struct {
 	Model      string          // 主模型名（成本归因用）
 	TaskStore  task.Store      // P12 异步任务存储（nil 关闭异步 API）
 	Supervisor *supervisor.Supervisor // P13 多 Agent（nil 关闭 supervisor 模式）
+	Feedback   *feedback.InMemoryStore // P16 反馈闭环（nil 关闭反馈 API）
 }
 
 // APIServer HTTP 服务。
@@ -118,6 +120,10 @@ func (s *APIServer) Handler() http.Handler {
 		mux.HandleFunc("POST /v1/tasks", s.handleSubmitTask)   // P12 异步任务
 		mux.HandleFunc("GET /v1/tasks", s.handleListTasks)    // P12 任务列表
 		mux.HandleFunc("GET /v1/tasks/", s.handleGetTask)     // P12 任务查询
+	}
+	if s.deps.Feedback != nil {
+		mux.HandleFunc("POST /v1/feedback", s.handleSubmitFeedback) // P16 反馈
+		mux.HandleFunc("GET /v1/feedback", s.handleListFeedback)    // P16 反馈列表
 	}
 	mux.HandleFunc("/", uiHandler()) // P14 前端 Web UI（公开）
 	mux.HandleFunc("/healthz", HealthzHandler())
