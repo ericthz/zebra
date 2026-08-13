@@ -33,6 +33,9 @@ import (
 )
 
 func main() {
+	// ---- P37 终端 banner ----
+	observe.PrintBanner(os.Stdout, "zebra CLI — AI Agent 单机学习入口（输入 exit 退出）")
+
 	// ---- P30 配置加载：先读 .env（决定日志去向与全部配置）----
 	envN, envErr := config.LoadDefault()
 
@@ -170,7 +173,7 @@ func main() {
 		ragChunks = ragIndex.Len()
 	}
 	observe.PrintInventory(os.Stdout, observe.Info{
-		Title:        "zebra CLI Agent（输入 exit 退出）",
+		Title:        "zebra CLI Agent",
 		Models:       []string{router.Primary().Name()},
 		Tools:        reg,
 		Skills:       skills,

@@ -44,6 +44,9 @@ import (
 )
 
 func main() {
+	// ---- P37 终端 banner ----
+	observe.PrintBanner(os.Stdout, "zebra server — 企业版 AI Agent API（纯 Go 标准库）")
+
 	// ---- P30 配置加载：启动时自动读取根目录 .env（零依赖）----
 	// 语义：真实环境变量优先，.env 只填充"尚未设置"的变量（本地默认值）。
 	// 文件不存在不算错误；解析失败仅告警，不阻断启动（避免坏 .env 拖垮服务）。

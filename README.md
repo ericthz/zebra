@@ -38,7 +38,7 @@
 
 | 维度 | 现状 |
 |---|---|
-| 代码规模 | 137 个 `.go` 文件（含 51 个测试），约 1.5 万行 |
+| 代码规模 | 139 个 `.go` 文件（含 52 个测试），约 1.5 万行 |
 | 包数量 | 28 个（`cmd/` 3 个入口 + `internal/` 24 个 + `test/` 评测） |
 | 运行时依赖 | 零第三方，纯 Go 标准库 |
 | 质量门禁 | `go build` / `go vet` 零警告，`go test ./...` 全绿 |
@@ -456,6 +456,7 @@ curl -X POST :8080/v1/user/profile/forget -H "Authorization: Bearer user-key" \
 | ✓ P34 | zebra 诊断日志落盘（默认 zebra.log，ZEBRA_LOG=off 回退 stderr） | `cmd/zebra/main.go` | 终端无探测告警刷屏；依赖降级原因可查日志 |
 | ✓ P35 | server 日志双写落盘（默认 server.log，LOG_FILE=off 仅 stdout） | `cmd/server/main.go` `config.OpenLogFile` | JSON 日志同时输出 stdout 与文件，采集与排查两不误 |
 | ✓ P36 | 启动清单统一（CLI/Server 共享渲染 + zebra 支持 RAG 知识库） | `internal/observe/` `internal/rag/docs.go` | zebra 与 server 清单行结构一致；zebra 真实加载 docs/ |
+| ✓ P37 | 终端启动 banner（ZEBRA ASCII 标题 + 副标题） | `internal/observe/banner.go` | zebra CLI 与 server 启动首屏打印 banner |
 
 **内置工具**：`calculator` / `get_current_datetime` / `generate_random_number` / `convert_units` / `translate_text` /
 `web_search` / `fetch_url`（SSRF 防护） / `list_dir` / `read_file` / `write_file` / `run_command` /
