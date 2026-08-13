@@ -45,7 +45,7 @@ func printStartupInventory(w io.Writer, info startupInfo) {
 	// 2. 工具（数量 + 逗号连接的名称列表）
 	if info.Tools != nil {
 		names := info.Tools.Names()
-		fmt.Fprintf(w, "├── %s: %d 个\n", label("🛠 工具"), len(names))
+		fmt.Fprintf(w, "├── %s: %d 个\n", label("🔧 工具"), len(names))
 		if len(names) > 0 {
 			fmt.Fprintf(w, "│     %s\n", strings.Join(names, ", "))
 		}
@@ -75,9 +75,9 @@ func printStartupInventory(w io.Writer, info startupInfo) {
 
 	// 6. 语音 / 影子评测 / Redis
 	if info.VoiceEnabled {
-		fmt.Fprintf(w, "├── %s: 已启用（ASR/TTS）\n", label("🎙 语音"))
+		fmt.Fprintf(w, "├── %s: 已启用（ASR/TTS）\n", label("🎤 语音"))
 	} else {
-		fmt.Fprintf(w, "├── %s: 未启用（VOICE_BASE_URL 未设置）\n", label("🎙 语音"))
+		fmt.Fprintf(w, "├── %s: 未启用（VOICE_BASE_URL 未设置）\n", label("🎤 语音"))
 	}
 	if info.ShadowCandidate != "" {
 		fmt.Fprintf(w, "├── %s: candidate=%s · sample=%.0f%%\n", label("🧪 影子评测"), info.ShadowCandidate, info.ShadowSample*100)

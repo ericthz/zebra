@@ -7,7 +7,7 @@ import (
 func TestPadAlignment(t *testing.T) {
 	// CJK/emoji 计 2 格、ASCII 计 1 格：不同内容补到同一宽度后，冒号列应齐齐的
 	a := Pad("🤖 模型", 12)
-	b := Pad("🛠 工具", 12)
+	b := Pad("🔧 工具", 12)
 	c := Pad("🔌 MCP", 12)
 	if displayWidth(a) != displayWidth(b) || displayWidth(a) != displayWidth(c) {
 		t.Fatalf("补齐后宽度应一致: %q(%d) %q(%d) %q(%d)",

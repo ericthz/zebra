@@ -85,9 +85,9 @@ func main() {
 		OnTool: func(name string, args map[string]interface{}, ok bool, err error) {
 			detail, _ := json.Marshal(args)
 			if ok {
-				fmt.Printf("  🛠 工具调用: %s(%s) ✓\n", name, detail)
+				fmt.Printf("  🔧 工具调用: %s(%s) ✓\n", name, detail)
 			} else {
-				fmt.Printf("  🛠 工具调用: %s(%s) ❌ %v\n", name, detail, err)
+				fmt.Printf("  🔧 工具调用: %s(%s) ❌ %v\n", name, detail, err)
 			}
 		},
 		OnSkill: func(names []string) {
@@ -103,7 +103,7 @@ func main() {
 	label := func(s string) string { return console.Pad(s, 12) } // 标签列定宽，冒号对齐
 	fmt.Printf("  %s: %s\n", label("🤖 模型"), router.Primary().Name())
 	toolNames := reg.Names()
-	fmt.Printf("  %s: %d 个 —— %s\n", label("🛠 工具"), len(toolNames), strings.Join(toolNames, ", "))
+	fmt.Printf("  %s: %d 个 —— %s\n", label("🔧 工具"), len(toolNames), strings.Join(toolNames, ", "))
 	if len(skills) == 0 {
 		fmt.Printf("  %s: 无\n", label("📚 技能"))
 	} else {

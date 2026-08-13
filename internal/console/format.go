@@ -1,9 +1,13 @@
 // Package console 终端排版小工具（P31 增强）：解决 emoji/CJK/ASCII 混排
-// 时的对齐问题，并提供多列换行，让启动清单与执行痕迹更易读。
+// 时的对齐问题，让启动清单与执行痕迹更易读。
 //
 // 为什么需要：fmt 的 %-Ns 按"字节/runes"补齐，但终端里 CJK 字符占 2 格、
-// emoji 占 2 格、ASCII 占 1 格。直接混排（如 "⚙️ 模型" vs "🛠 工具"）
+// emoji 占 2 格、ASCII 占 1 格。直接混排（如 "⚙ 模型" vs "🛠 工具"）
 // 会让标签列参差不齐。本包按"近似显示宽度"补齐与排版。
+//
+// 使用约定：用作行首图标的 emoji 请选 Unicode `Emoji_Presentation=Yes`
+// 的字符（如 🔧/🎤/🤖/📚），它们在终端都按 2 格渲染；避免 🛠/🎙/⚙ 这类
+// "默认文本呈现"的符号——它们可能被渲染成 1 格导致错位。
 package console
 
 import (
@@ -15,7 +19,7 @@ func displayWidth(s string) int {
 	w := 0
 	for _, r := range s {
 		switch {
-		case r >= 0x1F000: // emoji（U+1F000+，按 2 格估算）
+		case r >= 0x1F000: // emoji（U+1F000+，按 2 格估算；见包注释的使用约定）
 			w += 2
 		case r >= 0x1100 && (r <= 0x115F || // 谚文字母
 			r == 0x2329 || r == 0x232A ||
