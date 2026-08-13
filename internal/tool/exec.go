@@ -5,11 +5,11 @@
 // 本文件实现 3 个文件类工具，配合 exec_shell.go 的命令执行，构成最小 Agentic 能力。
 //
 // 安全设计（务必理解）：
-//   1. 路径沙箱：所有读写被限制在 ExecSandbox.WorkDir 白名单目录内，
-//      用 filepath.Clean + 前缀校验 防目录穿越（../ 逃逸）。
-//   2. 只读模式：ExecSandbox.ReadOnly=true 时禁用写文件（默认开启只读更安全）。
-//   3. 高危标记：写文件/执行命令声明 RiskLevel=2，配合 registry 的
-//      二次确认 + 角色白名单（仅 admin）双保险（D20）。
+//  1. 路径沙箱：所有读写被限制在 ExecSandbox.WorkDir 白名单目录内，
+//     用 filepath.Clean + 前缀校验 防目录穿越（../ 逃逸）。
+//  2. 只读模式：ExecSandbox.ReadOnly=true 时禁用写文件（默认开启只读更安全）。
+//  3. 高危标记：写文件/执行命令声明 RiskLevel=2，配合 registry 的
+//     二次确认 + 角色白名单（仅 admin）双保险（D20）。
 //
 // 生产演化方向：
 //   - 多用户时按用户分配独立工作目录（/sandbox/<user>/），真正隔离
@@ -168,13 +168,14 @@ func (t *WriteFileTool) Execute(_ context.Context, args map[string]interface{}) 
 
 // RiskLevel 声明写文件为高危（2 级：必须二次确认）。
 func (t *WriteFileTool) RiskLevel() int { return 2 }
+
 // AllowedRoles 仅 admin 可用。
 func (t *WriteFileTool) AllowedRoles() []string { return []string{"admin"} }
 
 // 编译期断言：文件工具实现 Tool 接口。
 var (
-	_ Tool   = (*ListDirTool)(nil)
-	_ Tool   = (*ReadFileTool)(nil)
-	_ Tool   = (*WriteFileTool)(nil)
-	_ Risky  = (*WriteFileTool)(nil)
+	_ Tool  = (*ListDirTool)(nil)
+	_ Tool  = (*ReadFileTool)(nil)
+	_ Tool  = (*WriteFileTool)(nil)
+	_ Risky = (*WriteFileTool)(nil)
 )

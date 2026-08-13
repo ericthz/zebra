@@ -5,6 +5,7 @@
 //   - 技能（skills/ 目录）
 //   - 提示词模板（prompts/ 目录）
 //   - RAG 知识库（docs/ 目录）
+//
 // 由 main 注入的 Reload 闭包完成实际重载（server 层只负责鉴权与触发）。
 package server
 

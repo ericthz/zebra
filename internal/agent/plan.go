@@ -5,9 +5,10 @@
 // 这正是多阶段编排的意义。
 //
 // 三阶段：
-//   阶段1 规划(plan)：让 LLM 把大任务拆成有序子步骤（JSON）
-//   阶段2 执行(executeStep)：逐个执行子任务（复用 toolLoop，可带工具调用）
-//   阶段3 汇总：把各步骤结果拼成最终回答
+//
+//	阶段1 规划(plan)：让 LLM 把大任务拆成有序子步骤（JSON）
+//	阶段2 执行(executeStep)：逐个执行子任务（复用 toolLoop，可带工具调用）
+//	阶段3 汇总：把各步骤结果拼成最终回答
 //
 // 设计要点：
 //   - 子步骤执行【不写】会话历史与记忆（toolLoop 不碰 history/mem），
@@ -95,9 +96,9 @@ var planSchema = map[string]interface{}{
 	"properties": map[string]interface{}{
 		"summary": map[string]interface{}{"type": "string"},
 		"steps": map[string]interface{}{
-			"type":  "array",
+			"type": "array",
 			"items": map[string]interface{}{
-				"type":       "object",
+				"type": "object",
 				"properties": map[string]interface{}{
 					"title": map[string]interface{}{"type": "string"},
 					"task":  map[string]interface{}{"type": "string"},

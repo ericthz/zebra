@@ -5,8 +5,10 @@
 //	GET  /v1/tasks/{id} 查询单个任务（status/progress/result）
 //
 // 检查点（checkpoint）机制：
-//   任务执行前/后，把会话历史序列化为快照存进 Task.Checkpoint；
-//   恢复/继续时反序列化回 history，实现"断点续跑"。
+//
+//	任务执行前/后，把会话历史序列化为快照存进 Task.Checkpoint；
+//	恢复/继续时反序列化回 history，实现"断点续跑"。
+//
 // 完成/失败时触发 Webhook 通知（复用 P4）。
 package server
 

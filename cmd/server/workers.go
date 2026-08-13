@@ -3,6 +3,7 @@
 // 三个专业 Agent 共享底层依赖（router/记忆/技能/RAG…），但各有：
 //   - 专属系统提示词（persona）：数据 / 知识 / 常规
 //   - 专属工具子集（tool.Subset）：能力聚焦
+//
 // Supervisor 负责把请求路由给最合适的 worker。
 package main
 

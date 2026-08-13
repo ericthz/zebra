@@ -2,7 +2,8 @@
 //
 // 背景：对话 API 是同步的，但真实业务常有长耗时任务（生成季度报告、
 // 批量处理文件）。同步等待会占满连接/拖垮体验，正确做法是【异步化】：
-//   提交 → 后台执行 → 轮询进度 → 完成通知
+//
+//	提交 → 后台执行 → 轮询进度 → 完成通知
 //
 // 本包实现（纯内存，单机够用；生产换 Redis/数据库）：
 //   - Task：任务状态机（pending → running → done/failed）+ 进度 + 结果
@@ -11,8 +12,9 @@
 //   - 检查点（checkpoint）：任务携带会话历史快照，可断点恢复
 //
 // 设计要点（避免循环依赖）：
-//   Manager 不 import server/agent，而是通过注入的 run 函数执行任务；
-//   server 层负责把"Agent 运行"包装成 run（加载检查点、跑任务、存新检查点）。
+//
+//	Manager 不 import server/agent，而是通过注入的 run 函数执行任务；
+//	server 层负责把"Agent 运行"包装成 run（加载检查点、跑任务、存新检查点）。
 //
 // 生产演化方向：
 //   - 存储换 Redis/DB；执行换独立 worker 进程（Kafka 消息队列）
@@ -29,10 +31,10 @@ import (
 
 // 任务状态。
 const (
-	StatusPending = "pending"
-	StatusRunning = "running"
-	StatusDone    = "done"
-	StatusFailed  = "failed"
+	StatusPending  = "pending"
+	StatusRunning  = "running"
+	StatusDone     = "done"
+	StatusFailed   = "failed"
 	StatusCanceled = "canceled"
 )
 
@@ -114,16 +116,16 @@ type NotifyFunc func(t *Task)
 
 // Manager 异步任务管理器（消费者队列）。
 type Manager struct {
-	store    Store
-	run      RunFunc
-	notify   NotifyFunc
+	store         Store
+	run           RunFunc
+	notify        NotifyFunc
 	maxConcurrent int
-	sem      chan struct{}
-	queue    chan *Task
-	stop     chan struct{}
-	wg       sync.WaitGroup
-	nextID   int64
-	idMu     sync.Mutex
+	sem           chan struct{}
+	queue         chan *Task
+	stop          chan struct{}
+	wg            sync.WaitGroup
+	nextID        int64
+	idMu          sync.Mutex
 }
 
 // NewManager 构造。
@@ -133,9 +135,9 @@ func NewManager(store Store, run RunFunc, maxConcurrent int) *Manager {
 	}
 	m := &Manager{
 		store: store, run: run, maxConcurrent: maxConcurrent,
-		sem: make(chan struct{}, maxConcurrent),
+		sem:   make(chan struct{}, maxConcurrent),
 		queue: make(chan *Task, 64),
-		stop: make(chan struct{}),
+		stop:  make(chan struct{}),
 	}
 	return m
 }
@@ -177,7 +179,7 @@ func (m *Manager) Stop() {
 // Submit 提交任务，返回任务 ID。
 func (m *Manager) Submit(user, session, prompt string) (string, error) {
 	t := &Task{
-		ID:      m.nextTaskID(), User: user, Session: session, Prompt: prompt,
+		ID: m.nextTaskID(), User: user, Session: session, Prompt: prompt,
 		Status: StatusPending, Created: time.Now(), Updated: time.Now(),
 	}
 	if err := m.store.Create(t); err != nil {

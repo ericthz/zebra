@@ -28,10 +28,10 @@ type SemanticCache struct {
 	threshold  float64 // 相似度阈值 [0,1]，越大越严格
 	maxEntries int
 
-	mu      sync.Mutex
-	items   []cacheItem // FIFO 队列，达到上限淘汰最旧
-	hits    int64
-	misses  int64
+	mu     sync.Mutex
+	items  []cacheItem // FIFO 队列，达到上限淘汰最旧
+	hits   int64
+	misses int64
 }
 
 type cacheItem struct {
@@ -98,4 +98,3 @@ func (c *SemanticCache) miss() {
 	defer c.mu.Unlock()
 	c.misses++
 }
-

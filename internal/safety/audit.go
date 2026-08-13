@@ -11,10 +11,10 @@ type AuditEvent struct {
 	Time    time.Time `json:"time"`
 	User    string    `json:"user"`
 	Role    string    `json:"role"`
-	Action  string    `json:"action"`  // 例如 tool.call / auth.fail / confirm
-	Target  string    `json:"target"`  // 例如工具名/资源
-	Detail  string    `json:"detail"`  // 脱敏后的参数/信息
-	Risk    int       `json:"risk"`    // 0 常规 / 1 关注 / 2 高危
+	Action  string    `json:"action"` // 例如 tool.call / auth.fail / confirm
+	Target  string    `json:"target"` // 例如工具名/资源
+	Detail  string    `json:"detail"` // 脱敏后的参数/信息
+	Risk    int       `json:"risk"`   // 0 常规 / 1 关注 / 2 高危
 	Success bool      `json:"success"`
 }
 

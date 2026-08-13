@@ -9,7 +9,7 @@ import (
 // fakeTool 供测试的最小工具。
 type fakeTool struct{}
 
-func (fakeTool) Name() string { return "fake" }
+func (fakeTool) Name() string        { return "fake" }
 func (fakeTool) Description() string { return "test tool" }
 func (fakeTool) Parameters() map[string]interface{} {
 	return map[string]interface{}{
@@ -27,8 +27,8 @@ func (fakeTool) Execute(_ context.Context, args map[string]interface{}) (string,
 // riskyTool 高危工具。
 type riskyTool struct{ fakeTool }
 
-func (riskyTool) Name() string { return "risky" }
-func (riskyTool) RiskLevel() int { return 2 }
+func (riskyTool) Name() string           { return "risky" }
+func (riskyTool) RiskLevel() int         { return 2 }
 func (riskyTool) AllowedRoles() []string { return []string{"admin"} }
 
 func str(v interface{}) string { b, _ := json.Marshal(v); return string(b) }

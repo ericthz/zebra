@@ -4,6 +4,7 @@
 //   - initialize / initialized 握手
 //   - tools/list、tools/call
 //   - stdio 与 HTTP 双传输层
+//
 // 生产演进方向：resources / prompts / sampling / notifications 能力协商。
 package mcp
 
@@ -37,9 +38,9 @@ const ProtocolVersion = "2024-11-05"
 
 // InitializeResult initialize 响应。
 type InitializeResult struct {
-	ProtocolVersion string          `json:"protocolVersion"`
-	Capabilities    map[string]any  `json:"capabilities"`
-	ServerInfo      map[string]any  `json:"serverInfo"`
+	ProtocolVersion string         `json:"protocolVersion"`
+	Capabilities    map[string]any `json:"capabilities"`
+	ServerInfo      map[string]any `json:"serverInfo"`
 }
 
 // ToolDef MCP 工具定义。

@@ -5,12 +5,12 @@ import "testing"
 func TestCheckSSRF(t *testing.T) {
 	// 内网/环回 IP 必须拒绝
 	for _, bad := range []string{
-		"http://127.0.0.1:8080/",       // 环回
-		"http://10.0.0.1/x",            // RFC1918
-		"http://192.168.1.1/x",         // RFC1918
+		"http://127.0.0.1:8080/",        // 环回
+		"http://10.0.0.1/x",             // RFC1918
+		"http://192.168.1.1/x",          // RFC1918
 		"http://169.254.169.254/latest", // 云元数据
-		"http://[::1]/",                // IPv6 环回
-		"ftp://example.com/x",          // 非 http/https
+		"http://[::1]/",                 // IPv6 环回
+		"ftp://example.com/x",           // 非 http/https
 	} {
 		if err := CheckSSRF(bad, nil); err == nil {
 			t.Errorf("应拒绝 %q", bad)

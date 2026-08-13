@@ -3,7 +3,8 @@
 // 零构建：一个内嵌 HTML 文件，浏览器直接可用。聊天走 /v1/chat/stream（SSE），
 // 用 fetch + ReadableStream 解析（POST + JSON body，EventSource 不支持）。
 // 功能：API Key 输入（localStorage 记忆）、多轮会话（session_id 续接）、
-//       流式渲染、工具调用展示。
+//
+//	流式渲染、工具调用展示。
 //
 // 生产演化方向：独立前端工程（React/Vue）+ WebSocket；接入鉴权/OAuth；
 // 会话历史管理界面；移动端适配。

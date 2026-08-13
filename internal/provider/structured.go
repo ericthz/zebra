@@ -14,8 +14,9 @@ type StructuredProvider interface {
 }
 
 // StructuredChat 请求结构化输出：
-//   1. 若主 provider 支持强约束（ChatJSON）→ 用它（生成前就按 schema）
-//   2. 否则走普通 Chat，再用 schema.Validate 事后校验
+//  1. 若主 provider 支持强约束（ChatJSON）→ 用它（生成前就按 schema）
+//  2. 否则走普通 Chat，再用 schema.Validate 事后校验
+//
 // 返回：回复文本 + 解析后的 JSON 值 + 错误。
 func StructuredChat(ctx context.Context, router *Router, messages []Message, jsonSchema map[string]interface{}) ([]byte, error) {
 	// 1. 强约束

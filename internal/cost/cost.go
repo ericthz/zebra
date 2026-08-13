@@ -22,10 +22,10 @@ import (
 // price 每百万 token 的美元价格（输入/输出分开）。
 // 用 map 存储示例单价；生产从配置/计费接口读取。
 var defaultPrices = map[string][2]float64{ // [in, out] 每 1M tokens 美元
-	"gpt-4o-mini":         {0.15, 0.60},
-	"gpt-4o":              {2.50, 10.00},
-	"claude-3-5-haiku":    {0.80, 4.00},
-	"qwen3.5:0.8b":        {0.05, 0.10},
+	"gpt-4o-mini":      {0.15, 0.60},
+	"gpt-4o":           {2.50, 10.00},
+	"claude-3-5-haiku": {0.80, 4.00},
+	"qwen3.5:0.8b":     {0.05, 0.10},
 }
 
 // Tracker 成本归因器（并发安全）。

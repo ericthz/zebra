@@ -37,16 +37,16 @@ type SessionStore interface {
 	Get(id string) (*Session, bool)
 	Create(user, tenant, role string, ttl time.Duration) (*Session, error)
 	Delete(id string)
-	Touch(id string) bool   // 续期
+	Touch(id string) bool            // 续期
 	ForgetUser(user string) []string // P6 被遗忘权：删该用户全部会话，返回被删 ID
 }
 
 // InMemoryStore 内存会话存储：懒创建 + 定期清理过期会话。
 type InMemoryStore struct {
-	mu      sync.RWMutex
-	items   map[string]*Session
-	ttl     time.Duration
-	stop    chan struct{}
+	mu    sync.RWMutex
+	items map[string]*Session
+	ttl   time.Duration
+	stop  chan struct{}
 }
 
 // NewInMemoryStore 构造，并启动后台过期清理（A2 过期）。
@@ -95,7 +95,7 @@ func (s *InMemoryStore) Create(user, tenant, role string, ttl time.Duration) (*S
 		ttl = s.ttl
 	}
 	sess := &Session{
-		ID:      newID(), Tenant: tenant, User: user, Role: role,
+		ID: newID(), Tenant: tenant, User: user, Role: role,
 		Created: time.Now(), Expires: time.Now().Add(ttl),
 	}
 	s.mu.Lock()

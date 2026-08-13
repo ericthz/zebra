@@ -178,7 +178,7 @@ func (p *OpenAIProvider) buildPayload(messages []Message, tools []Tool, stream b
 				switch part.Type {
 				case "image_url":
 					content = append(content, map[string]interface{}{
-						"type": "image_url",
+						"type":      "image_url",
 						"image_url": map[string]string{"url": part.ImageURL},
 					})
 				default:

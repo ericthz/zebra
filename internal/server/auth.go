@@ -1,8 +1,8 @@
 // A3 认证鉴权 + B6 限流配额。
 //
-//   A3 API Key + RBAC：Bearer Token 认证，admin/user 两级角色；
-//      角色→工具权限的具体收敛在 tool.Registry 白名单（D20）。
-//   B6 令牌桶限流：按身份维度（user）限流，防滥用；配额计量由 Metrics 完成。
+//	A3 API Key + RBAC：Bearer Token 认证，admin/user 两级角色；
+//	   角色→工具权限的具体收敛在 tool.Registry 白名单（D20）。
+//	B6 令牌桶限流：按身份维度（user）限流，防滥用；配额计量由 Metrics 完成。
 package server
 
 import (

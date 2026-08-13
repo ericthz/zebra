@@ -6,8 +6,10 @@
 // 校验器），配合 provider 层 response_format（见 internal/provider/openai.go）。
 //
 // 支持的子集（够用且好懂）：
-//   type: object/string/number/integer/boolean/array
-//   required / properties / enum / items（数组元素 schema）
+//
+//	type: object/string/number/integer/boolean/array
+//	required / properties / enum / items（数组元素 schema）
+//
 // 生产演化方向：换官方 json-schema 库（santhosh-tekuri/jsonschema）支持完整规范；
 // 校验结果与重试策略绑定（校验不过 → 反馈给模型重新生成）。
 package schema

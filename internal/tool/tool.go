@@ -20,7 +20,7 @@ type Tool interface {
 // Risky 可选接口：工具声明自己的风险等级与可用角色（D20 工具安全边界）。
 // 未实现该接口的工具视为 0 级（安全、所有角色可用）。
 type Risky interface {
-	RiskLevel() int      // 0 安全 / 1 中风险（记录审计）/ 2 高危（需二次确认）
+	RiskLevel() int         // 0 安全 / 1 中风险（记录审计）/ 2 高危（需二次确认）
 	AllowedRoles() []string // 允许的角色；空 slice 表示所有角色
 }
 

@@ -2,7 +2,8 @@
 //
 // 价值：Agent 输出质量好不好，模型自评（P3 Judge）是"估计"，用户点赞/踩是
 // "真值"。收集反馈 → 回流到评测集/优化 prompt，构成完整质量闭环：
-//   用户点赞/踩 → 落库 + 指标 + 审计 → 用作评测真值（golden）→ 回归测试
+//
+//	用户点赞/踩 → 落库 + 指标 + 审计 → 用作评测真值（golden）→ 回归测试
 //
 // 本包实现：
 //   - Feedback：一条反馈（点赞/踩 + 会话 + 可选评论）
@@ -44,11 +45,11 @@ type Store interface {
 
 // InMemoryStore 内存反馈存储（并发安全）。
 type InMemoryStore struct {
-	mu      sync.RWMutex
-	items   []*Feedback
-	pos     int64
-	neg     int64
-	nextID  int64
+	mu     sync.RWMutex
+	items  []*Feedback
+	pos    int64
+	neg    int64
+	nextID int64
 }
 
 // NewInMemoryStore 构造。

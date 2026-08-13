@@ -8,8 +8,8 @@ import (
 
 func TestEstimateTokens(t *testing.T) {
 	cases := []struct {
-		in   string
-		min  int
+		in  string
+		min int
 	}{
 		{"", 0},
 		{"hello world", 1},
