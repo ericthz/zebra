@@ -50,12 +50,12 @@ func TestPrintInventory(t *testing.T) {
 	for _, want := range []string{
 		"zebra 启动清单",
 		": 2 个",
-		"calculator — test", // 工具子项：名称 — 描述
-		"fetch_url — test",
+		"calculator: test", // 工具子项：名称: 描述（与父级冒号风格一致）
+		"fetch_url: test",
 		"模式=http · 已连接 3 个工具",
 		"技能",
-		"report-sop — 写研究报告",
-		"data-check — 数据核对",
+		"report-sop: 写研究报告",
+		"data-check: 数据核对",
 		": 2 篇文档 / 12 块",
 		": 已启用（ASR/TTS）",
 		"candidate=qwen2.5:7b",
@@ -66,17 +66,17 @@ func TestPrintInventory(t *testing.T) {
 		}
 	}
 
-	// 对齐：子项树形分支（├/└）起点显示列 == 父行标签文字（工具/技能）正中间
+	// 对齐：子项树形分支（├/└）起点显示列 == 父行行首图标（▲/■）正下方
 	// （用 console.Width 按显示宽度换算，避免多字节 UTF-8 的字节列干扰）
-	textMid := -1
+	iconCol := -1
 	for _, l := range strings.Split(out, "\n") {
 		if strings.Contains(l, "▲ 工具") {
-			i := strings.Index(l, "工具")
-			textMid = console.Width(l[:i]) + 2 // 2 字文字占 4 格，中点 +2
+			i := strings.Index(l, "▲")
+			iconCol = console.Width(l[:i])
 			break
 		}
 	}
-	if textMid < 0 {
+	if iconCol < 0 {
 		t.Fatal("未找到工具父行")
 	}
 	for _, l := range strings.Split(out, "\n") {
@@ -86,8 +86,8 @@ func TestPrintInventory(t *testing.T) {
 				if bi < 0 {
 					t.Fatalf("子项行缺少分支符: %q", l)
 				}
-				if got := console.Width(l[:bi]); got != textMid {
-					t.Fatalf("子项 %q 分支起点显示列 %d 应位于文字正中间（第 %d 列）: %q", item, got, textMid, l)
+				if got := console.Width(l[:bi]); got != iconCol {
+					t.Fatalf("子项 %q 分支起点显示列 %d 应与图标列 %d 对齐: %q", item, got, iconCol, l)
 				}
 			}
 		}
