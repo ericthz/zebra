@@ -47,6 +47,7 @@ func main() {
 	reg.Register(&tool.TranslateTool{})
 	reg.Register(&tool.IPInfoTool{})
 
+	reg.Register(&tool.FetchURLTool{}) // P6 SSRF 防护的抓取工具
 	// ---- P2 本地执行：文件读写 + 命令执行（demo 默认可写，便于演示 Agentic 能力）----
 	execSandbox := tool.NewExecSandbox("workspace", false)
 	reg.Register(&tool.ListDirTool{Sandbox: execSandbox})

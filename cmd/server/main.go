@@ -99,6 +99,7 @@ func main() {
 	// 可选：挂载 MCP 远端工具（保持与既有能力一致）
 	registerMCPTools(reg, logger)
 
+	reg.Register(&tool.FetchURLTool{}) // P6 SSRF 防护的抓取工具
 	// ---- P2 本地执行：文件读写 + 命令执行（沙箱隔离 + 高危二次确认）----
 	// 工作目录白名单：默认 ./workspace；只读模式默认开启（写文件/命令需显式放开）。
 	execSandbox := tool.NewExecSandbox(envOr("EXEC_WORKDIR", "workspace"), envOr("EXEC_READONLY", "1") == "1")

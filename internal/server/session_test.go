@@ -50,3 +50,23 @@ func TestSessionIsolation(t *testing.T) {
 		t.Fatal("两个会话历史应互相隔离")
 	}
 }
+
+// TestForgetUser 被遗忘权：删除用户全部会话。
+func TestForgetUser(t *testing.T) {
+	store := NewInMemoryStore(time.Minute)
+	defer store.Stop()
+
+	store.Create("alice", "t1", "user", time.Minute)
+	store.Create("alice", "t1", "user", time.Minute)
+	store.Create("bob", "t1", "user", time.Minute)
+
+	ids := store.ForgetUser("alice")
+	if len(ids) != 2 {
+		t.Fatalf("应删除 alice 的 2 个会话，实际 %d", len(ids))
+	}
+	// bob 不受影响
+	sess, _ := store.Create("bob", "t1", "user", time.Minute)
+	if _, ok := store.Get(sess.ID); !ok {
+		t.Fatal("bob 的会话不应被误删")
+	}
+}

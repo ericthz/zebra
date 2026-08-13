@@ -10,10 +10,22 @@ import (
 	"net/http"
 	"net/url"
 	"time"
+
+	"github.com/ericthz/zebra/internal/safety"
 )
 
 // netClient 网络工具共用的 HTTP 客户端（带超时，避免永久阻塞）。
 var netClient = &http.Client{Timeout: 8 * time.Second}
+
+// safeGet 纵深防御（P6）：任何网络工具发请求前都过一遍 SSRF 校验。
+// 这些内置工具的 URL 主机名虽是写死的公网域名，统一校验仍是好习惯——
+// 防止未来有人改成用户可控 URL 时漏掉防线。
+func safeGet(url string) (*http.Response, error) {
+	if err := safety.CheckSSRF(url, nil); err != nil {
+		return nil, err
+	}
+	return netClient.Get(url)
+}
 
 // ---------------- 天气 ----------------
 
@@ -40,7 +52,7 @@ func (w *WeatherTool) Execute(_ context.Context, args map[string]interface{}) (s
 		return "", fmt.Errorf("缺少参数 location")
 	}
 	apiURL := fmt.Sprintf("https://wttr.in/%s?format=j1", url.PathEscape(loc))
-	resp, err := netClient.Get(apiURL)
+	resp, err := safeGet(apiURL)
 	if err != nil {
 		return "", err
 	}
@@ -91,7 +103,7 @@ func (s *SearchTool) Execute(_ context.Context, args map[string]interface{}) (st
 		return "", fmt.Errorf("缺少搜索关键词")
 	}
 	apiURL := fmt.Sprintf("https://api.duckduckgo.com/?q=%s&format=json&no_html=1", url.QueryEscape(q))
-	resp, err := netClient.Get(apiURL)
+	resp, err := safeGet(apiURL)
 	if err != nil {
 		return "", err
 	}
@@ -142,7 +154,7 @@ func (t *TranslateTool) Execute(_ context.Context, args map[string]interface{}) 
 	}
 	apiURL := fmt.Sprintf("https://api.mymemory.translated.net/get?q=%s&langpair=%s",
 		url.QueryEscape(text), url.QueryEscape(langPair))
-	resp, err := netClient.Get(apiURL)
+	resp, err := safeGet(apiURL)
 	if err != nil {
 		return "", err
 	}
@@ -181,7 +193,7 @@ func (i *IPInfoTool) Parameters() map[string]interface{} {
 func (i *IPInfoTool) Execute(_ context.Context, args map[string]interface{}) (string, error) {
 	ip := StringArg(args, "ip")
 	if ip == "" {
-		resp, err := netClient.Get("https://api.ipify.org?format=json")
+		resp, err := safeGet("https://api.ipify.org?format=json")
 		if err != nil {
 			return "", err
 		}
@@ -196,7 +208,7 @@ func (i *IPInfoTool) Execute(_ context.Context, args map[string]interface{}) (st
 		}
 	}
 	geoURL := fmt.Sprintf("http://ip-api.com/json/%s?fields=status,message,country,regionName,city,zip,lat,lon,isp,query", ip)
-	resp, err := netClient.Get(geoURL)
+	resp, err := safeGet(geoURL)
 	if err != nil {
 		return "", err
 	}

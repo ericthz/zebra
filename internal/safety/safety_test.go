@@ -73,3 +73,24 @@ func (s staticStore) Get(k string) (string, bool) {
 	v, ok := s[k]
 	return v, ok
 }
+
+func TestTenantSecretStore(t *testing.T) {
+	ts := NewTenantSecretStore()
+	ts.Set("tenant-a", "OPENAI_API_KEY", "key-a")
+	ts.Set("tenant-b", "OPENAI_API_KEY", "key-b")
+
+	if v, ok := ts.Get("tenant-a", "OPENAI_API_KEY"); !ok || v != "key-a" {
+		t.Fatalf("tenant-a 密钥错误: %q", v)
+	}
+	if v, _ := ts.Get("tenant-b", "OPENAI_API_KEY"); v != "key-b" {
+		t.Fatalf("tenant-b 密钥错误: %q", v)
+	}
+	// 租户隔离：a 读不到 b 的（键名相同但值不同，已按租户隔离）
+	if v, _ := ts.Get("tenant-a", "OPENAI_API_KEY"); v == "key-b" {
+		t.Fatal("租户间密钥不应串")
+	}
+	// 不存在的租户
+	if _, ok := ts.Get("tenant-c", "OPENAI_API_KEY"); ok {
+		t.Fatal("不存在的租户不应有密钥")
+	}
+}

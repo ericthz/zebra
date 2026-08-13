@@ -47,6 +47,31 @@ func (m *Manager) Remember(sessionID, userInput, assistant string) {
 	}()
 }
 
+// TenantScoped 可选接口：长期记忆支持按租户切分（QdrantMemory 实现，A4）。
+type TenantScoped interface {
+	ForTenant(tenant string) Memory
+}
+
+// ForgetTenant 被遗忘权（P6/GDPR）：删除某租户的全部长期记忆。
+// 生产还需：删除会话、日志、审计中的该租户数据（全链路）。
+func (m *Manager) ForgetTenant(ctx context.Context, tenant string) error {
+	if m.Long == nil {
+		return nil
+	}
+	if ts, ok := m.Long.(TenantScoped); ok {
+		return ts.ForTenant(tenant).Clear(ctx)
+	}
+	// 非租户切分的长期记忆：仅当只有一个租户时清空
+	return m.Long.Clear(ctx)
+}
+
+// ForgetSession 清空某会话的工作记忆（被遗忘权的一部分）。
+func (m *Manager) ForgetSession(sessionID string) {
+	if m.Working != nil {
+		m.Working.Clear(sessionID)
+	}
+}
+
 // Recall 检索相关记忆：先合并工作记忆的最近摘要，再叠加长期记忆语义检索。
 func (m *Manager) Recall(ctx context.Context, sessionID, query string, limit int) []string {
 	var out []string

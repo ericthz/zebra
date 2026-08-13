@@ -92,6 +92,7 @@ func (s *APIServer) Handler() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/v1/chat", s.handleChat)
 	mux.HandleFunc("/v1/chat/stream", s.handleChatStream)
+	mux.HandleFunc("DELETE /v1/user/data", s.handleForget) // P6 被遗忘权
 	mux.HandleFunc("/healthz", HealthzHandler())
 	mux.HandleFunc("/readyz", ReadyzHandler(s.deps.Logger, map[string]func() error{
 		"llm":   func() error { return s.toolsReadyCheck() },

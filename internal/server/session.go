@@ -37,7 +37,8 @@ type SessionStore interface {
 	Get(id string) (*Session, bool)
 	Create(user, tenant, role string, ttl time.Duration) (*Session, error)
 	Delete(id string)
-	Touch(id string) bool // 续期
+	Touch(id string) bool   // 续期
+	ForgetUser(user string) []string // P6 被遗忘权：删该用户全部会话，返回被删 ID
 }
 
 // InMemoryStore 内存会话存储：懒创建 + 定期清理过期会话。
@@ -108,6 +109,20 @@ func (s *InMemoryStore) Delete(id string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	delete(s.items, id)
+}
+
+// ForgetUser 被遗忘权（P6）：删除某用户全部会话，返回被删会话 ID。
+func (s *InMemoryStore) ForgetUser(user string) []string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	var ids []string
+	for id, sess := range s.items {
+		if sess.User == user {
+			delete(s.items, id)
+			ids = append(ids, id)
+		}
+	}
+	return ids
 }
 
 // Touch 续期会话（每次请求刷新 TTL）。

@@ -9,6 +9,7 @@ import (
 	"os"
 	"regexp"
 	"strings"
+	"sync"
 )
 
 // ---------------- D17 Prompt 注入防护 ----------------
@@ -132,4 +133,37 @@ func (m *MultiSecretStore) Get(key string) (string, bool) {
 		}
 	}
 	return "", false
+}
+
+// ---------------- P6 租户级凭据 ----------------
+
+// TenantSecretStore 租户级密钥存储（A4 隔离：每个租户独立的第三方凭据）。
+// 与全局 EnvSecretStore 的区别：同一 API Key 名可被不同租户持有不同值。
+// 生产演化：底层接 KMS/Vault，按租户绑定密钥轮换。
+type TenantSecretStore struct {
+	mu      sync.RWMutex
+	secrets map[string]map[string]string // tenant -> key -> value
+}
+
+// NewTenantSecretStore 构造。
+func NewTenantSecretStore() *TenantSecretStore {
+	return &TenantSecretStore{secrets: make(map[string]map[string]string)}
+}
+
+// Set 设置某租户的密钥。
+func (t *TenantSecretStore) Set(tenant, key, value string) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	if t.secrets[tenant] == nil {
+		t.secrets[tenant] = make(map[string]string)
+	}
+	t.secrets[tenant][key] = value
+}
+
+// Get 读取某租户的密钥。
+func (t *TenantSecretStore) Get(tenant, key string) (string, bool) {
+	t.mu.RLock()
+	defer t.mu.RUnlock()
+	v, ok := t.secrets[tenant][key]
+	return v, ok
 }
