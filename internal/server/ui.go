@@ -17,7 +17,7 @@ const chatUI = `<!DOCTYPE html>
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>zebra AI Agent</title>
+<title>Zebra AI Agent</title>
 <style>
   body{font-family:system-ui,sans-serif;max-width:760px;margin:0 auto;padding:16px;background:#0f172a;color:#e2e8f0}
   h1{font-size:1.4rem} .bar{display:flex;gap:8px;margin-bottom:12px}
@@ -29,7 +29,7 @@ const chatUI = `<!DOCTYPE html>
 </style>
 </head>
 <body>
-<h1>◆ zebra AI Agent</h1>
+<h1>◆ Zebra AI Agent</h1>
 <div class="bar">
   <input id="key" placeholder="API Key (Bearer)" style="flex:1">
 </div>

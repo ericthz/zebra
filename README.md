@@ -1,8 +1,8 @@
-# zebra — AI Agent 全功能最小实现（学习原理）
+# Zebra — AI Agent 全功能最小实现（学习原理）
 
 > 版本：v0.8 · 里程碑：P0~P57 · 许可：Apache-2.0 · 语言：纯 Go 标准库（零第三方运行时依赖）
 
-**zebra 的目的只有一个：把 AI Agent 的各个技能——对话与推理、记忆、知识、工具、多 Agent、评测、安全、可观测、规模化——用最小可读的代码实现出来，让你看懂每个技能背后的原理。**
+**Zebra 的目的只有一个：把 AI Agent 的各个技能——对话与推理、记忆、知识、工具、多 Agent、评测、安全、可观测、规模化——用最小可读的代码实现出来，让你看懂每个技能背后的原理。**
 
 三条承诺：
 
@@ -322,7 +322,7 @@ curl :8080/readyz    # ready
 |---|---|---|
 | `ADDR` | `:8080` | 服务监听地址 |
 | `ADMIN_KEY` / `USER_KEY` | `admin-key` / `user-key` | RBAC 两级 API Key |
-| `ZEBRA_LOG` | `zebra.log` | zebra CLI 诊断日志路径（`off`=stderr） |
+| `ZEBRA_LOG` | `zebra.log` | Zebra CLI 诊断日志路径（`off`=stderr） |
 | `LOG_FILE` | `server.log` | server 日志双写文件路径（`off`=仅 stdout） |
 | `EVAL_CASES_DIR` | `test/eval/cases` | 反馈回流评测数据集目录 |
 | `MCP_MODE` / `MCP_COMMAND` / `MCP_HTTP_URL` | 空 | MCP 远端工具（stdio/http；stdio 建议指向预编译 `bin/zebra-mcp`） |
@@ -539,11 +539,11 @@ curl -X POST :8080/v1/user/profile/resolve -H "Authorization: Bearer user-key" \
 | ✓ P29 | 第七轮收尾（docs） | TODO/README 更新 | 全量验证 |
 | ✓ P30 | 配置加载（零依赖 .env） | `internal/config/` | 启动自动加载 .env |
 | ✓ P31 | 学习可观测（清单 + 执行痕迹） | `cmd/server/startup.go` `agent.OnTool/OnSkill` | 启动打印能力清单 |
-| ✓ P32 | 入口装配一致（CLI/Server 共享） | `memory.SetupManager` `mcp.RegisterTools` | zebra 与 server 同一套装配 |
+| ✓ P32 | 入口装配一致（CLI/Server 共享） | `memory.SetupManager` `mcp.RegisterTools` | Zebra 与 server 同一套装配 |
 | ✓ P33 | 终端配色（256 色，NO_COLOR 开关） | `internal/console/color.go` | TTY 着色、管道无色 |
-| ✓ P34 | zebra 诊断日志落盘 | `cmd/zebra/main.go` | 终端干净，降级原因可查日志 |
+| ✓ P34 | Zebra 诊断日志落盘 | `cmd/zebra/main.go` | 终端干净，降级原因可查日志 |
 | ✓ P35 | server 日志双写落盘 | `cmd/server/main.go` `config.OpenLogFile` | stdout 与文件一致 |
-| ✓ P36 | 启动清单统一（CLI/Server 共享渲染 + zebra RAG） | `internal/observe/` `internal/rag/docs.go` | 两端清单行结构一致 |
+| ✓ P36 | 启动清单统一（CLI/Server 共享渲染 + Zebra RAG） | `internal/observe/` `internal/rag/docs.go` | 两端清单行结构一致 |
 | ✓ P37 | 终端启动 banner | `internal/observe/banner.go` | 首屏 ZEBRA ASCII 标题 |
 | ✓ P38 | 命令行行编辑（raw + UTF-8 退格） | `internal/console/readline.go` | 中文输入删除不再卡 |
 | ✓ P39 | MCP 子项展示 | `internal/observe/inventory.go` | 清单逐项列出 MCP 工具 |
@@ -609,7 +609,7 @@ curl -X POST :8080/v1/user/profile/resolve -H "Authorization: Bearer user-key" \
 - **容器化与 CI**：Docker 多阶段构建 + distroless；GitHub Actions 提交自动 build+vet+test。
 - **端到端验证**：每个里程碑以"真实运行 + 断言"收尾（如影子 verdict、语音音频回传、Redis 续期、冲突裁决回退）。
 
-**启动清单符号说明**（zebra CLI 与 server 启动时打印的能力清单，TTY 下按类别着色）：
+**启动清单符号说明**（Zebra CLI 与 server 启动时打印的能力清单，TTY 下按类别着色）：
 
 | 符号 | 类别 | 颜色（TTY） |
 |---|---|---|
