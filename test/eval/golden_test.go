@@ -50,7 +50,7 @@ func TestGoldenEval(t *testing.T) {
 	httpCli := provider.NewHTTPClient(20*time.Second, 2, 300*time.Millisecond)
 	router := provider.NewRouter(&provider.OllamaProvider{
 		BaseURL: envOr("OLLAMA_BASE_URL", "http://localhost:11434"),
-		Model:   envOr("OLLAMA_MODEL", "llama3.1"),
+		Model:   envOr("OLLAMA_MODEL", "qwen3.5:0.8b-mlx"),
 		Client:  httpCli,
 	})
 
@@ -148,7 +148,7 @@ func TestJudgeClosedLoop(t *testing.T) {
 	httpCli := provider.NewHTTPClient(20*time.Second, 2, 300*time.Millisecond)
 	judge := eval.NewJudge(provider.NewRouter(&provider.OllamaProvider{
 		BaseURL: envOr("OLLAMA_BASE_URL", "http://localhost:11434"),
-		Model:   envOr("OLLAMA_MODEL", "llama3.1"),
+		Model:   envOr("OLLAMA_MODEL", "qwen3.5:0.8b-mlx"),
 		Client:  httpCli,
 	}))
 

@@ -14,6 +14,7 @@ import (
 	"github.com/ericthz/zebra/internal/cache"
 	"github.com/ericthz/zebra/internal/memory"
 	"github.com/ericthz/zebra/internal/prompt"
+	"github.com/ericthz/zebra/internal/rag"
 	"github.com/ericthz/zebra/internal/provider"
 	"github.com/ericthz/zebra/internal/safety"
 	"github.com/ericthz/zebra/internal/skill"
@@ -34,6 +35,7 @@ type Config struct {
 	OnUsage    func(model string, inTokens, outTokens int) // B5/P5 用量与成本钩子
 	Skills     *skill.Registry     // 技能注册表（P1，nil 则关闭技能检索）
 	Cache      *cache.SemanticCache // 语义缓存（P5，nil 则关闭）
+	RAG        *rag.Index          // 知识库检索（P8，nil 则关闭 RAG）
 }
 
 // Agent 单个会话的 Agent 实例。
@@ -266,6 +268,20 @@ func (a *Agent) buildMessages(ctx context.Context, userInput string) []provider.
 					Content: fmt.Sprintf("【已启用技能 %s v%s：%s】\n%s", sk.Name, sk.Version, sk.Description, sk.Instructions),
 				})
 			}
+		}
+	}
+
+	// RAG 知识库检索与注入（P8）：
+	// 按用户输入在私有知识库检索 topK 相关片段，作为 system 消息注入，
+	// 片段带【来源】标记，要求模型回答基于这些资料（接地/防幻觉，支持引用）。
+	if a.cfg.RAG != nil {
+		if hits, err := a.cfg.RAG.Retrieve(ctx, userInput, 3); err == nil && len(hits) > 0 {
+			var kb strings.Builder
+			kb.WriteString("以下是知识库中与本问题相关的资料（回答请优先基于这些资料，并标注来源）：\n")
+			for _, h := range hits {
+				fmt.Fprintf(&kb, "【来源:%s#%d】(相关度%.2f)\n%s\n\n", h.Chunk.Source, h.Chunk.Seq, h.Score, h.Chunk.Text)
+			}
+			msgs = append(msgs, provider.Message{Role: "system", Content: kb.String()})
 		}
 	}
 

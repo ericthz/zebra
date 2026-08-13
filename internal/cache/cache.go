@@ -59,7 +59,7 @@ func (c *SemanticCache) Get(ctx context.Context, query string) (string, bool) {
 	best := -1.0
 	var bestAnswer string
 	for _, it := range c.items {
-		if sim := cosine(vec, it.vec); sim > best {
+		if sim := memory.Cosine(vec, it.vec); sim > best {
 			best = sim
 			bestAnswer = it.answer
 		}
@@ -99,36 +99,3 @@ func (c *SemanticCache) miss() {
 	c.misses++
 }
 
-// cosine 余弦相似度 [-1,1]，用于向量比对。
-func cosine(a, b []float32) float64 {
-	n := len(a)
-	if len(b) < n {
-		n = len(b)
-	}
-	var dot, na, nb float64
-	for i := 0; i < n; i++ {
-		dot += float64(a[i]) * float64(b[i])
-		na += float64(a[i]) * float64(a[i])
-		nb += float64(b[i]) * float64(b[i])
-	}
-	if na == 0 || nb == 0 {
-		return 0
-	}
-	return dot / (sqrt(na) * sqrt(nb))
-}
-
-func sqrt(x float64) float64 {
-	// 极简牛顿迭代开方，避免引入 math 依赖的额外负担
-	if x <= 0 {
-		return 0
-	}
-	guess := x
-	for i := 0; i < 32; i++ {
-		next := (guess + x/guess) / 2
-		if next == guess {
-			break
-		}
-		guess = next
-	}
-	return guess
-}

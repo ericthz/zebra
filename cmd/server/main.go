@@ -13,20 +13,23 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
 	"github.com/ericthz/zebra/internal/agent"
 	"github.com/ericthz/zebra/internal/cache"
 	"github.com/ericthz/zebra/internal/cost"
-	"github.com/ericthz/zebra/internal/memory"
 	"github.com/ericthz/zebra/internal/mcp"
+	"github.com/ericthz/zebra/internal/memory"
 	"github.com/ericthz/zebra/internal/notify"
 	"github.com/ericthz/zebra/internal/prompt"
 	"github.com/ericthz/zebra/internal/provider"
+	"github.com/ericthz/zebra/internal/rag"
 	"github.com/ericthz/zebra/internal/safety"
 	"github.com/ericthz/zebra/internal/server"
 	"github.com/ericthz/zebra/internal/skill"
@@ -60,7 +63,7 @@ func main() {
 
 	chain = append(chain, &provider.OllamaProvider{
 		BaseURL: envOr("OLLAMA_BASE_URL", "http://localhost:11434"),
-		Model:   envOr("OLLAMA_MODEL", "llama3.1"),
+		Model:   envOr("OLLAMA_MODEL", "qwen3.5:0.8b-mlx"),
 		Client:  httpCli,
 	})
 	if fb := os.Getenv("FALLBACK_BASE_URL"); fb != "" {
@@ -154,8 +157,25 @@ func main() {
 
 	// ---- P5 语义缓存：复用嵌入器做语义相似度命中（相似问题直接回答案省钱）----
 	var semanticCache *cache.SemanticCache
+	var ragIndex *rag.Index
 	if emb := embedder(); emb != nil {
 		semanticCache = cache.New(emb, 0.92, 200)
+
+		// ---- P8 RAG 知识库：加载 docs/ 目录文档（可选）----
+		ragIndex = rag.NewIndex(emb)
+		if docs, err := loadDocs("docs"); err == nil && len(docs) > 0 {
+			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+			for name, content := range docs {
+				if derr := ragIndex.AddDocument(ctx, content, name, 600, 100); derr != nil {
+					logger.Warn("RAG 文档摄入失败", "doc", name, "err", derr)
+					continue
+				}
+				logger.Info("已摄入知识文档", "doc", name)
+			}
+			cancel()
+		} else {
+			logger.Warn("docs/ 目录无文档，RAG 知识库为空（仍可用，检索无命中）")
+		}
 	}
 
 	// ---- P4 主动出站：Webhook 通知器（可选，WEBHOOK_URL 为空则关闭）----
@@ -193,7 +213,8 @@ func main() {
 		Notifier:   notifier,
 		Cost:       costTracker,
 		Cache:      semanticCache,
-		Model:      envOr("OLLAMA_MODEL", "llama3.1"),
+		RAG:        ragIndex,
+		Model:      envOr("OLLAMA_MODEL", "qwen3.5:0.8b-mlx"),
 	})
 
 	addr := envOr("ADDR", ":8080")
@@ -265,4 +286,31 @@ func envOr(key, def string) string {
 		return v
 	}
 	return def
+}
+
+// loadDocs 读取 docs/ 目录下的 .md / .txt 文档（RAG 摄取源）。
+func loadDocs(dir string) (map[string]string, error) {
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return nil, err
+	}
+	out := make(map[string]string)
+	for _, e := range entries {
+		if e.IsDir() {
+			continue
+		}
+		name := e.Name()
+		if !strings.HasSuffix(name, ".md") && !strings.HasSuffix(name, ".txt") {
+			continue
+		}
+		data, err := os.ReadFile(filepath.Join(dir, name))
+		if err != nil {
+			continue
+		}
+		out[name] = string(data)
+	}
+	if len(out) == 0 {
+		return nil, fmt.Errorf("no docs found")
+	}
+	return out, nil
 }

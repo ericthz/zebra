@@ -34,7 +34,7 @@
 ### 1. 单机 CLI（最快体验 Agent 本体）
 
 ```bash
-ollama pull llama3.1
+ollama pull qwen3.5:0.8b-mlx
 go run ./cmd/demo
 # 输入：北京今天天气怎么样？ → 观察工具调用循环
 ```

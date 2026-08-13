@@ -18,6 +18,7 @@ import (
 	"github.com/ericthz/zebra/internal/notify"
 	"github.com/ericthz/zebra/internal/prompt"
 	"github.com/ericthz/zebra/internal/provider"
+	"github.com/ericthz/zebra/internal/rag"
 	"github.com/ericthz/zebra/internal/safety"
 	"github.com/ericthz/zebra/internal/skill"
 	"github.com/ericthz/zebra/internal/tool"
@@ -43,6 +44,7 @@ type Deps struct {
 	Notifier   notify.Notifier // P4 主动出站：任务完成通知（nil 关闭）
 	Cost       *cost.Tracker   // P5 成本归因（nil 关闭）
 	Cache      *cache.SemanticCache // P5 语义缓存（nil 关闭）
+	RAG        *rag.Index      // P8 知识库检索（nil 关闭）
 	Model      string          // 主模型名（成本归因用）
 }
 
@@ -75,6 +77,7 @@ func (s *APIServer) agentFor(sess *Session) *agent.Agent {
 		PromptName: s.deps.PromptName,
 		Skills:     s.deps.Skills,
 		Cache:      s.deps.Cache,
+		RAG:        s.deps.RAG,
 		Model:      s.deps.Model,
 		OnUsage: func(model string, in, out int) { // B5 用量指标 + P5 成本归因
 			s.deps.Metrics.Inc("tokens_in:" + itoa(in/100))

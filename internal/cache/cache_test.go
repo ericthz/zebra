@@ -4,6 +4,8 @@ import (
 	"context"
 	"math"
 	"testing"
+
+	"github.com/ericthz/zebra/internal/memory"
 )
 
 // fakeEmbedder 确定性嵌入：1024 维、每字符计 1（去重）。
@@ -62,10 +64,10 @@ func TestCacheEviction(t *testing.T) {
 }
 
 func TestCosine(t *testing.T) {
-	if math.Abs(cosine([]float32{1, 0}, []float32{1, 0})-1) > 1e-6 {
+	if math.Abs(memory.Cosine([]float32{1, 0}, []float32{1, 0})-1) > 1e-6 {
 		t.Fatal("相同向量余弦应≈1")
 	}
-	if math.Abs(cosine([]float32{1, 0}, []float32{0, 1})) > 1e-6 {
+	if math.Abs(memory.Cosine([]float32{1, 0}, []float32{0, 1})) > 1e-6 {
 		t.Fatal("正交向量余弦应≈0")
 	}
 }
