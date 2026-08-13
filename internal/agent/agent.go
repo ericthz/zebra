@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/ericthz/zebra/internal/cache"
 	"github.com/ericthz/zebra/internal/memory"
 	"github.com/ericthz/zebra/internal/prompt"
 	"github.com/ericthz/zebra/internal/provider"
@@ -29,8 +30,10 @@ type Config struct {
 	Moderator  safety.Moderator    // D18 内容审核（nil 则跳过）
 	MaxTurns   int                 // 工具调用最大轮数
 	PromptName string              // 使用的系统提示模板名
-	OnUsage    func(inTokens, outTokens int) // B5 用量指标钩子
+	Model      string              // 当前模型名（用于成本归因 P5）
+	OnUsage    func(model string, inTokens, outTokens int) // B5/P5 用量与成本钩子
 	Skills     *skill.Registry     // 技能注册表（P1，nil 则关闭技能检索）
+	Cache      *cache.SemanticCache // 语义缓存（P5，nil 则关闭）
 }
 
 // Agent 单个会话的 Agent 实例。
@@ -71,6 +74,14 @@ func (a *Agent) Run(ctx context.Context, userInput string, opts RunOptions) (str
 
 // run 核心循环。emit 非 nil 时把增量事件推给调用方（流式模式）。
 func (a *Agent) run(ctx context.Context, userInput string, opts RunOptions, emit func(Event)) (string, error) {
+	// P5 语义缓存：命中相似历史问答 → 直接返回，省一次 LLM 调用（省钱省延迟）。
+	// 仅对"纯文本回答"缓存（本函数末尾 Put 时已过滤工具调用场景）。
+	if a.cfg.Cache != nil && emit == nil {
+		if answer, ok := a.cfg.Cache.Get(ctx, userInput); ok {
+			return answer, nil
+		}
+	}
+
 	if a.cfg.Moderator != nil { // D18 输入审核
 		if ok, reason := a.cfg.Moderator.Check(userInput); !ok {
 			return "", fmt.Errorf("输入未通过内容审核: %s", reason)
@@ -84,6 +95,7 @@ func (a *Agent) run(ctx context.Context, userInput string, opts RunOptions, emit
 	tools := a.cfg.Tools.ToolsFor(a.role) // 只暴露该角色可见的工具（D20）
 	var finalAnswer string
 	var lastErr error
+	toolsUsed := false // 是否调用过工具（调用了则不写入缓存，防结果过时）
 
 	// 循环检测（B9 健壮性）：连续相同工具调用视为死循环，提前中止。
 	// 小模型容易出现"反复调同一工具不产出"的退化行为。
@@ -128,6 +140,7 @@ func (a *Agent) run(ctx context.Context, userInput string, opts RunOptions, emit
 		}
 
 		// 执行工具调用
+		toolsUsed = true
 		for _, tc := range respMsg.ToolCalls {
 			args, perr := tool.ParseArguments(tc.Function.Arguments)
 			if perr != nil {
@@ -179,13 +192,18 @@ func (a *Agent) run(ctx context.Context, userInput string, opts RunOptions, emit
 		}
 	}
 
-	// 6. 用量指标（B5）：以估算值上报，生产用精确计费
+	// 6. 用量与成本指标（B5/P5）：以估算值上报，生产用精确计费
 	if a.cfg.OnUsage != nil {
 		inTokens := 0
 		for _, m := range msgs {
 			inTokens += MessageTokens(m)
 		}
-		a.cfg.OnUsage(inTokens, EstimateTokens(finalAnswer))
+		a.cfg.OnUsage(a.cfg.Model, inTokens, EstimateTokens(finalAnswer))
+	}
+
+	// 7. 写入语义缓存（P5）：仅纯文本回答（未调工具）才缓存
+	if a.cfg.Cache != nil && !toolsUsed && finalAnswer != "" {
+		a.cfg.Cache.Put(ctx, userInput, finalAnswer)
 	}
 	return finalAnswer, nil
 }

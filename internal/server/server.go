@@ -12,6 +12,8 @@ import (
 	"time"
 
 	"github.com/ericthz/zebra/internal/agent"
+	"github.com/ericthz/zebra/internal/cache"
+	"github.com/ericthz/zebra/internal/cost"
 	"github.com/ericthz/zebra/internal/memory"
 	"github.com/ericthz/zebra/internal/notify"
 	"github.com/ericthz/zebra/internal/prompt"
@@ -39,6 +41,9 @@ type Deps struct {
 	PromptName string
 	Skills     *skill.Registry // P1 技能注册表（nil 关闭技能检索）
 	Notifier   notify.Notifier // P4 主动出站：任务完成通知（nil 关闭）
+	Cost       *cost.Tracker   // P5 成本归因（nil 关闭）
+	Cache      *cache.SemanticCache // P5 语义缓存（nil 关闭）
+	Model      string          // 主模型名（成本归因用）
 }
 
 // APIServer HTTP 服务。
@@ -69,9 +74,14 @@ func (s *APIServer) agentFor(sess *Session) *agent.Agent {
 		MaxTurns:   s.deps.MaxTurns,
 		PromptName: s.deps.PromptName,
 		Skills:     s.deps.Skills,
-		OnUsage: func(in, out int) { // B5 用量指标
+		Cache:      s.deps.Cache,
+		Model:      s.deps.Model,
+		OnUsage: func(model string, in, out int) { // B5 用量指标 + P5 成本归因
 			s.deps.Metrics.Inc("tokens_in:" + itoa(in/100))
 			s.deps.Metrics.Inc("tokens_out:" + itoa(out/100))
+			if s.deps.Cost != nil {
+				s.deps.Cost.Record(sess.User, sess.ID, model, in, out)
+			}
 		},
 	})
 	return ag.Bind(sess.ID, sess.Role, sess.User, sess.History())
@@ -88,13 +98,16 @@ func (s *APIServer) Handler() http.Handler {
 		"tools": func() error { return s.toolsReadyCheck() },
 	}))
 	mux.Handle("/metrics", s.deps.Metrics.Handler())
+	if s.deps.Cost != nil {
+		mux.Handle("/metrics/cost", s.deps.Cost.Handler())
+	}
 
 	// 鉴权 + 限流 + 日志 + 恢复，按序包裹业务路由
 	var h http.Handler = mux
 	h = Recover(s.deps.Logger)(h)
 	h = AccessLog(s.deps.Logger, s.deps.Metrics)(h)
 	h = RateLimit(s.deps.Rate)(h)
-	h = Auth(s.deps.Keys, "/healthz", "/readyz", "/metrics")(h)
+	h = Auth(s.deps.Keys, "/healthz", "/readyz", "/metrics", "/metrics/cost")(h)
 	h = RequestID(h)
 	return h
 }

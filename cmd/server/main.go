@@ -20,6 +20,8 @@ import (
 	"time"
 
 	"github.com/ericthz/zebra/internal/agent"
+	"github.com/ericthz/zebra/internal/cache"
+	"github.com/ericthz/zebra/internal/cost"
 	"github.com/ericthz/zebra/internal/memory"
 	"github.com/ericthz/zebra/internal/mcp"
 	"github.com/ericthz/zebra/internal/notify"
@@ -146,6 +148,15 @@ func main() {
 	// ---- 指标（B5/P3）----
 	metrics := server.NewMetrics() // 工具成功率指标记录 + /metrics 暴露
 
+	// ---- P5 成本治理：成本归因追踪器（挂 /metrics/cost）----
+	costTracker := cost.NewTracker()
+
+	// ---- P5 语义缓存：复用嵌入器做语义相似度命中（相似问题直接回答案省钱）----
+	var semanticCache *cache.SemanticCache
+	if emb := embedder(); emb != nil {
+		semanticCache = cache.New(emb, 0.92, 200)
+	}
+
 	// ---- P4 主动出站：Webhook 通知器（可选，WEBHOOK_URL 为空则关闭）----
 	var notifier notify.Notifier
 	if wh := os.Getenv("WEBHOOK_URL"); wh != "" {
@@ -179,6 +190,9 @@ func main() {
 		PromptName: "assistant",
 		Skills:     skillReg,
 		Notifier:   notifier,
+		Cost:       costTracker,
+		Cache:      semanticCache,
+		Model:      envOr("OLLAMA_MODEL", "llama3.1"),
 	})
 
 	addr := envOr("ADDR", ":8080")
