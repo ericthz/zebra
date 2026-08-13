@@ -227,8 +227,9 @@ func main() {
 	// （多副本共享状态）；否则用内存实现（单机部署）。
 	var sessions server.SessionStore
 	var taskStore task.Store
+	var rc *redis.Client
 	if rurl := os.Getenv("REDIS_URL"); rurl != "" {
-		rc := &redis.Client{
+		rc = &redis.Client{
 			Addr:     rurl,
 			Password: os.Getenv("REDIS_PASSWORD"),
 			DB:       atoiDefault(os.Getenv("REDIS_DB"), 0),
@@ -242,6 +243,14 @@ func main() {
 	}
 	rate := server.NewRateLimiter(2, 5)    // B6：每用户每秒 2 次、突发 5 次
 	fbStore := feedback.NewInMemoryStore() // P16 反馈闭环存储
+
+	// P51 Redis 长期记忆：无 Qdrant 但配了 Redis 时启用（关键词检索）
+	if rc != nil && os.Getenv("QDRANT_URL") == "" {
+		if rm, ok := memory.SetupManagerRedis(rc, logger); ok {
+			mem = rm
+			longMem = true
+		}
+	}
 
 	// ---- P22 用户画像：对话自动学习 + 遗忘策略（TTL 保鲜 + 容量治理）----
 	profileStore := memory.NewProfileStore()

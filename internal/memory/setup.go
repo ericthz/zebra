@@ -19,6 +19,8 @@ import (
 	"os"
 	"strconv"
 	"time"
+
+	"github.com/ericthz/zebra/internal/redis"
 )
 
 // SetupManager 按环境变量装配分层记忆，返回（管理器, 是否启用长期记忆）。
@@ -78,4 +80,26 @@ func vectorSize() int {
 		return 768
 	}
 	return n
+}
+
+// SetupManagerRedis 按环境变量装配"Redis 长期记忆"分层记忆（P51）。
+// 先写读探针 key 验证连通性；失败自动降级为仅工作记忆（B7）。
+func SetupManagerRedis(client *redis.Client, logger *slog.Logger) (*Manager, bool) {
+	working := NewWorkingMemory(10)
+	mem := NewManager(working, nil)
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+
+	probeKey := redisMemPrefix + "probe"
+	if err := client.Set(ctx, probeKey, "1", time.Second); err != nil {
+		logger.Warn("Redis 不可用，长期记忆保持关闭", "err", err)
+		return mem, false
+	}
+	if _, ok, err := client.Get(ctx, probeKey); err != nil || !ok {
+		logger.Warn("Redis 探针失败，长期记忆保持关闭", "err", err)
+		return mem, false
+	}
+	mem = NewManager(working, NewRedisMemory(client, "default"))
+	logger.Info("长期记忆已启用（Redis）")
+	return mem, true
 }
