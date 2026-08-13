@@ -458,6 +458,7 @@ curl -X POST :8080/v1/user/profile/forget -H "Authorization: Bearer user-key" \
 | ✓ P36 | 启动清单统一（CLI/Server 共享渲染 + zebra 支持 RAG 知识库） | `internal/observe/` `internal/rag/docs.go` | zebra 与 server 清单行结构一致；zebra 真实加载 docs/ |
 | ✓ P37 | 终端启动 banner（ZEBRA ASCII 标题 + 副标题） | `internal/observe/banner.go` | zebra CLI 与 server 启动首屏打印 banner |
 | ✓ P38 | 命令行行编辑（raw 模式 + UTF-8 感知退格） | `internal/console/readline.go` `raw_*.go` | 中文输入删除不再残留字节残片；非 TTY 自动回退 |
+| ✓ P39 | MCP 子项展示（与工具一致：树形分支 + 名称: 描述） | `internal/observe/inventory.go` `mcp.RegisterTools` | 启动清单逐项列出已连接的 MCP 工具 |
 
 **内置工具**：`calculator` / `get_current_datetime` / `generate_random_number` / `convert_units` / `translate_text` /
 `web_search` / `fetch_url`（SSRF 防护） / `list_dir` / `read_file` / `write_file` / `run_command` /
