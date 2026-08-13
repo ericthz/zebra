@@ -57,6 +57,7 @@ type Deps struct {
 	Shadow     *eval.ShadowEvaluator   // P21 在线评测/影子模式（nil 关闭）
 	Profile    *memory.ProfileStore    // P22 用户画像（nil 关闭画像 API 与注入）
 	ProfileTTL time.Duration           // P22 画像事实保鲜期（<=0 永不过期）
+	Extractor  memory.Extractor        // P27 画像抽取器（nil 用规则抽取）
 	Voice      *provider.VoiceClient   // P25 语音交互（nil 关闭语音 API）
 }
 
@@ -101,6 +102,7 @@ func (s *APIServer) buildAgent(user, role, sessionID string, hist *[]provider.Me
 		RAG:        s.deps.RAG,
 		Profile:    s.deps.Profile,
 		ProfileTTL: s.deps.ProfileTTL,
+		Extractor:  s.deps.Extractor,
 		Model:      s.deps.Model,
 		OnUsage: func(model string, in, out int) { // B5 用量指标 + P5 成本归因
 			s.deps.Metrics.Inc("tokens_in:" + itoa(in/100))

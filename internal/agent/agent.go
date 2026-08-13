@@ -40,6 +40,7 @@ type Config struct {
 	RAG        *rag.Index                                  // 知识库检索（P8，nil 则关闭 RAG）
 	Profile    *memory.ProfileStore                        // 用户画像（P22，nil 则关闭）
 	ProfileTTL time.Duration                               // 画像事实保鲜期（P22，<=0 永不过期）
+	Extractor  memory.Extractor                            // 画像抽取器（P27，nil 用规则抽取）
 }
 
 // Agent 单个会话的 Agent 实例。
@@ -116,10 +117,15 @@ func (a *Agent) run(ctx context.Context, userInput string, opts RunOptions, emit
 		a.cfg.Mem.Remember(a.sessionID, userInput, finalAnswer)
 	}
 
-	// 4.1 画像学习（P22）：从用户输入抽取事实入库（规则抽取，零成本）。
-	// 只从用户输入抽取（模型回答含事实的置信度低）；生产可换 LLM 抽取器。
+	// 4.1 画像学习（P22/P27）：从用户输入抽取事实入库。
+	// 只从用户输入抽取（模型回答含事实的置信度低）。P27 起支持
+	// LLM 语义抽取，失败自动回退规则抽取（Extractor 接口可替换）。
 	if a.cfg.Profile != nil {
-		if facts := memory.ExtractFacts(userInput); len(facts) > 0 {
+		extractor := a.cfg.Extractor
+		if extractor == nil {
+			extractor = memory.RuleExtractor{}
+		}
+		if facts, err := extractor.Extract(ctx, userInput); err == nil && len(facts) > 0 {
 			a.cfg.Profile.Learn(a.user, facts, time.Now())
 		}
 	}

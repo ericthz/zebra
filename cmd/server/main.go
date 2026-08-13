@@ -218,6 +218,11 @@ func main() {
 
 	// ---- P22 用户画像：对话自动学习 + 遗忘策略（TTL 保鲜 + 容量治理）----
 	profileStore := memory.NewProfileStore()
+	// P27 抽取器升级：默认 LLM 语义抽取 + 规则回退（PROFILE_LLM=0 可退回纯规则）
+	var profileExtractor memory.Extractor = memory.RuleExtractor{}
+	if os.Getenv("PROFILE_LLM") != "0" && router != nil {
+		profileExtractor = &memory.LLMExtractor{Router: router, Timeout: 15 * time.Second}
+	}
 	profilePolicy := &memory.ForgetPolicy{
 		TTL:             time.Duration(atoiDefault(os.Getenv("PROFILE_TTL_HOURS"), 24*30)) * time.Hour, // 默认 30 天保鲜
 		MaxFactsPerUser: 50,
@@ -346,6 +351,7 @@ func main() {
 		Shadow:     shadowEval,
 		Profile:    profileStore,
 		ProfileTTL: profilePolicy.TTL,
+		Extractor:  profileExtractor,
 		Voice:      voice,
 	})
 
