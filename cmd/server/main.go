@@ -140,6 +140,12 @@ func main() {
 你擅长搜索资料、抓取网页、查阅本地文档。回答必须基于检索/抓取到的信息并注明来源，不要编造。角色：{role}。`})
 	prompts.Activate("assistant", "v1")
 
+	// P18 提示词模板文件化：若 prompts/ 目录存在则加载（改文件即热更新，无需改代码）
+	if fileTemplates, err := prompt.LoadDir("prompts"); err == nil && len(fileTemplates) > 0 {
+		prompts.LoadAll(fileTemplates)
+		logger.Info("已从 prompts/ 加载模板", "count", len(fileTemplates))
+	}
+
 	// ---- C12 记忆：工作记忆 + 可选 Qdrant 长期记忆 ----
 	working := memory.NewWorkingMemory(10)
 	var mem *memory.Manager
@@ -216,6 +222,42 @@ func main() {
 		}, reg)
 	}
 
+	// ---- P18 配置热更新：重载 技能/提示词/知识库（不重启）----
+	var reload func() error
+	if skillReg != nil && prompts != nil {
+		reload = func() error {
+			// 1. 技能
+			if loaded, err := skill.LoadDir("skills"); err != nil {
+				return err
+			} else if len(loaded) > 0 {
+				skillReg.LoadAll(loaded)
+				logger.Info("热重载技能", "count", len(loaded))
+			}
+			// 2. 提示词
+			if loaded, err := prompt.LoadDir("prompts"); err != nil {
+				return err
+			} else if len(loaded) > 0 {
+				prompts.LoadAll(loaded)
+				logger.Info("热重载提示词", "count", len(loaded))
+			}
+			// 3. RAG 知识库（清空重建）
+			if ragIndex != nil {
+				ragIndex.Reset()
+				if docs, err := loadDocs("docs"); err == nil {
+					ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+					defer cancel()
+					for name, content := range docs {
+						if derr := ragIndex.AddDocument(ctx, content, name, 600, 100); derr != nil {
+							return derr
+						}
+					}
+					logger.Info("热重载知识库", "docs", len(docs))
+				}
+			}
+			return nil
+		}
+	}
+
 	api := server.NewAPIServer(server.Deps{
 		Router:     router,
 		Tools:      reg,
@@ -240,6 +282,7 @@ func main() {
 		TaskStore:  taskStore,
 		Supervisor: supervisorInst,
 		Feedback:   fbStore,
+		Reload:     reload,
 	})
 
 	addr := envOr("ADDR", ":8080")

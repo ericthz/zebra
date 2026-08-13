@@ -69,6 +69,13 @@ func (r *Registry) Render(name string, vars map[string]string) (string, error) {
 	return out, nil
 }
 
+// LoadAll 批量注册模板（供 LoadDir 后调用；P18 热更新用）。
+func (r *Registry) LoadAll(templates []*Template) {
+	for _, t := range templates {
+		r.Register(t)
+	}
+}
+
 // Active 返回某模板当前版本号。
 func (r *Registry) Active(name string) string {
 	r.mu.RLock()

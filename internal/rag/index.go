@@ -99,6 +99,14 @@ func (idx *Index) Retrieve(ctx context.Context, query string, topK int) ([]Resul
 	return out, nil
 }
 
+// Reset 清空索引（P18 热更新：重载知识库前先清空再重建）。
+func (idx *Index) Reset() {
+	idx.mu.Lock()
+	defer idx.mu.Unlock()
+	idx.chunks = nil
+	idx.vecs = nil
+}
+
 // Len 索引中的块总数（用于统计/监控）。
 func (idx *Index) Len() int {
 	idx.mu.RLock()

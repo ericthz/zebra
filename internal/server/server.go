@@ -52,6 +52,7 @@ type Deps struct {
 	TaskStore  task.Store      // P12 异步任务存储（nil 关闭异步 API）
 	Supervisor *supervisor.Supervisor // P13 多 Agent（nil 关闭 supervisor 模式）
 	Feedback   *feedback.InMemoryStore // P16 反馈闭环（nil 关闭反馈 API）
+	Reload     func() error        // P18 配置热更新（nil 关闭重载端点）
 }
 
 // APIServer HTTP 服务。
@@ -124,6 +125,9 @@ func (s *APIServer) Handler() http.Handler {
 	if s.deps.Feedback != nil {
 		mux.HandleFunc("POST /v1/feedback", s.handleSubmitFeedback) // P16 反馈
 		mux.HandleFunc("GET /v1/feedback", s.handleListFeedback)    // P16 反馈列表
+	}
+	if s.deps.Reload != nil {
+		mux.HandleFunc("POST /v1/admin/reload", s.handleReload) // P18 热更新（仅 admin）
 	}
 	mux.HandleFunc("/", uiHandler()) // P14 前端 Web UI（公开）
 	mux.HandleFunc("/healthz", HealthzHandler())
