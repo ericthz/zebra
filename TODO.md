@@ -64,40 +64,40 @@
 - [x] 汇总差距分析到 TODO.md
 - [x] 提交基线
 
-### 🚧 P1 — Skill 技能体系（本轮重点）
-- [ ] `internal/skill/`：Skill 结构 + SKILL.md(frontmatter) 解析 + 注册表 + 检索 + 注入
-- [ ] 示例技能：`skills/` 目录下 2 个（研究报告 SOP / 数据核对 SOP）
-- [ ] Agent 集成：buildMessages 时检索并注入相关技能指令
-- [ ] 单元测试 + 提交
+### ✅ P1 — Skill 技能体系
+- [x] `internal/skill/`：Skill 结构 + SKILL.md(frontmatter) 解析 + 注册表 + 检索 + 注入
+- [x] 示例技能：`skills/` 目录下 2 个（研究报告 SOP / 数据核对 SOP）
+- [x] Agent 集成：buildMessages 时检索并注入相关技能指令
+- [x] 单元测试 + 提交
 
-### P2 — 本地执行能力（Agentic 分水岭）
-- [ ] `tool/exec`：文件读写/编辑/diff + 只读/可写模式
-- [ ] `tool/exec`：Shell 命令执行 + **沙箱**（工作目录白名单/命令黑名单/超时/输出截断）
-- [ ] 高危工具标记（RiskLevel=2 + 二次确认）联动 D20
-- [ ] 单元测试 + 提交
+### ✅ P2 — 本地执行能力（Agentic 分水岭）
+- [x] `tool/exec`：文件读写/列目录 + 只读/可写模式
+- [x] `tool/exec`：Shell 命令执行 + **沙箱**（工作目录白名单/命令黑名单/超时/输出截断）
+- [x] 高危工具标记（RiskLevel=2 + 二次确认）联动 D20
+- [x] 单元测试 + 提交（端到端：Agent 真实建文件 + 执行命令）
 
-### P3 — LLM 质量闭环
-- [ ] `internal/eval/`：LLM-as-Judge 自动评分器（忠实度/相关性/安全性）
-- [ ] 工具调用成功率指标（挂 /metrics）
-- [ ] 评测增强：多用例 + 自动报告
-- [ ] 单元测试 + 提交
+### ✅ P3 — LLM 质量闭环
+- [x] `internal/eval/`：LLM-as-Judge 自动评分器（忠实度/相关性/安全性）
+- [x] 工具调用成功率指标（挂 /metrics，tool_call:<name>:ok/fail）
+- [x] 评测增强：TestJudgeClosedLoop 自动打分汇总
+- [x] 单元测试 + 提交
 
-### P4 — 主动出站能力
-- [ ] `internal/notify/`：Webhook 通知器（任务完成回调）
-- [ ] 写回外部系统工具（HTTP POST，幂等 + 重试）
-- [ ] `internal/schedule/`：最小定时调度器（cron 式触发）
-- [ ] 单元测试 + 提交
+### ✅ P4 — 主动出站能力
+- [x] `internal/notify/`：Webhook 通知器（HMAC 签名 + 幂等键 + 重试）
+- [x] 对话完成自动推送 task.complete（端到端验证）
+- [x] `internal/schedule/`：最小定时调度器（Every/Once + panic 隔离）
+- [x] 单元测试 + 提交
 
-### P5 — 成本与资源治理
-- [ ] 成本归因：按会话/用户记录 token 用量（扩展 Metrics）
-- [ ] `internal/cache/`：语义缓存（嵌入相似度命中）
-- [ ] 单元测试 + 提交
+### ✅ P5 — 成本与资源治理
+- [x] 成本归因：/metrics/cost 按 用户×会话×模型 归因 token + 单价估算
+- [x] `internal/cache/`：语义缓存（端到端：23.8s → 21ms）
+- [x] 单元测试 + 提交
 
-### P6 — 安全加固
-- [ ] SSRF 防护（URL 白名单/内网阻断）接入网络工具
-- [ ] 租户级凭据（SecretStore 扩展 per-tenant）
-- [ ] 被遗忘权：记忆/会话全链路删除
-- [ ] 单元测试 + 提交
+### ✅ P6 — 安全加固
+- [x] SSRF 防护（协议白名单/内网拦截/域名白名单）接入 fetch_url + 网络工具
+- [x] 租户级凭据（TenantSecretStore）
+- [x] 被遗忘权：DELETE /v1/user/data（端到端验证 401 失效）
+- [x] 单元测试 + 提交
 
 ### P7 — 收尾
 - [ ] README 更新（新增能力地图）

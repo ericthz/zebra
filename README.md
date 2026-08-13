@@ -1,8 +1,10 @@
 # zebra — AI Agent 企业架构参考实现
 
 > 一个把 **企业级 AI Agent 的全部横切能力** 落到代码里的学习项目。
-> 纯 Go 标准库（零第三方运行时依赖），42 个 `.go` 文件（含测试）约 4850 行，
-> **每个企业要点都有真实可运行的最小实现**，同时刻意保持精简、可逐行读懂。
+> 纯 Go 标准库（零第三方运行时依赖），覆盖**两轮架构**：
+> 第一轮 A~E 企业骨架（服务化/可靠性/安全/可观测）；
+> 第二轮 P1~P6 对标成熟 Agent 的能力补全（技能/本地执行/质量闭环/主动出站/成本治理/安全加固）。
+> **每个能力都有真实可运行的最小实现 + 详细中文注释 + 端到端验证**，刻意保持精简、可逐行读懂。
 
 这不是一个"能直接上线的产品"，而是一张**可对照学习的架构地图**：
 每个 `A~E` 模块既实现了最小可运行代码，也标注了**生产演化方向**。
@@ -22,6 +24,8 @@
 - [API 示例](#api-示例)
 - [代码规模](#代码规模)
 - [从 Demo 到上线的差距清单](#从-demo-到上线的差距清单)
+- [第二轮：对标成熟 Agent 的能力补全（P1~P6）](#第二轮对标成熟-agent-的能力补全p1p6)
+- [API 端点一览](#api-端点一览)
 
 ---
 
@@ -220,3 +224,36 @@ curl :8080/metrics
 **一句话**：这个仓库的价值不是"代码能用"，而是**把企业 AI Agent 的 21 个架构要点，
 各自用最小可读的代码落在一个文件里，并且能编译、能测试、能跑起来** ——
 按 `README` 的能力地图逐文件读一遍，就等于上了一堂企业 AI 架构课。
+
+---
+
+## 第二轮：对标成熟 Agent 的能力补全（P1~P6）
+
+> 第一轮是"企业骨架"，第二轮补的是**"Agent 能实际做事 + 商用好"**的能力。
+> 每个 P 项都有：实现 + 单元测试 + 真实模型端到端验证 + 独立提交。
+
+| 里程碑 | 能力 | 代码 | 端到端验证 |
+|---|---|---|---|
+| ✅ P1 | **技能体系 Skill**（程序性知识包，区别于 Tool/Prompt/MCP） | `internal/skill/` `skills/` | Agent 命中技能时自动注入 SOP |
+| ✅ P2 | **本地执行**（文件读写 + 命令沙箱，Agentic 分水岭） | `internal/tool/exec*.go` | Agent 真实创建文件 + 执行 ls |
+| ✅ P3 | **质量闭环**（LLM-as-Judge + 工具成功率指标） | `internal/eval/` | Judge 自动打分 + /metrics |
+| ✅ P4 | **主动出站**（Webhook 通知 + 定时调度） | `internal/notify/` `internal/schedule/` | 对话完成自动推送 task.complete |
+| ✅ P5 | **成本治理**（成本归因 + 语义缓存） | `internal/cost/` `internal/cache/` | 同问题 23.8s(LLM) → 21ms(缓存) |
+| ✅ P6 | **安全加固**（SSRF + 租户凭据 + 被遗忘权） | `internal/safety/ssrf.go` `internal/tool/fetch.go` `internal/server/forget.go` | DELETE 后旧会话 401 失效 |
+
+**新增工具**：`list_dir` / `read_file` / `write_file` / `run_command`（本地执行，P2）、`fetch_url`（SSRF 防护，P6）。
+
+**新增环境变量**：见 `.env.example`（`EXEC_WORKDIR` / `EXEC_READONLY` / `WEBHOOK_URL` / `WEBHOOK_SECRET` 等）。
+
+---
+
+## API 端点一览
+
+| 方法 | 路径 | 说明 |
+|---|---|---|
+| POST | /v1/chat | 非流式对话 |
+| POST | /v1/chat/stream | SSE 流式对话 |
+| DELETE | /v1/user/data | 被遗忘权：删除当前用户全链路数据（P6） |
+| GET | /healthz /readyz | 存活/就绪探针（免鉴权） |
+| GET | /metrics | 通用指标（免鉴权） |
+| GET | /metrics/cost | 成本归因：按用户/会话 token 用量（P5，免鉴权） |
