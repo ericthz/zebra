@@ -14,6 +14,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"io"
 	"log/slog"
 	"net/http"
 	"os"
@@ -44,16 +45,28 @@ import (
 )
 
 func main() {
-	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil)) // B5 结构化日志
-	slog.SetDefault(logger)
-
 	// ---- P30 配置加载：启动时自动读取根目录 .env（零依赖）----
 	// 语义：真实环境变量优先，.env 只填充"尚未设置"的变量（本地默认值）。
 	// 文件不存在不算错误；解析失败仅告警，不阻断启动（避免坏 .env 拖垮服务）。
-	if n, err := config.LoadDefault(); err != nil {
-		logger.Warn("加载 .env 失败，继续使用系统环境变量/默认值", "err", err)
-	} else if n > 0 {
-		logger.Info("已从 .env 加载配置", "count", n)
+	envN, envErr := config.LoadDefault()
+
+	// ---- P35 日志双写：JSON 日志同时输出到 stdout 与本地文件 ----
+	// LOG_FILE 指定路径（默认 server.log），LOG_FILE=off 仅输出 stdout。
+	// 文件打开失败时回退为仅 stdout，不影响服务启动（B7 降级）。
+	logWriter := io.Writer(os.Stdout)
+	if fw, closeLog, ferr := config.OpenLogFile(envOr("LOG_FILE", "server.log")); ferr != nil {
+		fmt.Fprintf(os.Stderr, "打开日志文件失败，日志仅输出到 stdout: %v\n", ferr)
+	} else if fw != nil {
+		logWriter = io.MultiWriter(os.Stdout, fw)
+		defer closeLog()
+	}
+	logger := slog.New(slog.NewJSONHandler(logWriter, nil)) // B5 结构化日志
+	slog.SetDefault(logger)
+
+	if envErr != nil {
+		logger.Warn("加载 .env 失败，继续使用系统环境变量/默认值", "err", envErr)
+	} else if envN > 0 {
+		logger.Info("已从 .env 加载配置", "count", envN)
 	}
 
 	// ---- 密钥（D19：从环境注入，生产接 KMS/Vault）----

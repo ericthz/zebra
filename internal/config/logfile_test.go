@@ -1,4 +1,4 @@
-package main
+package config
 
 import (
 	"os"
@@ -7,19 +7,19 @@ import (
 )
 
 func TestOpenLogFile(t *testing.T) {
-	// ZEBRA_LOG=off → stderr，不建文件
-	w, closeFn, err := openLogFile("off")
+	// "off" → 禁用文件日志（nil writer），不建文件
+	w, closeFn, err := OpenLogFile("off")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if w != os.Stderr {
-		t.Fatal("off 应返回 stderr")
+	if w != nil {
+		t.Fatal("off 应返回 nil writer")
 	}
 	closeFn()
 
-	// 指定路径 → 创建文件，可写
-	path := filepath.Join(t.TempDir(), "zebra.log")
-	w, closeFn, err = openLogFile(path)
+	// 指定路径 → 创建文件、可写
+	path := filepath.Join(t.TempDir(), "server.log")
+	w, closeFn, err = OpenLogFile(path)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -33,7 +33,7 @@ func TestOpenLogFile(t *testing.T) {
 	}
 
 	// 非法路径 → 报错
-	if _, _, err := openLogFile(filepath.Join(t.TempDir(), "no-such-dir", "x.log")); err == nil {
+	if _, _, err := OpenLogFile(filepath.Join(t.TempDir(), "no-such-dir", "x.log")); err == nil {
 		t.Fatal("非法路径应报错")
 	}
 }

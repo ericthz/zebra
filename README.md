@@ -185,6 +185,8 @@ curl -X POST :8080/v1/chat \
   -d '{"message":"北京今天天气怎么样？","confirm_risky":true}'
 ```
 
+> server 的 JSON 日志**双写**：stdout 与本地文件 `server.log`（P35，`LOG_FILE` 可改路径，`LOG_FILE=off` 关闭落盘）。
+
 ### 4.4 一键起全套依赖（Ollama + Qdrant + 服务）
 
 ```bash
@@ -233,6 +235,7 @@ curl :8080/readyz    # ready
 | `ADDR` | `:8080` | 服务监听地址 |
 | `ADMIN_KEY` / `USER_KEY` | `admin-key` / `user-key` | RBAC 两级 API Key（演示默认值） |
 | `ZEBRA_LOG` | `zebra.log` | zebra CLI 诊断日志路径（置 `off` 输出到 stderr） |
+| `LOG_FILE` | `server.log` | server JSON 日志双写文件路径（置 `off` 仅输出 stdout） |
 | `MCP_MODE` / `MCP_COMMAND` / `MCP_HTTP_URL` | 空 | MCP 远端工具（stdio/http）；stdio 建议指向预编译 `bin/zebra-mcp`（先 `make build`） |
 
 ### 5.3 本地执行沙箱
@@ -449,6 +452,7 @@ curl -X POST :8080/v1/user/profile/forget -H "Authorization: Bearer user-key" \
 | ✅ P32 | 入口装配一致（CLI/Server 共享 .env/MCP/记忆） | `memory.SetupManager` `mcp.RegisterTools` | zebra CLI 与 server 同一套装配逻辑，状态如实显示 |
 | ✅ P33 | 终端配色（256 色符号，TTY/NO_COLOR 自动开关） | `internal/console/color.go` | TTY 下符号按类别着色；管道/CI 自动无色、对齐不变 |
 | ✅ P34 | zebra 诊断日志落盘（默认 zebra.log，ZEBRA_LOG=off 回退 stderr） | `cmd/zebra/main.go` | 终端无探测告警刷屏；依赖降级原因可查日志 |
+| ✅ P35 | server 日志双写落盘（默认 server.log，LOG_FILE=off 仅 stdout） | `cmd/server/main.go` `config.OpenLogFile` | JSON 日志同时输出 stdout 与文件，采集与排查两不误 |
 
 **内置工具**：`calculator` / `get_current_datetime` / `generate_random_number` / `convert_units` / `translate_text` /
 `web_search` / `fetch_url`（SSRF 防护） / `list_dir` / `read_file` / `write_file` / `run_command` /
