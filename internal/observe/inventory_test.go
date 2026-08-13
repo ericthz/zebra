@@ -66,16 +66,17 @@ func TestPrintInventory(t *testing.T) {
 		}
 	}
 
-	// 对齐：子项树形分支（├/└）起点显示列 == 父行冒号显示列
+	// 对齐：子项树形分支（├/└）起点显示列 == 父行标签文字（工具/技能）正中间
 	// （用 console.Width 按显示宽度换算，避免多字节 UTF-8 的字节列干扰）
-	colonCol := -1
+	textMid := -1
 	for _, l := range strings.Split(out, "\n") {
 		if strings.Contains(l, "▲ 工具") {
-			colonCol = console.Width(l[:strings.Index(l, ":")])
+			i := strings.Index(l, "工具")
+			textMid = console.Width(l[:i]) + 2 // 2 字文字占 4 格，中点 +2
 			break
 		}
 	}
-	if colonCol < 0 {
+	if textMid < 0 {
 		t.Fatal("未找到工具父行")
 	}
 	for _, l := range strings.Split(out, "\n") {
@@ -85,8 +86,8 @@ func TestPrintInventory(t *testing.T) {
 				if bi < 0 {
 					t.Fatalf("子项行缺少分支符: %q", l)
 				}
-				if got := console.Width(l[:bi]); got != colonCol {
-					t.Fatalf("子项 %q 分支起点显示列 %d 应与冒号列 %d 对齐: %q", item, got, colonCol, l)
+				if got := console.Width(l[:bi]); got != textMid {
+					t.Fatalf("子项 %q 分支起点显示列 %d 应位于文字正中间（第 %d 列）: %q", item, got, textMid, l)
 				}
 			}
 		}

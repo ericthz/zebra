@@ -18,10 +18,10 @@ import (
 // labelWidth 标签列定宽（显示宽度）。
 const labelWidth = 16
 
-// childTrunk 子项树干：父行 "├── "(4 格) + 标签(labelWidth) 后冒号位于第
-// 4+labelWidth+1 列；子项用 "│"(树干延续) + (3+labelWidth) 个空格，使
-// 分支（├─/└─）从冒号列开始向下展开，与父级树形组织一致。
-var childTrunk = "│" + strings.Repeat(" ", 3+labelWidth)
+// childTrunkText 工具/技能子项树干：竖线定位到标签"文字"正中间的正下方。
+// 父行 "├── "(4 格) 后：符号(1)+空格(1) → 文字从第 7 列起；2 字文字占 4 格，
+// 中点在第 7+2=9 列，故子项前缀 "│"(第 1 列树干) + 7 个空格，分支起点在第 9 列。
+var childTrunkText = "│" + strings.Repeat(" ", 7)
 
 // branch 返回树形分支：非末项用 ├─，末项用 └─。
 func branch(i, total int) string {
@@ -66,7 +66,7 @@ func PrintInventory(w io.Writer, info Info) {
 		fmt.Fprintf(w, "├── %s: %d 个\n", lbl("▲", console.ColorTool, "工具"), len(names))
 		descs := info.Tools.Descriptions()
 		for i, n := range names {
-			fmt.Fprintf(w, "%s%s%s — %s\n", childTrunk, branch(i, len(names)), n, descs[n])
+			fmt.Fprintf(w, "%s%s%s — %s\n", childTrunkText, branch(i, len(names)), n, descs[n])
 		}
 	}
 
@@ -83,7 +83,7 @@ func PrintInventory(w io.Writer, info Info) {
 	} else {
 		fmt.Fprintf(w, "├── %s: %d 个\n", lbl("■", console.ColorSkill, "技能"), len(info.Skills))
 		for i, sk := range info.Skills {
-			fmt.Fprintf(w, "%s%s%s — %s\n", childTrunk, branch(i, len(info.Skills)), sk.Name, sk.Description)
+			fmt.Fprintf(w, "%s%s%s — %s\n", childTrunkText, branch(i, len(info.Skills)), sk.Name, sk.Description)
 		}
 	}
 
