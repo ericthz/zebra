@@ -47,7 +47,7 @@ import (
 
 func main() {
 	// ---- P37 终端 banner ----
-	observe.PrintBanner(os.Stdout, "zebra server — 企业版 AI Agent API（纯 Go 标准库）")
+	observe.PrintBanner(os.Stdout, "Zebra server — 企业版 AI Agent API（纯 Go 标准库）")
 
 	// ---- P30 配置加载：启动时自动读取根目录 .env（零依赖）----
 	// 语义：真实环境变量优先，.env 只填充"尚未设置"的变量（本地默认值）。
@@ -454,7 +454,7 @@ func main() {
 		ragChunks = ragIndex.Len()
 	}
 	observe.PrintInventory(os.Stdout, observe.Info{
-		Title:           "zebra 启动清单",
+		Title:           "Zebra 启动清单",
 		Models:          models,
 		Tools:           reg,
 		Skills:          skillsList,

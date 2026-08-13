@@ -629,7 +629,7 @@ curl -X POST :8080/v1/user/profile/resolve -H "Authorization: Bearer user-key" \
 示例（server）：
 
 ```
-── zebra 启动清单
+── Zebra 启动清单
 ├── ◆ 模型      : ollama
 ├── ▲ 工具      : 15 个
 │   ├─ calculator   : 计算数学表达式

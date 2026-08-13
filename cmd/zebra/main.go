@@ -34,7 +34,7 @@ import (
 
 func main() {
 	// ---- P37 终端 banner ----
-	observe.PrintBanner(os.Stdout, "zebra CLI — 本地命令行 Agent 客户端（输入 exit 退出）")
+	observe.PrintBanner(os.Stdout, "Zebra CLI — 本地命令行 Agent 客户端（输入 exit 退出）")
 
 	// ---- P30 配置加载：先读 .env（决定日志去向与全部配置）----
 	envN, envErr := config.LoadDefault()
@@ -68,7 +68,7 @@ func main() {
 		Client:  httpCli,
 	})
 
-	// ---- 工具（zebra CLI 全量开放）----
+	// ---- 工具（Zebra CLI 全量开放）----
 	reg := tool.NewRegistry()
 	reg.Register(&tool.WeatherTool{})
 	reg.Register(&tool.CalculatorTool{})
@@ -80,7 +80,7 @@ func main() {
 	reg.Register(&tool.IPInfoTool{})
 
 	reg.Register(&tool.FetchURLTool{}) // P6 SSRF 防护的抓取工具
-	// ---- P2 本地执行：文件读写 + 命令执行（zebra CLI 默认可写，便于演示 Agentic 能力）----
+	// ---- P2 本地执行：文件读写 + 命令执行（Zebra CLI 默认可写，便于演示 Agentic 能力）----
 	execSandbox := tool.NewExecSandbox("workspace", false)
 	reg.Register(&tool.ListDirTool{Sandbox: execSandbox})
 	reg.Register(&tool.ReadFileTool{Sandbox: execSandbox})
@@ -180,7 +180,7 @@ func main() {
 		ragChunks = ragIndex.Len()
 	}
 	observe.PrintInventory(os.Stdout, observe.Info{
-		Title:        "zebra CLI Agent",
+		Title:        "Zebra CLI Agent",
 		Models:       []string{router.Primary().Name()},
 		Tools:        reg,
 		Skills:       skills,

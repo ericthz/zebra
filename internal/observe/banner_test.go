@@ -8,7 +8,7 @@ import (
 
 func TestPrintBanner(t *testing.T) {
 	var buf bytes.Buffer
-	PrintBanner(&buf, "zebra server — AI Agent API")
+	PrintBanner(&buf, "Zebra server — AI Agent API")
 	out := buf.String()
 	lines := strings.Split(strings.TrimRight(out, "\n"), "\n")
 	if len(lines) != 7 { // 6 行字母 + 1 行副标题
@@ -19,7 +19,7 @@ func TestPrintBanner(t *testing.T) {
 			t.Fatalf("第 %d 行缺少字母像素: %q", i+1, l)
 		}
 	}
-	if !strings.Contains(lines[6], "zebra server") {
+	if !strings.Contains(lines[6], "Zebra server") {
 		t.Fatalf("副标题缺失: %q", lines[6])
 	}
 

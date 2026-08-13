@@ -1,4 +1,4 @@
-// Package observe 启动能力清单（P31/P36）：zebra CLI 与 server 共用的清单渲染。
+// Package observe 启动能力清单（P31/P36）：Zebra CLI 与 server 共用的清单渲染。
 //
 // 背景：两个入口此前各自打印清单，行结构与状态措辞容易漂移。抽成共享
 // 渲染器后，两端只用同一套符号、配色与行格式；"这台程序有什么"一目了然，
@@ -52,7 +52,7 @@ func branch(i, total int) string {
 
 // Info 启动清单所需信息（由 cmd/zebra、cmd/server 装配后传入）。
 type Info struct {
-	Title           string         // 清单标题（如 "zebra 启动清单" / "zebra CLI Agent（输入 exit 退出）"）
+	Title           string         // 清单标题（如 "Zebra 启动清单" / "Zebra CLI Agent"）
 	Models          []string       // 路由链上的模型名（主 + 备）
 	Tools           *tool.Registry // 已注册工具（Names 排序输出）
 	Skills          []*skill.Skill // 已加载技能（可能为空）
@@ -70,7 +70,7 @@ type Info struct {
 
 // PrintInventory 打印能力清单（纯函数，便于测试与两端复用）。
 func PrintInventory(w io.Writer, info Info) {
-	fmt.Fprintln(w, console.Symbol("──", console.ColorTitle)+" "+orDefault(info.Title, "zebra 启动清单"))
+	fmt.Fprintln(w, console.Symbol("──", console.ColorTitle)+" "+orDefault(info.Title, "Zebra 启动清单"))
 	lbl := func(sym string, code int, name string) string { // 符号上色 + 标签列定宽
 		return console.Pad(console.Symbol(sym, code)+" "+name, labelWidth)
 	}

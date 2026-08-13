@@ -29,7 +29,7 @@ func TestPrintInventory(t *testing.T) {
 	reg.Register(testTool{name: "fetch_url"})
 
 	info := Info{
-		Title:           "zebra 启动清单",
+		Title:           "Zebra 启动清单",
 		Models:          []string{"qwen3.5:0.8b-mlx", "gpt-4o-mini"},
 		Tools:           reg,
 		Skills:          []*skill.Skill{{Name: "report-sop", Description: "写研究报告"}, {Name: "data-check", Description: "数据核对"}},
@@ -49,7 +49,7 @@ func TestPrintInventory(t *testing.T) {
 	PrintInventory(&buf, info)
 	out := buf.String()
 	for _, want := range []string{
-		"zebra 启动清单",
+		"Zebra 启动清单",
 		": 2 个",
 		"calculator", // 工具子项逐行
 		"fetch_url",

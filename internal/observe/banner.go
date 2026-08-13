@@ -1,4 +1,4 @@
-// 终端启动 banner（P37）：zebra CLI 与 server 启动时打印的 ASCII 标题。
+// 终端启动 banner（P37）：Zebra CLI 与 server 启动时打印的 ASCII 标题。
 //
 // 用 6 行高的块状字母拼出 ZEBRA，下面跟一行副标题（各入口自定）；
 // 纯文本输出到终端（stdout），不进入结构化日志文件。
