@@ -117,7 +117,7 @@ func main() {
 	reg.DenyTool("user", "web_search") // 示例：收回搜索权限
 
 	// 可选：挂载 MCP 远端工具（保持与既有能力一致）
-	mcpMode, mcpCount := registerMCPTools(reg, logger)
+	mcpMode, mcpCount := mcp.RegisterTools(reg, logger)
 
 	reg.Register(&tool.FetchURLTool{}) // P6 SSRF 防护的抓取工具
 	// ---- P2 本地执行：文件读写 + 命令执行（沙箱隔离 + 高危二次确认）----
@@ -161,26 +161,8 @@ func main() {
 		logger.Info("已从 prompts/ 加载模板", "count", len(fileTemplates))
 	}
 
-	// ---- C12 记忆：工作记忆 + 可选 Qdrant 长期记忆 ----
-	working := memory.NewWorkingMemory(10)
-	var mem *memory.Manager
-	longMem := false
-	mem = memory.NewManager(working, nil) // 先只启工作记忆
-
-	if q := os.Getenv("QDRANT_URL"); q != "" {
-		embed := embedder()
-		qmem := memory.NewQdrantMemory(q, "zebra_mem", 768, embed)
-		// 就绪探针：Qdrant 不可用时自动降级为仅工作记忆（B7 降级）
-		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
-		if _, err := qmem.Retrieve(ctx, "ping", 1); err == nil {
-			mem = memory.NewManager(working, qmem)
-			longMem = true
-			logger.Info("长期记忆已启用", "qdrant", q)
-		} else {
-			logger.Warn("Qdrant 不可用，降级为仅工作记忆", "err", err)
-		}
-		cancel()
-	}
+	// ---- C12 记忆：工作记忆 + 可选 Qdrant 长期记忆（P32 与 cmd/zebra 共用装配）----
+	mem, longMem := memory.SetupManager(logger)
 
 	// ---- 指标（B5/P3）----
 	metrics := server.NewMetrics() // 工具成功率指标记录 + /metrics 暴露
@@ -192,7 +174,7 @@ func main() {
 	var semanticCache *cache.SemanticCache
 	var ragIndex *rag.Index
 	docsCount := 0
-	if emb := embedder(); emb != nil {
+	if emb := memory.NewEmbedderFromEnv(); emb != nil {
 		semanticCache = cache.New(emb, 0.92, 200)
 
 		// ---- P8 RAG 知识库：加载 docs/ 目录文档（可选）----
@@ -426,65 +408,6 @@ func main() {
 		logger.Error("server exited", "err", err)
 		os.Exit(1)
 	}
-}
-
-func embedder() memory.Embedder {
-	base := envOr("OLLAMA_BASE_URL", "http://localhost:11434")
-	model := envOr("EMBED_MODEL", "nomic-embed-text:v1.5")
-	if apiKey := os.Getenv("OPENAI_API_KEY"); apiKey != "" {
-		return &memory.OpenAIEmbedder{
-			BaseURL: envOr("OPENAI_BASE_URL", "https://api.openai.com/v1"),
-			Model:   envOr("OPENAI_EMBED_MODEL", "text-embedding-3-small"),
-			APIKey:  apiKey, Client: &http.Client{Timeout: 10 * time.Second},
-		}
-	}
-	return &memory.OllamaEmbedder{BaseURL: base, Model: model, Client: &http.Client{Timeout: 10 * time.Second}}
-}
-
-// registerMCPTools 挂载 MCP 远端工具，返回（模式, 已注册工具数）。
-func registerMCPTools(reg *tool.Registry, logger *slog.Logger) (string, int) {
-	mode := strings.ToLower(os.Getenv("MCP_MODE"))
-	if mode == "" {
-		return mode, 0
-	}
-	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
-	defer cancel()
-
-	var client *mcp.Client
-	switch mode {
-	case "stdio":
-		cmd := os.Getenv("MCP_COMMAND")
-		if cmd == "" {
-			return mode, 0
-		}
-		parts := strings.Fields(cmd)
-		tr, err := mcp.NewStdioClient(parts[0], parts[1:]...)
-		if err != nil {
-			logger.Warn("MCP stdio 启动失败", "err", err)
-			return mode, 0
-		}
-		client = mcp.NewClient(tr)
-	case "http":
-		tr := mcp.NewHTTPClient(envOr("MCP_HTTP_URL", "http://localhost:9000"))
-		client = mcp.NewClient(tr)
-	}
-	if client == nil {
-		return mode, 0
-	}
-	if err := client.Initialize(ctx); err != nil { // 握手（官方规范）
-		logger.Warn("MCP initialize 失败", "err", err)
-		return mode, 0
-	}
-	defs, err := client.ListTools(ctx)
-	if err != nil {
-		logger.Warn("MCP tools/list 失败", "err", err)
-		return mode, 0
-	}
-	for _, def := range defs {
-		reg.Register(mcp.NewMCPToolAdapter(client, def))
-		logger.Info("已注册 MCP 工具", "name", def.Name)
-	}
-	return mode, len(defs)
 }
 
 func envOr(key, def string) string {

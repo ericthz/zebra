@@ -17,7 +17,9 @@ import (
 	"time"
 
 	"github.com/ericthz/zebra/internal/agent"
+	"github.com/ericthz/zebra/internal/config"
 	"github.com/ericthz/zebra/internal/console"
+	"github.com/ericthz/zebra/internal/mcp"
 	"github.com/ericthz/zebra/internal/memory"
 	"github.com/ericthz/zebra/internal/prompt"
 	"github.com/ericthz/zebra/internal/provider"
@@ -29,6 +31,13 @@ import (
 func main() {
 	logger := slog.New(slog.NewTextHandler(os.Stderr, nil))
 	slog.SetDefault(logger)
+
+	// ---- P30 配置加载：与 cmd/server 一致，启动自动读取 .env ----
+	if n, err := config.LoadDefault(); err != nil {
+		logger.Warn("加载 .env 失败，继续使用系统环境变量/默认值", "err", err)
+	} else if n > 0 {
+		logger.Info("已从 .env 加载配置", "count", n)
+	}
 
 	// ---- LLM（默认 Ollama 原生，流式）----
 	httpCli := provider.NewHTTPClient(20*time.Second, 2, 300*time.Millisecond)
@@ -56,6 +65,8 @@ func main() {
 	reg.Register(&tool.ReadFileTool{Sandbox: execSandbox})
 	reg.Register(&tool.WriteFileTool{Sandbox: execSandbox})
 	reg.Register(&tool.RunCommandTool{Sandbox: execSandbox})
+	// ---- P32 MCP 远端工具：与 cmd/server 同一装配（MCP_MODE 设置即启用）----
+	mcpMode, mcpCount := mcp.RegisterTools(reg, logger)
 
 	// ---- P1 技能体系：加载 skills/ 目录 ----
 	skillReg := skill.NewRegistry()
@@ -64,8 +75,8 @@ func main() {
 	}
 	skills := skillReg.List()
 
-	// ---- 记忆：仅工作记忆（单机演示不依赖 Qdrant）----
-	mem := memory.NewManager(memory.NewWorkingMemory(10), nil)
+	// ---- P32 记忆：与 cmd/server 同一装配（QDRANT_URL 设置且可用则启用长期记忆）----
+	mem, longMem := memory.SetupManager(logger)
 
 	// ---- 系统提示模板 ----
 	prompts := prompt.NewRegistry("zebra")
@@ -113,8 +124,16 @@ func main() {
 		}
 		fmt.Printf("  %s: %d 个 —— %s\n", label("■ 技能"), len(skills), strings.Join(names, ", "))
 	}
-	fmt.Printf("  %s: 未启用（企业版 cmd/server 支持 MCP）\n", label("● MCP"))
-	fmt.Printf("  %s: 工作记忆（单机）\n", label("▣ 记忆"))
+	if mcpMode == "" {
+		fmt.Printf("  %s: 未启用（MCP_MODE 未设置）\n", label("● MCP"))
+	} else {
+		fmt.Printf("  %s: 模式=%s · 已连接 %d 个工具\n", label("● MCP"), mcpMode, mcpCount)
+	}
+	memMode := "工作记忆"
+	if longMem {
+		memMode = "工作记忆 + Qdrant"
+	}
+	fmt.Printf("  %s: %s\n", label("▣ 记忆"), memMode)
 	fmt.Println(strings.Repeat("─", 60))
 	sc := bufio.NewScanner(os.Stdin)
 	for {

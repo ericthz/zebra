@@ -38,7 +38,7 @@
 
 | 维度 | 现状 |
 |---|---|
-| 代码规模 | 125 个 `.go` 文件（含 45 个测试），约 1.5 万行 |
+| 代码规模 | 131 个 `.go` 文件（含 48 个测试），约 1.5 万行 |
 | 包数量 | 26 个（`cmd/` 3 个入口 + `internal/` 22 个 + `test/` 评测） |
 | 运行时依赖 | 零第三方，纯 Go 标准库 |
 | 质量门禁 | `go build` / `go vet` 零警告，`go test ./...` 全绿 |
@@ -76,6 +76,7 @@
 | 运营治理（Operations & Governance） | 成本归因与语义缓存（P5）、安全加固（P6）、结构化输出强约束（P17）、配置热更新（P18）、记忆画像与遗忘（P22/P27） |
 | 多模态交互（Multimodal Interaction） | 语音 ASR/TTS 与语音对话链路（P25） |
 | 学习与可观测（Observability & Learning） | 启动能力清单 + 执行痕迹（工具/技能调用日志，P31） |
+| 入口一致性（Entry Consistency） | zebra CLI 与 server 共享装配：.env / MCP / 长期记忆（P32） |
 
 详细里程碑见 [8. 交付路线图](#8-交付路线图)。
 
@@ -166,6 +167,10 @@ ollama pull qwen3.5:0.8b-mlx
 go run ./cmd/zebra
 # 输入：北京今天天气怎么样？ → 观察工具调用循环
 ```
+
+> zebra CLI 与 server 使用**同一套装配逻辑**（P32）：自动加载 `.env`，配置了
+> `MCP_MODE` 则挂载 MCP 工具，配置了可用的 `QDRANT_URL` 则启用长期记忆；
+> 启动清单会如实显示这些状态（未就绪时自动降级，不阻断使用）。
 
 ### 4.3 企业版 HTTP 服务
 
@@ -388,7 +393,7 @@ curl -X POST :8080/v1/user/profile/forget -H "Authorization: Bearer user-key" \
 
 | # | 能力 | 代码 | 说明 |
 |---|---|---|---|
-| E | 单元测试 | `internal/*/*_test.go` | 45 个测试文件，覆盖限流/会话/脱敏/权限/上下文/prompt/RAG/影子/画像等 |
+| E | 单元测试 | `internal/*/*_test.go` | 48 个测试文件，覆盖限流/会话/脱敏/权限/上下文/prompt/RAG/影子/画像等 |
 | E | LLM 评测 | `test/eval/golden_test.go` | 黄金用例回归（`ZEBRA_EVAL=1` 开启），换模型/改 prompt 必跑 |
 | E | 容器化 | `Dockerfile` `docker-compose.yml` | 多阶段构建 + distroless 最小镜像 + 一键依赖编排 |
 | E | CI/CD | `.github/workflows/ci.yml` `Makefile` | 提交自动 build+vet+test；`make eval` 触发真实模型评测 |
@@ -434,6 +439,7 @@ curl -X POST :8080/v1/user/profile/forget -H "Authorization: Bearer user-key" \
 | ✅ P29 | 第七轮收尾（docs） | TODO/README 更新 | 全量验证 |
 | ✅ P30 | 配置加载（Config Loading：零依赖 .env 加载器） | `internal/config/` `cmd/server/main.go` | 启动自动加载 .env，真实环境变量优先 |
 | ✅ P31 | 学习可观测（Observability for Learning：启动能力清单 + 执行痕迹） | `cmd/server/startup.go` `agent.OnTool/OnSkill` `tool.Registry.Names` | 启动打印工具/MCP/技能清单；执行打印工具调用与技能注入 |
+| ✅ P32 | 入口装配一致（CLI/Server 共享 .env/MCP/记忆） | `memory.SetupManager` `mcp.RegisterTools` | zebra CLI 与 server 同一套装配逻辑，状态如实显示 |
 
 **内置工具**：`calculator` / `get_current_datetime` / `generate_random_number` / `convert_units` / `translate_text` /
 `web_search` / `fetch_url`（SSRF 防护） / `list_dir` / `read_file` / `write_file` / `run_command` /
@@ -485,7 +491,7 @@ curl -X POST :8080/v1/user/profile/forget -H "Authorization: Bearer user-key" \
 
 ## 10. 工程化与质量保障
 
-- **单元测试**：45 个测试文件，`go test ./...` 全绿；每个新增功能强制配套测试。
+- **单元测试**：48 个测试文件，`go test ./...` 全绿；每个新增功能强制配套测试。
 - **静态检查**：`go vet ./...` 零警告；提交前 `gofmt` 全量格式化。
 - **学习可观测（P31）**：启动打印能力清单（模型/工具/MCP/技能/记忆/知识库/语音/影子/Redis）；执行阶段打印 `skill.inject` 与 `tool.call` 痕迹（zebra CLI 终端友好输出，server 结构化日志）。
 - **LLM 评测**：`test/eval/golden_test.go` 黄金用例回归（`ZEBRA_EVAL=1` 开启真实模型），换模型/改 prompt 必跑。
