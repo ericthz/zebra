@@ -38,8 +38,8 @@
 
 | 维度 | 现状 |
 |---|---|
-| 代码规模 | 161 个 `.go` 文件（含 61 个测试），约 1.7 万行 |
-| 包数量 | 29 个（`cmd/` 3 个入口 + `internal/` 25 个 + `test/` 评测） |
+| 代码规模 | 169 个 `.go` 文件（含 65 个测试），约 1.8 万行 |
+| 包数量 | 31 个（`cmd/` 3 个入口 + `internal/` 27 个 + `test/` 评测） |
 | 运行时依赖 | 零第三方，纯 Go 标准库 |
 | 质量门禁 | `go build` / `go vet` 零警告，`go test ./...` 全绿 |
 | 交付轮次 | 七轮（A~E 企业骨架 → P1~P28 能力里程碑） |
@@ -468,6 +468,9 @@ curl -X POST :8080/v1/user/profile/forget -H "Authorization: Bearer user-key" \
 | ✓ P47 | LLM 摘要压缩（语义摘要替代截断） | `internal/agent/summarize.go` | ZEBRA_SUMMARIZER=llm；Trim 保留 2 条触发摘要 |
 | ✓ P48 | 查询改写（结构化改写，提升检索与回答） | `internal/agent/rewrite.go` | ZEBRA_QUERY_REWRITE=1 时检索与消息均用改写后问题 |
 | ✓ P49 | 评测数据集管理（用例目录化 + 回归对比） | `internal/eval/dataset.go` `test/eval/cases/` | LoadCases / RunCases / BaselineDiff |
+| ✓ P51 | Redis 长期记忆（关键词检索 + 租户隔离） | `internal/memory/redis_mem.go` | 无 Qdrant 时 REDIS_URL 即启用 |
+| ✓ P52 | 知识图谱（三元组抽取/查询 + API） | `internal/kg/` `server/knowledge.go` | GET /v1/knowledge?entity=xx |
+| ✓ P53 | 插件动态加载（plugins/ JSON 定义 HTTP 工具 + 热重载） | `internal/plugin/` `tool.Registry.Remove` | 放 JSON 即注册，reload 可卸载 |
 
 **内置工具**：`calculator` / `get_current_datetime` / `generate_random_number` / `convert_units` / `translate_text` /
 `web_search` / `fetch_url`（SSRF 防护） / `list_dir` / `read_file` / `write_file` / `run_command` /
@@ -486,13 +489,12 @@ curl -X POST :8080/v1/user/profile/forget -H "Authorization: Bearer user-key" \
 | 优先级 | 项目 | 说明 |
 |---|---|---|
 | 高 | 语音流式 ASR / 实时语音对话（Streaming ASR / Realtime Voice） | 现为请求-响应式；实时对话需 WebSocket 半双工 |
-| 中 | 知识图谱（Knowledge Graph） | RAG 重排（P41）已落地；实体关系检索仍缺 |
-| 中 | Redis 长期记忆存储深化（Memory Store） | 会话与任务队列已迁 Redis（P28/P43）；长期记忆仍为 Qdrant |
-| 中 | 插件动态加载 / 浏览器自动化（Plugin Loading / Browser Automation） | 工具生态扩展（现为编译期注册） |
+| 中 | 浏览器自动化（Browser Automation） | 插件动态加载（P53）已落地；浏览器操作仍缺 |
 
 > 已闭环：反思/自一致性（P40）、RAG 重排（P41）、金丝雀自动回滚（P42）、
 > Redis 任务队列（P43）、ReAct 轨迹（P45）、多 Agent 辩论（P46）、LLM 摘要压缩（P47）、
-> 查询改写（P48）、评测数据集管理（P49）——详见 [8. 交付路线图](#8-交付路线图)。
+> 查询改写（P48）、评测数据集管理（P49）、Redis 长期记忆（P51）、知识图谱（P52）、
+> 插件动态加载（P53）——详见 [8. 交付路线图](#8-交付路线图)。
 
 #### B. 需决策项（与"零第三方依赖"约束冲突，或需外部工具链）
 
