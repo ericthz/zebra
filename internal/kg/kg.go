@@ -76,8 +76,9 @@ func (g *Graph) Size() int {
 // ---- 规则抽取（常见中文关系句式）----
 
 var (
-	verbRule = regexp.MustCompile(`([\p{Han}A-Za-z0-9]{1,16})(?:位于|包含|包括|属于|支持|擅长|依赖|使用)([\p{Han}A-Za-z0-9]{1,24})`)
-	isRule   = regexp.MustCompile(`([\p{Han}A-Za-z0-9]{1,16})是([\p{Han}A-Za-z0-9]{1,24})`)
+	// 谓词两侧允许空白（"zebra 支持 工具调用" 这类带空格的句式）
+	verbRule = regexp.MustCompile(`([\p{Han}A-Za-z0-9]{1,16})\s*(?:位于|包含|包括|属于|支持|擅长|依赖|使用)\s*([\p{Han}A-Za-z0-9]{1,24})`)
+	isRule   = regexp.MustCompile(`([\p{Han}A-Za-z0-9]{1,16})\s*是\s*([\p{Han}A-Za-z0-9]{1,24})`)
 )
 
 // ExtractTriples 从文本中规则抽取三元组（零成本、确定性；生产可换 LLM 抽取）。
