@@ -1,12 +1,13 @@
 # zebra — AI Agent 企业架构参考实现
 
 > 一个把 **企业级 AI Agent 的全部横切能力** 落到代码里的学习项目。
-> 纯 Go 标准库（零第三方运行时依赖），覆盖**三轮架构**：
+> 纯 Go 标准库（零第三方运行时依赖），覆盖**六轮架构**：
 > 第一轮 A~E 企业骨架（服务化/可靠性/安全/可观测）；
 > 第二轮 P1~P6 对标成熟 Agent 的能力补全（技能/本地执行/质量闭环/主动出站/成本治理/安全加固）；
 > 第三轮 P8~P10 智能体纵深（RAG 知识库 / 并行工具调用 / 规划-执行编排）；
 > 第四轮 P12~P14 规模化与体验（异步长任务 / 多 Agent 协作 / 前端 Web UI）；
-> 第五轮 P16~P18 运营与工程纵深（反馈闭环 / 结构化输出 / 配置热更新）。
+> 第五轮 P16~P18 运营与工程纵深（反馈闭环 / 结构化输出 / 配置热更新）；
+> 第六轮 P20~P23 检索与交付纵深（混合检索 / 影子评测 / 记忆画像 / 文档图表产出）。
 > **每个能力都有真实可运行的最小实现 + 详细中文注释 + 端到端验证**，刻意保持精简、可逐行读懂。
 
 这不是一个"能直接上线的产品"，而是一张**可对照学习的架构地图**：
@@ -190,22 +191,29 @@ curl :8080/metrics
 ## 代码规模
 
 ```
-42 个 .go 文件（含 8 个测试），约 4850 行，纯 Go 标准库
+107 个 .go 文件（含 35 个测试），约 1.2 万行，纯 Go 标准库
 ├── cmd/         3 个入口（server / demo / mcp）
 ├── internal/
-│   ├── agent/    核心编排 + 上下文工程 + 流式 + 循环检测
-│   ├── provider/ LLM 多协议适配 + 路由 + 超时重试熔断
-│   ├── tool/     工具 + 权限 + 校验 + 审计
-│   ├── memory/   分层记忆（工作/长期/租户隔离）
+│   ├── agent/    核心编排 + 上下文工程 + 规划-执行 + 画像注入
+│   ├── provider/ LLM 多协议适配 + 路由 + 超时重试熔断 + 结构化输出
+│   ├── tool/     工具 + 权限 + 校验 + 审计 + 本地执行沙箱 + 文档工具
+│   ├── memory/   分层记忆 + 用户画像 + 遗忘策略
+│   ├── docgen/   Word/PDF/SVG 图表产出（零依赖文件生成）
+│   ├── rag/      分块 + BM25 关键词/向量混合检索
+│   ├── eval/     LLM-as-Judge + 影子评测（shadow traffic）
 │   ├── mcp/      MCP 协议栈（客户端/服务端/握手）
-│   ├── server/   HTTP API + 会话 + 鉴权 + 限流 + 可观测
+│   ├── server/   HTTP API + 会话 + 鉴权 + 限流 + 可观测 + Web UI
 │   ├── safety/   注入防护 + 审核 + 脱敏 + 审计
-│   └── prompt/   模板版本化
+│   ├── prompt/   模板版本化 + 热更新
+│   ├── feedback/ 反馈闭环
+│   ├── task/     异步长任务 + 检查点
+│   ├── supervisor/ 多 Agent 路由
+│   └── notify/ schedule/ cost/ cache/ schema/ 出站/调度/成本/缓存/校验
 └── test/eval/    LLM 黄金评测骨架
 ```
 
 对比：重构前 25 个文件 3274 行，覆盖的却是"单机 CLI Demo"能力。
-**相近量级的代码，现在覆盖了 21 项企业能力** —— 这就是"架构设计"的杠杆。
+**相近量级的代码，现在覆盖了 25 项企业能力** —— 这就是"架构设计"的杠杆。
 并且：`go build` / `go vet` 零警告，`go test ./...` 全绿。
 
 ---
@@ -252,10 +260,16 @@ curl :8080/metrics
 | ✅ P16 | **反馈闭环** | `internal/feedback/` `internal/server/feedback.go` | 赞/踩 → 指标+审计+回流评测 |
 | ✅ P17 | **结构化输出强约束** | `internal/schema/` `internal/provider/structured.go` | response_format 强约束 + schema 校验 |
 | ✅ P18 | **配置热更新** | `internal/server/reload.go` `prompt.LoadDir` | 技能/提示词/知识库不重启重载 |
+| ✅ P20 | **RAG 混合检索**（BM25 关键词 + 向量融合） | `internal/rag/bm25.go` `index.go` | 专有名词问题从"向量漏检"到精确命中 |
+| ✅ P21 | **在线评测/影子模式**（真实流量复制给候选模型双评） | `internal/eval/shadow.go` `internal/server/shadow.go` | POST /v1/eval/shadow → verdict 对比 |
+| ✅ P22 | **记忆画像/遗忘机制**（对话学习画像 + TTL 保鲜 + 容量治理） | `internal/memory/profile.go` `forget.go` | 说"我叫小明"→画像可见；TTL 过期自动隐藏 |
+| ✅ P23 | **文档/图表产出**（docx/PDF/SVG 图表） | `internal/docgen/` `internal/tool/docgen.go` | generate_docx / generate_chart 落盘可打开 |
 
-**新增工具**：`list_dir` / `read_file` / `write_file` / `run_command`（本地执行，P2）、`fetch_url`（SSRF 防护，P6）。
+**新增工具**：`list_dir` / `read_file` / `write_file` / `run_command`（本地执行，P2）、`fetch_url`（SSRF 防护，P6）、
+`generate_docx` / `generate_chart`（文档/图表产出，P23）。
 
-**新增环境变量**：见 `.env.example`（`EXEC_WORKDIR` / `EXEC_READONLY` / `WEBHOOK_URL` / `WEBHOOK_SECRET` 等）。
+**新增环境变量**：见 `.env.example`（`EXEC_WORKDIR` / `EXEC_READONLY` / `WEBHOOK_URL` / `WEBHOOK_SECRET` /
+`ZEBRA_SHADOW_MODEL` / `ZEBRA_SHADOW_OPENAI` / `ZEBRA_SHADOW_SAMPLE` / `PROFILE_TTL_HOURS` 等）。
 
 ---
 
@@ -266,6 +280,10 @@ curl :8080/metrics
 | POST | /v1/chat | 非流式对话 |
 | POST | /v1/chat/stream | SSE 流式对话 |
 | DELETE | /v1/user/data | 被遗忘权：删除当前用户全链路数据（P6） |
+| GET | /v1/user/profile | 查看自己的画像事实（P22） |
+| POST | /v1/user/profile/forget | 删除一条画像事实（P22） |
+| POST | /v1/eval/shadow | 触发一次影子评测（P21，仅 admin） |
+| GET | /v1/eval/shadow | 影子评测记录（P21，仅 admin） |
 | GET | /healthz /readyz | 存活/就绪探针（免鉴权） |
 | GET | /metrics | 通用指标（免鉴权） |
 | GET | /metrics/cost | 成本归因：按用户/会话 token 用量（P5，免鉴权） |

@@ -157,6 +157,29 @@
 - [x] 重载 技能/提示词/知识库，不重启；单测 + 端到端（v2 生效）
 - [x] 样本模板 prompts/*.md
 
+### ✅ P20 — RAG 混合检索（BM25 关键词 + 向量融合）
+- [x] `internal/rag/bm25.go`：BM25 打分（f(t,d) 文档词频 + IDF + 长度归一）
+- [x] `RetrieveHybrid`：向量/BM25 z-score 归一融合（默认 0.7/0.3）；Agent 默认切换
+- [x] 单测（tokenize / BM25 命中 / 专有名词混合命中 / 空索引安全）
+
+### ✅ P21 — 在线评测/影子模式（shadow traffic）
+- [x] `internal/eval/shadow.go`：候选模型独立回答 + Judge 双评 + 胜负对比
+- [x] ShadowStore 记录 + 指标（runs / better / worse / error）+ 采样率
+- [x] API：POST/GET /v1/eval/shadow（仅 admin）；chat 流量自动采样（异步不阻塞）
+- [x] 单测 + 端到端（verdict=candidate_better；user 403）
+
+### ✅ P22 — 记忆画像/遗忘机制深化
+- [x] `internal/memory/profile.go`：Fact + 规则抽取器 + ProfileStore（Learn / FactsFor / ForgetKey / ForgetUser / Sweep / TrimUser）
+- [x] `internal/memory/forget.go`：ForgetPolicy（TTL 保鲜 + MaxFactsPerUser 容量治理）
+- [x] Agent 画像注入 + 对话自动学习；API：GET /v1/user/profile、POST /v1/user/profile/forget
+- [x] 被遗忘权扩展：DELETE /v1/user/data 同时清除画像
+- [x] 单测 + 端到端（学习→查看→精细遗忘→租户隔离）
+
+### ✅ P23 — 文档/图表产出
+- [x] `internal/docgen/`：WriteDocx（zip+OOXML）、WritePDF（对象/xref/trailer）、BarChartSVG / LineChartSVG
+- [x] 工具：generate_docx / generate_chart（沙箱落盘 + 高危二次确认 + admin-only）
+- [x] 单测 + 端到端（docx 可解包、PDF 头/xref/startxref、SVG 元素校验）
+
 ## 3. 设计基调（每个功能都必须遵守）
 
 1. **纯 Go 标准库**，零第三方运行时依赖
