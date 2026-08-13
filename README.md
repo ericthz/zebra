@@ -4,7 +4,8 @@
 > 纯 Go 标准库（零第三方运行时依赖），覆盖**三轮架构**：
 > 第一轮 A~E 企业骨架（服务化/可靠性/安全/可观测）；
 > 第二轮 P1~P6 对标成熟 Agent 的能力补全（技能/本地执行/质量闭环/主动出站/成本治理/安全加固）；
-> 第三轮 P8~P10 智能体纵深（RAG 知识库 / 并行工具调用 / 规划-执行编排）。
+> 第三轮 P8~P10 智能体纵深（RAG 知识库 / 并行工具调用 / 规划-执行编排）；
+> 第四轮 P12~P14 规模化与体验（异步长任务 / 多 Agent 协作 / 前端 Web UI）。
 > **每个能力都有真实可运行的最小实现 + 详细中文注释 + 端到端验证**，刻意保持精简、可逐行读懂。
 
 这不是一个"能直接上线的产品"，而是一张**可对照学习的架构地图**：
@@ -244,6 +245,9 @@ curl :8080/metrics
 | ✅ P8 | **RAG 知识库**（分块/向量索引/检索/注入/引用） | `internal/rag/` `docs/` | 问知识库问题→基于资料准确回答，无幻觉 |
 | ✅ P9 | **并行工具调用**（fan-out/fan-in） | `internal/agent/agent.go` | 双工具并发执行，耗时减半、结果有序 |
 | ✅ P10 | **规划-执行编排**（Plan-then-Execute） | `internal/agent/plan.go` | mode=plan 自动拆解→逐步执行→汇总 |
+| ✅ P12 | **异步长任务+检查点** | `internal/task/` `internal/server/tasks.go` | 提交即返回 id，后台执行可轮询，断点续跑 |
+| ✅ P13 | **多 Agent Supervisor** | `internal/supervisor/` `cmd/server/workers.go` | 数据/知识/常规 worker，自动路由 |
+| ✅ P14 | **前端 Web UI** | `internal/server/ui.go` | 零构建 SSE 聊天界面，浏览器直接用 |
 
 **新增工具**：`list_dir` / `read_file` / `write_file` / `run_command`（本地执行，P2）、`fetch_url`（SSRF 防护，P6）。
 

@@ -123,6 +123,23 @@
 - [x] API：mode="plan" 触发；HTTP_TIMEOUT 可配置
 - [x] 单测 + 端到端（规划 2 步：计算 123*7=861 + 时间 → 汇总）
 
+### ✅ P12 — 异步长任务 + 检查点
+- [x] `internal/task/`：任务状态机 + 消费者队列（信号量限并发）+ 进度 + 检查点
+- [x] API：POST /v1/tasks（立即返回 id）、GET /v1/tasks、GET /v1/tasks/{id}
+- [x] 检查点：会话历史快照断点续跑；完成 Webhook（复用 P4）
+- [x] 单测 + 端到端（后台执行 calculator 45*32=1440 + 时间，轮询 done）
+
+### ✅ P13 — 多 Agent Supervisor（路由到专业 Worker）
+- [x] `internal/supervisor/`：Worker(工厂) + Route(LLM 路由+关键词兜底) + Run
+- [x] `tool.Registry.Subset`：按名复制工具子集（worker 能力聚焦）
+- [x] 3 个专业 worker：数据 / 知识 / 常规（persona + 工具子集）
+- [x] API：mode="supervisor" 自动路由；单测 + 端到端（计算→data worker）
+
+### ✅ P14 — 前端 Web UI
+- [x] 零构建单页 SSE 聊天界面（/ 公开返回）
+- [x] API Key / 多轮会话续接 / 三模式切换 / 流式渲染 / 工具展示
+- [x] 验证：GET / 返回 HTML 200 免鉴权
+
 ## 3. 设计基调（每个功能都必须遵守）
 
 1. **纯 Go 标准库**，零第三方运行时依赖
