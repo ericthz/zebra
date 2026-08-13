@@ -1,0 +1,93 @@
+// 多 Agent 辩论（P46）：让两个不同立场的"辩手"先独立作答，再互相看到
+// 对方观点后给出最终立场，最后由评审模型选优——提升答案的全面性与稳健性。
+//
+// 流程：
+//
+//	左/右独立回答 → 交换观点（各给一轮反驳/完善）→ 评审选优（结构化输出）
+//
+// 可靠性：评审失败时回退左方最终立场（不阻塞，B9 容错）。
+package agent
+
+import (
+	"context"
+	"encoding/json"
+	"fmt"
+
+	"github.com/ericthz/zebra/internal/provider"
+)
+
+// debateSchema 辩论评审输出 JSON Schema。
+var debateSchema = map[string]interface{}{
+	"type": "object",
+	"properties": map[string]interface{}{
+		"answer": map[string]interface{}{"type": "string"},
+		"winner": map[string]interface{}{"type": "string", "enum": []string{"left", "right", "tie"}},
+		"reason": map[string]interface{}{"type": "string"},
+	},
+	"required": []string{"answer"},
+}
+
+// Debate 双 Agent 辩论。返回（胜出答案, 评审理由, error）。
+func (a *Agent) Debate(ctx context.Context, question, leftPersona, rightPersona string) (string, string, error) {
+	if leftPersona == "" {
+		leftPersona = "你是左方辩手：严谨，偏好引用事实、数据与计算验证。"
+	}
+	if rightPersona == "" {
+		rightPersona = "你是右方辩手：务实，偏好简明、直接、可执行的结论。"
+	}
+
+	// 1. 独立首轮回答
+	left1, err := a.chatPersona(ctx, leftPersona, question)
+	if err != nil {
+		return "", "", err
+	}
+	right1, err := a.chatPersona(ctx, rightPersona, question)
+	if err != nil {
+		return "", "", err
+	}
+
+	// 2. 交换观点后的最终立场
+	left2, err := a.chatPersona(ctx, leftPersona,
+		fmt.Sprintf("对方观点：%s\n请结合对方观点，给出你的最终立场。\n问题：%s", right1, question))
+	if err != nil {
+		return "", "", err
+	}
+	right2, err := a.chatPersona(ctx, rightPersona,
+		fmt.Sprintf("对方观点：%s\n请结合对方观点，给出你的最终立场。\n问题：%s", left1, question))
+	if err != nil {
+		return "", "", err
+	}
+
+	// 3. 评审选优（结构化输出；失败回退左方最终立场）
+	prompt := fmt.Sprintf(`你是辩论评审。请从下面两个最终立场中选出更优的一个，只输出 JSON：
+{"answer":"选中的回答","winner":"left|right|tie","reason":"理由"}
+问题：%s
+左方最终立场：%s
+右方最终立场：%s`, question, left2, right2)
+	data, err := provider.StructuredChat(ctx, a.cfg.Router,
+		[]provider.Message{{Role: "user", Content: prompt}}, debateSchema)
+	if err != nil {
+		return left2, "评审失败，回退左方立场", nil
+	}
+	var out struct {
+		Answer string `json:"answer"`
+		Winner string `json:"winner"`
+		Reason string `json:"reason"`
+	}
+	if err := json.Unmarshal(data, &out); err != nil || out.Answer == "" {
+		return left2, "评审输出异常，回退左方立场", nil
+	}
+	return out.Answer, out.Reason, nil
+}
+
+// chatPersona 用 persona 作为系统提示执行一轮对话。
+func (a *Agent) chatPersona(ctx context.Context, persona, question string) (string, error) {
+	msg, _, err := a.cfg.Router.ChatWithFallback(ctx, []provider.Message{
+		{Role: "system", Content: persona},
+		{Role: "user", Content: question},
+	}, nil)
+	if err != nil {
+		return "", err
+	}
+	return msg.Content, nil
+}

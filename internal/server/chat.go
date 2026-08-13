@@ -75,6 +75,9 @@ func (s *APIServer) handleChat(w http.ResponseWriter, r *http.Request) {
 	case "react":
 		// P45 ReAct：显式"思考→行动→观察→答案"轨迹
 		reply, err = ag.ReAct(ctx, req.Message, opts, 6)
+	case "debate":
+		// P46 双 Agent 辩论：左右立场独立作答→交换观点→评审选优
+		reply, _, err = ag.Debate(ctx, req.Message, "", "")
 	default:
 		reply, err = ag.Run(ctx, req.Message, opts)
 	}
