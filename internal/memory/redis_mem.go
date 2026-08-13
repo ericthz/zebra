@@ -67,7 +67,7 @@ func (m *RedisMemory) Retrieve(ctx context.Context, query string, limit int) ([]
 	for _, e := range entries {
 		s := 0
 		seen := map[string]bool{}
-		for _, t := range memTokens(e.Content) {
+		for t := range memTokens(e.Content) {
 			if !seen[t] && q[t] {
 				seen[t] = true
 				s++
