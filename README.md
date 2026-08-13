@@ -395,12 +395,12 @@ curl -X POST :8080/v1/user/profile/forget -H "Authorization: Bearer user-key" \
 
 ## 8. 交付路线图
 
-> 本路线图由 `TODO.md` 整合而来：**以功能为单位实现，完成一个提交一个**。
+> 实施原则：**以功能为单位实现，完成一个提交一个**。
 > ✅ = 已完成并提交（含对应收尾 docs 提交）；每个里程碑均含实现 + 单元测试 + 端到端验证。
 
 | 里程碑 | 能力 | 关键落点 | 端到端验收 |
 |---|---|---|---|
-| ✅ P0 | 基线：差距分析汇总 + 基线提交 | `TODO.md` `README.md` | 可编译、可测试、可运行 |
+| ✅ P0 | 基线：差距分析汇总 + 基线提交 | `README.md` | 可编译、可测试、可运行 |
 | ✅ P1 | 技能体系 Skill（程序性知识包） | `internal/skill/` `skills/` | Agent 命中技能自动注入 SOP |
 | ✅ P2 | 本地执行（文件读写 + 命令沙箱） | `internal/tool/exec*.go` | Agent 真实建文件 + 执行命令 |
 | ✅ P3 | LLM 质量闭环（Judge + 工具成功率指标） | `internal/eval/` | Judge 自动打分 + `/metrics` |
@@ -491,7 +491,7 @@ curl -X POST :8080/v1/user/profile/forget -H "Authorization: Bearer user-key" \
 
 ## 11. 开发规范
 
-每个新增功能必须遵守（源自 `TODO.md` 设计基调）：
+每个新增功能必须遵守以下设计基调：
 
 1. **纯 Go 标准库**，零第三方运行时依赖。
 2. **接口驱动 + 依赖注入**，可替换实现；生产演化方向用注释标注。
