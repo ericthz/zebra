@@ -1,0 +1,7 @@
+{
+  "cases": [
+    {"id": "calc-1", "question": "12*8 等于多少？", "expect": "96", "tags": ["calculator"]},
+    {"id": "date-1", "question": "今天星期几？", "expect": "", "tags": ["datetime"]},
+    {"id": "know-1", "question": "zebra 用什么语言编写？", "expect": "Go", "tags": ["knowledge"]}
+  ]
+}
