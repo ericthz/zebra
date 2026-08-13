@@ -18,9 +18,7 @@ import (
 	"log/slog"
 	"net/http"
 	"os"
-	"path/filepath"
 	"strconv"
-	"strings"
 	"time"
 
 	"github.com/ericthz/zebra/internal/agent"
@@ -32,6 +30,7 @@ import (
 	"github.com/ericthz/zebra/internal/mcp"
 	"github.com/ericthz/zebra/internal/memory"
 	"github.com/ericthz/zebra/internal/notify"
+	"github.com/ericthz/zebra/internal/observe"
 	"github.com/ericthz/zebra/internal/prompt"
 	"github.com/ericthz/zebra/internal/provider"
 	"github.com/ericthz/zebra/internal/rag"
@@ -192,7 +191,7 @@ func main() {
 
 		// ---- P8 RAG 知识库：加载 docs/ 目录文档（可选）----
 		ragIndex = rag.NewIndex(emb)
-		if docs, err := loadDocs("docs"); err == nil && len(docs) > 0 {
+		if docs, err := rag.LoadDocs("docs"); err == nil && len(docs) > 0 {
 			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 			for name, content := range docs {
 				if derr := ragIndex.AddDocument(ctx, content, name, 600, 100); derr != nil {
@@ -302,7 +301,7 @@ func main() {
 			// 3. RAG 知识库（清空重建）
 			if ragIndex != nil {
 				ragIndex.Reset()
-				if docs, err := loadDocs("docs"); err == nil {
+				if docs, err := rag.LoadDocs("docs"); err == nil {
 					ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 					defer cancel()
 					for name, content := range docs {
@@ -401,7 +400,8 @@ func main() {
 	if ragIndex != nil {
 		ragChunks = ragIndex.Len()
 	}
-	printStartupInventory(os.Stdout, startupInfo{
+	observe.PrintInventory(os.Stdout, observe.Info{
+		Title:           "zebra 启动清单",
 		Models:          models,
 		Tools:           reg,
 		Skills:          skillsList,
@@ -440,31 +440,4 @@ func atoiDefault(s string, def int) int {
 		return def
 	}
 	return n
-}
-
-// loadDocs 读取 docs/ 目录下的 .md / .txt 文档（RAG 摄取源）。
-func loadDocs(dir string) (map[string]string, error) {
-	entries, err := os.ReadDir(dir)
-	if err != nil {
-		return nil, err
-	}
-	out := make(map[string]string)
-	for _, e := range entries {
-		if e.IsDir() {
-			continue
-		}
-		name := e.Name()
-		if !strings.HasSuffix(name, ".md") && !strings.HasSuffix(name, ".txt") {
-			continue
-		}
-		data, err := os.ReadFile(filepath.Join(dir, name))
-		if err != nil {
-			continue
-		}
-		out[name] = string(data)
-	}
-	if len(out) == 0 {
-		return nil, fmt.Errorf("no docs found")
-	}
-	return out, nil
 }

@@ -12,7 +12,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"net/http"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 
@@ -21,8 +23,10 @@ import (
 	"github.com/ericthz/zebra/internal/console"
 	"github.com/ericthz/zebra/internal/mcp"
 	"github.com/ericthz/zebra/internal/memory"
+	"github.com/ericthz/zebra/internal/observe"
 	"github.com/ericthz/zebra/internal/prompt"
 	"github.com/ericthz/zebra/internal/provider"
+	"github.com/ericthz/zebra/internal/rag"
 	"github.com/ericthz/zebra/internal/safety"
 	"github.com/ericthz/zebra/internal/skill"
 	"github.com/ericthz/zebra/internal/tool"
@@ -92,6 +96,37 @@ func main() {
 	// ---- P32 记忆：与 cmd/server 同一装配（QDRANT_URL 设置且可用则启用长期记忆）----
 	mem, longMem := memory.SetupManager(logger)
 
+	// ---- P36 知识库（RAG）：与 cmd/server 同一装配，加载 docs/ 目录 ----
+	var ragIndex *rag.Index
+	docsCount := 0
+	if emb := memory.NewEmbedderFromEnv(); emb != nil {
+		ragIndex = rag.NewIndex(emb)
+		if docs, err := rag.LoadDocs("docs"); err == nil && len(docs) > 0 {
+			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+			for name, content := range docs {
+				if derr := ragIndex.AddDocument(ctx, content, name, 600, 100); derr != nil {
+					logger.Warn("RAG 文档摄入失败", "doc", name, "err", derr)
+					continue
+				}
+				docsCount++
+			}
+			cancel()
+		}
+	}
+
+	// ---- P36 语音客户端：与 cmd/server 同一装配（VOICE_BASE_URL 设置即启用）----
+	var voice *provider.VoiceClient
+	if vb := os.Getenv("VOICE_BASE_URL"); vb != "" {
+		voice = &provider.VoiceClient{
+			BaseURL:  vb,
+			APIKey:   os.Getenv("VOICE_API_KEY"),
+			ASRModel: envOr("VOICE_ASR_MODEL", "whisper-1"),
+			TTSModel: envOr("VOICE_TTS_MODEL", "tts-1"),
+			Voice:    envOr("VOICE_TONE", "alloy"),
+			Client:   &http.Client{Timeout: time.Duration(atoiDefault(os.Getenv("HTTP_TIMEOUT"), 60)) * time.Second},
+		}
+	}
+
 	// ---- 系统提示模板 ----
 	prompts := prompt.NewRegistry("zebra")
 	prompts.Register(&prompt.Template{Name: "assistant", Version: "v1", Text: `你是 zebra AI 助手，可以调用工具。回答简洁准确。角色：{role}。`})
@@ -106,6 +141,7 @@ func main() {
 		MaxTurns:   5,
 		PromptName: "assistant",
 		Skills:     skillReg,
+		RAG:        ragIndex,
 		// P31 执行痕迹：工具调用与技能注入在终端可见，学习 Agent 行为
 		OnTool: func(name string, args map[string]interface{}, ok bool, err error) {
 			detail, _ := json.Marshal(args)
@@ -124,33 +160,27 @@ func main() {
 	history := make([]provider.Message, 0)
 	ag.Bind("zebra", "admin", "local", &history)
 
-	// ---- P31 启动清单：一眼看清这台 Agent 有什么 ----
-	fmt.Println(console.Symbol("──", console.ColorTitle) + " zebra CLI Agent（输入 exit 退出）")
-	lbl := func(sym string, code int, name string) string { // 符号上色 + 标签列定宽
-		return console.Pad(console.Symbol(sym, code)+" "+name, 12)
-	}
-	fmt.Printf("  %s: %s\n", lbl("◆", console.ColorModel, "模型"), router.Primary().Name())
-	toolNames := reg.Names()
-	fmt.Printf("  %s: %d 个 —— %s\n", lbl("▲", console.ColorTool, "工具"), len(toolNames), strings.Join(toolNames, ", "))
-	if len(skills) == 0 {
-		fmt.Printf("  %s: 无\n", lbl("■", console.ColorSkill, "技能"))
-	} else {
-		names := make([]string, 0, len(skills))
-		for _, sk := range skills {
-			names = append(names, fmt.Sprintf("%s(%s)", sk.Name, sk.Description))
-		}
-		fmt.Printf("  %s: %d 个 —— %s\n", lbl("■", console.ColorSkill, "技能"), len(skills), strings.Join(names, ", "))
-	}
-	if mcpMode == "" {
-		fmt.Printf("  %s: 未启用（MCP_MODE 未设置）\n", lbl("●", console.ColorMCP, "MCP"))
-	} else {
-		fmt.Printf("  %s: 模式=%s · 已连接 %d 个工具\n", lbl("●", console.ColorMCP, "MCP"), mcpMode, mcpCount)
-	}
+	// ---- P31/P36 启动清单：与 cmd/server 同一渲染（行结构/符号/配色一致）----
 	memMode := "工作记忆"
 	if longMem {
 		memMode = "工作记忆 + Qdrant"
 	}
-	fmt.Printf("  %s: %s\n", lbl("▣", console.ColorMemory, "记忆"), memMode)
+	ragChunks := 0
+	if ragIndex != nil {
+		ragChunks = ragIndex.Len()
+	}
+	observe.PrintInventory(os.Stdout, observe.Info{
+		Title:        "zebra CLI Agent（输入 exit 退出）",
+		Models:       []string{router.Primary().Name()},
+		Tools:        reg,
+		Skills:       skills,
+		MCPMode:      mcpMode,
+		MCPCount:     mcpCount,
+		MemMode:      memMode,
+		RAGDocs:      docsCount,
+		RAGChunks:    ragChunks,
+		VoiceEnabled: voice != nil,
+	})
 	fmt.Println(strings.Repeat("─", 60))
 	sc := bufio.NewScanner(os.Stdin)
 	for {
@@ -180,4 +210,16 @@ func envOr(k, d string) string {
 		return v
 	}
 	return d
+}
+
+// atoiDefault 字符串转 int，失败返回默认值。
+func atoiDefault(s string, def int) int {
+	if s == "" {
+		return def
+	}
+	n, err := strconv.Atoi(s)
+	if err != nil {
+		return def
+	}
+	return n
 }

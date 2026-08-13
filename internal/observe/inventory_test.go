@@ -1,4 +1,4 @@
-package main
+package observe
 
 import (
 	"bytes"
@@ -22,12 +22,13 @@ func (t testTool) Execute(_ context.Context, _ map[string]interface{}) (string, 
 	return "ok", nil
 }
 
-func TestPrintStartupInventory(t *testing.T) {
+func TestPrintInventory(t *testing.T) {
 	reg := tool.NewRegistry()
 	reg.Register(testTool{name: "calculator"})
 	reg.Register(testTool{name: "fetch_url"})
 
-	info := startupInfo{
+	info := Info{
+		Title:           "zebra 启动清单",
 		Models:          []string{"qwen3.5:0.8b-mlx", "gpt-4o-mini"},
 		Tools:           reg,
 		Skills:          []*skill.Skill{{Name: "report-sop", Description: "写研究报告"}, {Name: "data-check", Description: "数据核对"}},
@@ -43,7 +44,7 @@ func TestPrintStartupInventory(t *testing.T) {
 	}
 
 	var buf bytes.Buffer
-	printStartupInventory(&buf, info)
+	PrintInventory(&buf, info)
 	out := buf.String()
 	for _, want := range []string{
 		"zebra 启动清单",
@@ -63,9 +64,9 @@ func TestPrintStartupInventory(t *testing.T) {
 	}
 }
 
-func TestPrintStartupInventoryDisabled(t *testing.T) {
+func TestPrintInventoryDisabled(t *testing.T) {
 	var buf bytes.Buffer
-	printStartupInventory(&buf, startupInfo{MCPMode: "", RedisURL: "", ShadowCandidate: ""})
+	PrintInventory(&buf, Info{})
 	out := buf.String()
 	for _, want := range []string{
 		": 未启用（MCP_MODE 未设置）",

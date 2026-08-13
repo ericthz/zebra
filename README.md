@@ -38,8 +38,8 @@
 
 | 维度 | 现状 |
 |---|---|
-| 代码规模 | 135 个 `.go` 文件（含 51 个测试），约 1.5 万行 |
-| 包数量 | 26 个（`cmd/` 3 个入口 + `internal/` 22 个 + `test/` 评测） |
+| 代码规模 | 137 个 `.go` 文件（含 51 个测试），约 1.5 万行 |
+| 包数量 | 28 个（`cmd/` 3 个入口 + `internal/` 24 个 + `test/` 评测） |
 | 运行时依赖 | 零第三方，纯 Go 标准库 |
 | 质量门禁 | `go build` / `go vet` 零警告，`go test ./...` 全绿 |
 | 交付轮次 | 七轮（A~E 企业骨架 → P1~P28 能力里程碑） |
@@ -135,6 +135,7 @@
 │   ├── eval/           LLM-as-Judge + 影子评测 + 灰度统计
 │   ├── redis/          纯标准库 RESP 客户端（水平扩展）
 │   ├── config/         零依赖 .env 配置加载
+│   ├── observe/        启动清单共享渲染（CLI/Server 一致）
 │   ├── mcp/            MCP 协议栈（客户端/服务端/握手）
 │   ├── server/         HTTP API + 会话 + 鉴权 + 限流 + 可观测 + Web UI
 │   ├── safety/         注入防护 + 审核 + 脱敏 + 审计
@@ -172,7 +173,8 @@ go run ./cmd/zebra
 > `MCP_MODE` 则挂载 MCP 工具，配置了可用的 `QDRANT_URL` 则启用长期记忆；
 > 启动清单会如实显示这些状态（未就绪时自动降级，不阻断使用）。MCP/Qdrant 等
 > 依赖的探测细节写入诊断日志 `zebra.log`（`ZEBRA_LOG=off` 可退回 stderr），
-> 终端保持干净，只显示清单与对话。
+> 终端保持干净，只显示清单与对话。P36 起 zebra 也加载 `docs/` 知识库（RAG），
+> 且与 server 共用同一套清单渲染（`internal/observe`），行结构完全一致。
 
 ### 4.3 企业版 HTTP 服务
 
@@ -453,6 +455,7 @@ curl -X POST :8080/v1/user/profile/forget -H "Authorization: Bearer user-key" \
 | ✓ P33 | 终端配色（256 色符号，TTY/NO_COLOR 自动开关） | `internal/console/color.go` | TTY 下符号按类别着色；管道/CI 自动无色、对齐不变 |
 | ✓ P34 | zebra 诊断日志落盘（默认 zebra.log，ZEBRA_LOG=off 回退 stderr） | `cmd/zebra/main.go` | 终端无探测告警刷屏；依赖降级原因可查日志 |
 | ✓ P35 | server 日志双写落盘（默认 server.log，LOG_FILE=off 仅 stdout） | `cmd/server/main.go` `config.OpenLogFile` | JSON 日志同时输出 stdout 与文件，采集与排查两不误 |
+| ✓ P36 | 启动清单统一（CLI/Server 共享渲染 + zebra 支持 RAG 知识库） | `internal/observe/` `internal/rag/docs.go` | zebra 与 server 清单行结构一致；zebra 真实加载 docs/ |
 
 **内置工具**：`calculator` / `get_current_datetime` / `generate_random_number` / `convert_units` / `translate_text` /
 `web_search` / `fetch_url`（SSRF 防护） / `list_dir` / `read_file` / `write_file` / `run_command` /
