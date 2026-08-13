@@ -65,8 +65,15 @@ func PrintInventory(w io.Writer, info Info) {
 		names := info.Tools.Names()
 		fmt.Fprintf(w, "├── %s: %d 个\n", lbl("▲", console.ColorTool, "工具"), len(names))
 		descs := info.Tools.Descriptions()
+		maxName := 0
+		for _, n := range names {
+			if w := console.Width(n); w > maxName {
+				maxName = w
+			}
+		}
 		for i, n := range names {
-			fmt.Fprintf(w, "%s%s%s: %s\n", childTrunkIcon, branch(i, len(names)), n, descs[n])
+			// 名称补宽到组内最长，使冒号像父级一样对齐在同一竖列
+			fmt.Fprintf(w, "%s%s%s: %s\n", childTrunkIcon, branch(i, len(names)), console.Pad(n, maxName+2), descs[n])
 		}
 	}
 
@@ -82,8 +89,14 @@ func PrintInventory(w io.Writer, info Info) {
 		fmt.Fprintf(w, "├── %s: 无（skills/ 目录为空或加载失败）\n", lbl("■", console.ColorSkill, "技能"))
 	} else {
 		fmt.Fprintf(w, "├── %s: %d 个\n", lbl("■", console.ColorSkill, "技能"), len(info.Skills))
+		maxName := 0
+		for _, sk := range info.Skills {
+			if w := console.Width(sk.Name); w > maxName {
+				maxName = w
+			}
+		}
 		for i, sk := range info.Skills {
-			fmt.Fprintf(w, "%s%s%s: %s\n", childTrunkIcon, branch(i, len(info.Skills)), sk.Name, sk.Description)
+			fmt.Fprintf(w, "%s%s%s: %s\n", childTrunkIcon, branch(i, len(info.Skills)), console.Pad(sk.Name, maxName+2), sk.Description)
 		}
 	}
 

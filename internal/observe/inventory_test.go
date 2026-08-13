@@ -50,12 +50,13 @@ func TestPrintInventory(t *testing.T) {
 	for _, want := range []string{
 		"zebra 启动清单",
 		": 2 个",
-		"calculator: test", // 工具子项：名称: 描述（与父级冒号风格一致）
-		"fetch_url: test",
+		"calculator", // 工具子项逐行
+		"fetch_url",
 		"模式=http · 已连接 3 个工具",
 		"技能",
-		"report-sop: 写研究报告",
-		"data-check: 数据核对",
+		"report-sop",
+		"写研究报告",
+		"数据核对",
 		": 2 篇文档 / 12 块",
 		": 已启用（ASR/TTS）",
 		"candidate=qwen2.5:7b",
@@ -91,6 +92,24 @@ func TestPrintInventory(t *testing.T) {
 				}
 			}
 		}
+	}
+
+	// 子项冒号对齐：同一节内各子项冒号显示列一致（像父级一样）
+	colonOf := func(item string) int {
+		for _, l := range strings.Split(out, "\n") {
+			if i := strings.Index(l, item); i >= 0 {
+				if ci := strings.Index(l[i:], ":"); ci >= 0 {
+					return console.Width(l[:i+ci])
+				}
+			}
+		}
+		return -1
+	}
+	if toolsA, toolsB := colonOf("calculator"), colonOf("fetch_url"); toolsA != toolsB {
+		t.Fatalf("工具子项冒号未对齐: %d vs %d", toolsA, toolsB)
+	}
+	if skillsA, skillsB := colonOf("report-sop"), colonOf("data-check"); skillsA != skillsB {
+		t.Fatalf("技能子项冒号未对齐: %d vs %d", skillsA, skillsB)
 	}
 }
 
