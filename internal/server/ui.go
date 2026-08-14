@@ -61,7 +61,10 @@ const chatUI = `<!DOCTYPE html>
         display:flex;flex-direction:column;height:100vh;transition:transform .25s,background .2s}
   .side-head{display:flex;align-items:center;justify-content:space-between;padding:12px 14px;border-bottom:1px solid var(--border)}
   .side-head b{font-size:13px}
-  #convList{flex:1;overflow-y:auto;padding:8px}
+  #convList{flex:1;overflow-y:auto;padding:8px;scrollbar-width:thin}
+  #convList::-webkit-scrollbar{width:8px}
+  #convList::-webkit-scrollbar-thumb{background:var(--border);border-radius:4px}
+  #convList::-webkit-scrollbar-thumb:hover{background:var(--accent)}
   .conv{padding:9px 11px;border-radius:9px;cursor:pointer;margin-bottom:3px;border:1px solid transparent}
   .conv:hover{background:var(--hover)}
   .conv.active{background:var(--hover);border-color:var(--accent)}
@@ -84,15 +87,15 @@ const chatUI = `<!DOCTYPE html>
   .headbtns{display:flex;align-items:center;gap:6px;font-size:12px}
   .headbtns button{font-size:12px;padding:5px 9px}
 
-  main{flex:1;overflow-y:auto;padding:20px;scrollbar-width:thin;scrollbar-gutter:stable}
-  main::-webkit-scrollbar{width:10px}
-  main::-webkit-scrollbar-track{background:transparent}
-  main::-webkit-scrollbar-thumb{background:var(--border);border-radius:5px;border:2px solid transparent;background-clip:content-box}
-  main::-webkit-scrollbar-thumb:hover{background:var(--accent);border:2px solid transparent;background-clip:content-box}
-  .chat{max-width:860px;margin:0 auto;display:flex;flex-direction:column;gap:12px}
+  main{flex:1;overflow-y:scroll;padding:20px;scrollbar-width:thin;scrollbar-gutter:stable}
+  main::-webkit-scrollbar{width:12px}
+  main::-webkit-scrollbar-track{background:var(--panel);border-left:1px solid var(--border)}
+  main::-webkit-scrollbar-thumb{background:var(--border);border-radius:6px;border:2px solid var(--panel)}
+  main::-webkit-scrollbar-thumb:hover{background:var(--accent)}
+  .chat{max-width:960px;margin:0 auto;display:flex;flex-direction:column;gap:12px}
   .empty-hint{text-align:center;color:var(--muted);margin-top:52px;font-size:13px;line-height:2}
   .empty-hint .big{font-size:17px;color:var(--text)}
-  .msg{display:flex;gap:10px;max-width:84%}
+  .msg{display:flex;gap:10px;max-width:100%}
   .msg.user{align-self:flex-end;flex-direction:row-reverse}
   .avatar{flex:none;width:30px;height:30px;border-radius:9px;display:flex;align-items:center;justify-content:center;font-size:13px;color:#fff}
   .msg.user .avatar{background:var(--user-bg)}
@@ -131,7 +134,7 @@ const chatUI = `<!DOCTYPE html>
   @keyframes bounce{0%,60%,100%{transform:translateY(0)}30%{transform:translateY(-4px)}}
 
   footer{border-top:1px solid var(--border);background:var(--panel);padding:12px 16px 14px;transition:background .2s}
-  .composer{max-width:860px;margin:0 auto;display:flex;flex-direction:column;gap:8px}
+  .composer{max-width:960px;margin:0 auto;display:flex;flex-direction:column;gap:8px}
   #msg{resize:none;min-height:44px;max-height:150px;line-height:1.5}
   .actions{display:flex;gap:8px;align-items:center;justify-content:space-between;flex-wrap:wrap}
   .actions .left,.actions .right{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
