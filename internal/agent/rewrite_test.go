@@ -50,7 +50,7 @@ func TestBuildMessagesRewrites(t *testing.T) {
 	})
 	ag.Bind("s", "admin", "u", nil)
 
-	msgs := ag.buildMessages(context.Background(), "原问题")
+	msgs := ag.buildMessages(context.Background(), "原问题", nil)
 	last := msgs[len(msgs)-1]
 	if last.Role != "user" || last.Content != "改写后的问题" {
 		t.Fatalf("最终用户消息应为改写后的问题: %+v", last)
@@ -58,7 +58,7 @@ func TestBuildMessagesRewrites(t *testing.T) {
 
 	// 关闭改写 → 原样
 	ag.cfg.RewriteQuery = false
-	msgs = ag.buildMessages(context.Background(), "原问题")
+	msgs = ag.buildMessages(context.Background(), "原问题", nil)
 	if msgs[len(msgs)-1].Content != "原问题" {
 		t.Fatalf("关闭改写后应原样: %q", msgs[len(msgs)-1].Content)
 	}

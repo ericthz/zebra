@@ -25,7 +25,7 @@ func TestProfileInjection(t *testing.T) {
 	ag := New(Config{Prompts: prompts, Profile: profile, ProfileTTL: time.Hour})
 	ag.Bind("sess-1", "user", "alice", nil)
 
-	msgs := ag.buildMessages(context.Background(), "你好")
+	msgs := ag.buildMessages(context.Background(), "你好", nil)
 	var profileMsg string
 	for _, m := range msgs {
 		if m.Role == "system" && strings.Contains(m.Content, "画像") {
@@ -41,7 +41,7 @@ func TestProfileInjection(t *testing.T) {
 
 	// TTL 过期后不再注入（读时惰性遗忘）
 	ag.cfg.ProfileTTL = time.Nanosecond
-	msgs = ag.buildMessages(context.Background(), "你好")
+	msgs = ag.buildMessages(context.Background(), "你好", nil)
 	for _, m := range msgs {
 		if strings.Contains(m.Content, "画像") {
 			t.Fatalf("TTL 过期后不应注入画像: %s", m.Content)
@@ -51,7 +51,7 @@ func TestProfileInjection(t *testing.T) {
 	// 用户隔离：bob 无画像 → 不注入
 	ag.Bind("sess-2", "user", "bob", nil)
 	ag.cfg.ProfileTTL = time.Hour
-	for _, m := range ag.buildMessages(context.Background(), "你好") {
+	for _, m := range ag.buildMessages(context.Background(), "你好", nil) {
 		if strings.Contains(m.Content, "画像") {
 			t.Fatalf("bob 不应看到 alice 画像")
 		}

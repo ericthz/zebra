@@ -501,7 +501,7 @@ curl -X POST :8080/v1/user/profile/resolve -H "Authorization: Bearer user-key" \
 
 ---
 
-## 8. 交付路线图（P0~P57）
+## 8. 交付路线图（P0~P63）
 
 > 实施原则：**以功能为单位实现，完成一个提交一个**；每个里程碑含实现 + 单元测试 + 端到端验证。P 编号即提交历史（`git log --oneline` 可逐项追溯）；部分轮次收尾为 docs 提交（如 P44/P50/P54），未逐一列行。
 
@@ -564,6 +564,8 @@ curl -X POST :8080/v1/user/profile/resolve -H "Authorization: Bearer user-key" \
 | ✓ P57 | 画像冲突消解/合并 | `internal/memory/profile.go` `server/profile.go` | 冲突可查可裁决、自动合并 |
 | ✓ P60 | 流式阶段轨迹（phase 事件：plan/ReAct 思考与步骤） | `internal/agent/stream.go` `plan.go` `react.go` | 流式端点按 mode 分发五种模式 |
 | ✓ P61 | Web UI 多会话/导出/阶段展示/移动端抽屉 | `internal/server/ui.go` | 会话侧栏、TXT/JSON 导出、轨迹阶段行 |
+| ✓ P62 | 结构化输出容错（围栏/多对象/单键包裹/顶层数组 + plan 字段归一化） | `internal/provider/structured.go` `internal/agent/plan.go` | 小模型不规范 JSON 也能通过强约束校验 |
+| ✓ P63 | Web UI 活动轨迹（phase/skill/tool 统一活动块 + 工具去重计数 + 技能流式事件） | `internal/server/ui.go` `internal/agent/stream.go` | 一次回答内阶段/技能/工具优雅归集，工具按调用次数合并 |
 
 ---
 

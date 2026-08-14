@@ -110,9 +110,12 @@ const chatUI = `<!DOCTYPE html>
   .bubble-actions button.on.bad{color:var(--err);border-color:var(--err)}
   .cursor::after{content:"▍";color:var(--tool);animation:blink 1s step-start infinite}
   @keyframes blink{50%{opacity:0}}
-  .phase{display:flex;gap:8px;align-items:center;font-size:12px;color:var(--muted);border-left:3px solid var(--accent);padding-left:9px;margin:2px 0}
-  .tool-chip{display:inline-flex;align-items:center;gap:6px;background:rgba(251,191,36,.12);border:1px solid rgba(251,191,36,.35);color:var(--tool);
-             font-size:12px;border-radius:7px;padding:3px 9px;margin:2px 4px 2px 0}
+  /* 活动轨迹：一次回答内的 阶段/技能/工具调用 统一展示 */
+  .activity{display:flex;flex-direction:column;gap:3px;background:var(--panel);border:1px solid var(--border);
+            border-radius:10px;padding:8px 12px;margin:2px 0;font-size:12px}
+  .phase{display:flex;gap:8px;align-items:baseline;color:var(--muted);border-left:3px solid var(--accent);padding-left:8px;line-height:1.7}
+  .phase.skill{color:var(--accent)}
+  .tools-row{color:var(--tool);padding-left:11px;line-height:1.7;overflow-wrap:anywhere}
   .meta{font-size:12px;color:var(--muted);text-align:center;padding:2px 0}
   .err{background:rgba(248,113,113,.12);border:1px solid rgba(248,113,113,.35);color:var(--err);
        border-radius:10px;padding:9px 12px;font-size:13px;display:flex;gap:10px;align-items:center;justify-content:space-between}
@@ -211,6 +214,8 @@ let activeId = null;
 let controller = null;
 let currentAnswer = null;
 let toolCount = 0;
+let activityEl = null; // 当前回答的活动轨迹块
+let tools = {};        // 工具名 → 调用次数（实时去重计数）
 const LS_CONVS = 'zebra_conversations';
 const chat = document.getElementById('chat');
 const empty = document.getElementById('empty');
@@ -377,17 +382,35 @@ function bubble(role, name, avatar) {
   chat.insertBefore(wrap, empty);
   return b;
 }
+function ensureActivity() {
+  if (!activityEl || !activityEl.isConnected) {
+    activityEl = document.createElement('div');
+    activityEl.className = 'activity';
+    chat.insertBefore(activityEl, empty);
+  }
+  return activityEl;
+}
 function addPhase(text) {
-  var p = document.createElement('div');
-  p.className = 'phase'; p.textContent = '◇ ' + text;
-  chat.insertBefore(p, empty);
+  var row = document.createElement('div');
+  row.className = 'phase'; row.textContent = '◇ ' + text;
+  ensureActivity().appendChild(row);
+  scrollBottom();
+}
+function addSkill(name) {
+  var row = document.createElement('div');
+  row.className = 'phase skill'; row.textContent = '■ 技能：' + name;
+  ensureActivity().appendChild(row);
   scrollBottom();
 }
 function addTool(name) {
-  var chip = document.createElement('span');
-  chip.className = 'tool-chip'; chip.textContent = '▲ ' + name;
-  if (currentAnswer && currentAnswer.isConnected) currentAnswer.appendChild(chip);
-  else { var w = document.createElement('div'); w.appendChild(chip); chat.insertBefore(w, empty); }
+  tools[name] = (tools[name] || 0) + 1;
+  var wrap = ensureActivity();
+  var row = wrap.querySelector('.tools-row');
+  if (!row) { row = document.createElement('div'); row.className = 'tools-row'; wrap.appendChild(row); }
+  var names = Object.keys(tools);
+  var parts = [];
+  for (var i = 0; i < names.length; i++) parts.push(names[i] + '×' + tools[names[i]]);
+  row.textContent = '▲ 工具：' + parts.join(' · ');
   scrollBottom();
 }
 function addMeta(text) {
@@ -538,6 +561,8 @@ async function send(retried) {
   setBusy(true);
   typingIndicator(true);
   toolCount = 0;
+  activityEl = null;
+  tools = {};
   controller = new AbortController();
   var answerEl = null;
   var raw = '';
@@ -606,6 +631,8 @@ async function send(retried) {
             toolCount++;
             setStatus('生成中… · 工具 ×' + toolCount, 'busy');
             addTool(ev.tool_name || '');
+          } else if (type === 'skill') {
+            addSkill(ev.skill_name || ev.tool_name || '');
           } else if (type === 'done') {
             if (answerEl) answerEl.classList.remove('cursor');
           } else if (type === 'error') {

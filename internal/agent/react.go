@@ -98,7 +98,7 @@ func (a *Agent) react(ctx context.Context, question string, opts RunOptions, max
 			result = "工具执行错误: " + terr.Error()
 		}
 		if emit != nil {
-			emit(Event{Type: EventTool, Name: out.Action.Name})
+			emit(Event{Type: EventTool, Name: out.Action.Name, Args: out.Action.Args})
 			emit(Event{Type: EventPhase, Phase: "观察：" + truncateRunes(result, 120)})
 		}
 		if a.cfg.OnTool != nil {

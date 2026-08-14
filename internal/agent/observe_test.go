@@ -106,3 +106,28 @@ func TestOnToolHook(t *testing.T) {
 		t.Fatalf("OnTool 参数异常: %v", gotArgs)
 	}
 }
+
+// TestSkillEventEmitted P61：技能注入时发出 skill 流式事件（前端轨迹展示）。
+func TestSkillEventEmitted(t *testing.T) {
+	skillReg := skill.NewRegistry()
+	skillReg.Register(&skill.Skill{Name: "report-sop", Description: "写报告", Instructions: "SOP"})
+	prompts := prompt.NewRegistry("z")
+	prompts.Register(&prompt.Template{Name: "assistant", Version: "v1", Text: "系统提示"})
+	ag := New(Config{
+		Router: provider.NewRouter(&fakeProvider{}), Prompts: prompts,
+		PromptName: "assistant", Skills: skillReg,
+	})
+	ag.Bind("s", "admin", "u", nil)
+
+	var evs []Event
+	ag.buildMessages(context.Background(), "帮我写一份研究报告", func(ev Event) { evs = append(evs, ev) })
+	found := false
+	for _, ev := range evs {
+		if ev.Type == EventSkill && ev.Skill == "report-sop" {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("应发出技能事件: %+v", evs)
+	}
+}

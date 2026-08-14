@@ -99,7 +99,7 @@ func (a *Agent) run(ctx context.Context, userInput string, opts RunOptions, emit
 	}
 
 	// 1. 组装消息（记忆 + 历史 + 系统提示 + 当前输入），并做上下文预算裁剪（C11）
-	msgs := a.buildMessages(ctx, userInput)
+	msgs := a.buildMessages(ctx, userInput, emit)
 
 	// 2. 工具调用循环（抽取为 toolLoop，供规划-执行 P10 复用）
 	finalAnswer, lastErr, toolsUsed := a.toolLoop(ctx, msgs, a.cfg.Tools.ToolsFor(a.role), opts, emit)
@@ -292,7 +292,7 @@ func (a *Agent) toolResult(tc provider.ToolCall, content string, isErr bool) pro
 }
 
 // buildMessages 组装发送给模型的完整消息：系统提示 + 记忆 + 历史 + 当前输入。
-func (a *Agent) buildMessages(ctx context.Context, userInput string) []provider.Message {
+func (a *Agent) buildMessages(ctx context.Context, userInput string, emit func(Event)) []provider.Message {
 	// 查询改写（P48）：先改写问题，再用于技能/RAG 检索与最终消息
 	if a.cfg.RewriteQuery {
 		userInput = a.rewriteForRetrieval(ctx, userInput)
@@ -330,6 +330,11 @@ func (a *Agent) buildMessages(ctx context.Context, userInput string) []provider.
 	// 生产演化：技能检索换向量匹配；命中技能后可进一步按需读取其 scripts/ 资源。
 	if a.cfg.Skills != nil {
 		if hits := a.cfg.Skills.Match(userInput, 2); len(hits) > 0 {
+			if emit != nil { // P61：技能注入也进入流式轨迹
+				for _, sk := range hits {
+					emit(Event{Type: EventSkill, Skill: sk.Name})
+				}
+			}
 			if a.cfg.OnSkill != nil { // P31：对外上报"本次注入了哪些技能"（学习/可观测）
 				names := make([]string, 0, len(hits))
 				for _, sk := range hits {
