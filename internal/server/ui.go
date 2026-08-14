@@ -1,20 +1,22 @@
-// 前端 Web UI（P14）：单页 SSE 聊天工作台（企业风格）。
+// 前端 Web UI（P14/P61）：单页 SSE 聊天工作台（企业风格）。
 //
 // 零构建：一个内嵌 HTML 文件，浏览器直接可用；聊天走 /v1/chat/stream（SSE），
 // 用 fetch + ReadableStream 解析（POST + JSON body，EventSource 不支持）。
 //
 // 功能与组件：
+//   - 多会话管理：左侧会话侧栏（新建/切换/删除，localStorage 持久化）
 //   - 亮/暗主题：跟随系统 + 手动切换（localStorage 记忆）
-//   - 顶栏：品牌 + 生成状态（含工具调用计数）+ 会话 ID（复制/新建）
+//   - 流式阶段轨迹：plan/ReAct 的 思考/规划/执行步骤/观察 以阶段行展示
 //   - 消息流：角色气泡（头像/时间/流式光标/打字动画）、Markdown 轻量渲染、
 //     工具调用内联展示、错误横幅（可重试）
 //   - 消息操作：复制 / 重试 / 赞踩反馈（POST /v1/feedback，负面自动回流评测集）
-//   - 会话历史持久化（localStorage，刷新不丢）
+//   - 导出对话：TXT / JSON 下载
+//   - 会话过期自愈：session 过期时自动新建并重试一次
 //   - 输入区：Enter 发送（兼容中文输入法）/ Shift+Enter 换行 / 自动增高、
 //     五种推理模式、发送↔停止、清空
-//   - 设置：API Key（localStorage 记忆、可显隐）
+//   - 移动端：侧栏抽屉 + 设置抽屉
 //
-// 生产演化方向：独立前端工程（React/Vue）+ WebSocket；会话历史侧栏；移动端适配。
+// 生产演化方向：独立前端工程（React/Vue）+ WebSocket；会话服务端历史 API。
 package server
 
 import "net/http"
@@ -31,6 +33,7 @@ const chatUI = `<!DOCTYPE html>
     --text:#e2e8f0; --muted:#8494b0; --accent:#3b82f6; --accent-2:#2563eb;
     --user-bg:#1d4ed8; --user-text:#fff; --ok:#22c55e; --err:#f87171; --tool:#fbbf24;
     --code-bg:#0b1626; --hover:#172a4a; --shadow:0 4px 18px rgba(0,0,0,.25);
+    --sidebar-w:264px;
   }
   [data-theme="light"]{
     --bg:#f3f6fb; --panel:#ffffff; --panel-2:#f8fafd; --border:#d9e1ec;
@@ -40,7 +43,7 @@ const chatUI = `<!DOCTYPE html>
   }
   *{box-sizing:border-box}
   html,body{height:100%}
-  body{margin:0;display:flex;flex-direction:column;background:var(--bg);color:var(--text);
+  body{margin:0;display:flex;background:var(--bg);color:var(--text);
        font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;font-size:14px;
        transition:background .2s,color .2s}
   button,input,select,textarea{font:inherit;color:var(--text)}
@@ -53,19 +56,37 @@ const chatUI = `<!DOCTYPE html>
   input:focus,select:focus,textarea:focus{border-color:var(--accent)}
   code{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
 
-  header{display:flex;align-items:center;gap:12px;padding:10px 18px;background:var(--panel);border-bottom:1px solid var(--border);flex-wrap:wrap;transition:background .2s}
-  .brand{display:flex;align-items:center;gap:10px;font-weight:700;font-size:15px}
+  /* 侧栏 */
+  aside{width:var(--sidebar-w);flex:none;background:var(--panel);border-right:1px solid var(--border);
+        display:flex;flex-direction:column;height:100vh;transition:transform .25s,background .2s}
+  .side-head{display:flex;align-items:center;justify-content:space-between;padding:12px 14px;border-bottom:1px solid var(--border)}
+  .side-head b{font-size:13px}
+  #convList{flex:1;overflow-y:auto;padding:8px}
+  .conv{padding:9px 11px;border-radius:9px;cursor:pointer;margin-bottom:3px;border:1px solid transparent}
+  .conv:hover{background:var(--hover)}
+  .conv.active{background:var(--hover);border-color:var(--accent)}
+  .conv .t{font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .conv .s{font-size:11px;color:var(--muted);margin-top:2px}
+  .conv .del{float:right;visibility:hidden;border:none;background:none;color:var(--muted);padding:0 4px;font-size:12px}
+  .conv:hover .del{visibility:visible}
+  .conv .del:hover{color:var(--err)}
+  .backdrop{display:none}
+
+  .wrap{flex:1;display:flex;flex-direction:column;min-width:0;height:100vh}
+  header{display:flex;align-items:center;gap:10px;padding:10px 16px;background:var(--panel);border-bottom:1px solid var(--border);flex-wrap:wrap;transition:background .2s}
+  .hamb{display:none;font-size:18px}
+  .brand{display:flex;align-items:center;gap:9px;font-weight:700;font-size:15px}
   .brand .mark{width:26px;height:26px;border-radius:7px;background:linear-gradient(135deg,var(--accent),#7c3aed);display:flex;align-items:center;justify-content:center;font-size:13px;color:#fff}
   .status{display:flex;align-items:center;gap:6px;margin-left:auto;font-size:12px;color:var(--muted)}
   .dot{width:8px;height:8px;border-radius:50%;background:var(--ok)}
   .dot.busy{background:var(--tool);animation:pulse 1s infinite}
   @keyframes pulse{50%{opacity:.35}}
-  .session{margin-left:8px;font-size:12px;color:var(--muted);display:flex;align-items:center;gap:6px;flex-wrap:wrap}
-  .session code{color:var(--tool);background:var(--code-bg);border:1px solid var(--border);padding:2px 6px;border-radius:5px}
+  .headbtns{display:flex;align-items:center;gap:6px;font-size:12px}
+  .headbtns button{font-size:12px;padding:5px 9px}
 
   main{flex:1;overflow-y:auto;padding:20px}
-  .chat{max-width:860px;margin:0 auto;display:flex;flex-direction:column;gap:14px}
-  .empty-hint{text-align:center;color:var(--muted);margin-top:56px;font-size:13px;line-height:2}
+  .chat{max-width:860px;margin:0 auto;display:flex;flex-direction:column;gap:12px}
+  .empty-hint{text-align:center;color:var(--muted);margin-top:52px;font-size:13px;line-height:2}
   .empty-hint .big{font-size:17px;color:var(--text)}
   .msg{display:flex;gap:10px;max-width:84%}
   .msg.user{align-self:flex-end;flex-direction:row-reverse}
@@ -89,6 +110,7 @@ const chatUI = `<!DOCTYPE html>
   .bubble-actions button.on.bad{color:var(--err);border-color:var(--err)}
   .cursor::after{content:"▍";color:var(--tool);animation:blink 1s step-start infinite}
   @keyframes blink{50%{opacity:0}}
+  .phase{display:flex;gap:8px;align-items:center;font-size:12px;color:var(--muted);border-left:3px solid var(--accent);padding-left:9px;margin:2px 0}
   .tool-chip{display:inline-flex;align-items:center;gap:6px;background:rgba(251,191,36,.12);border:1px solid rgba(251,191,36,.35);color:var(--tool);
              font-size:12px;border-radius:7px;padding:3px 9px;margin:2px 4px 2px 0}
   .meta{font-size:12px;color:var(--muted);text-align:center;padding:2px 0}
@@ -100,107 +122,203 @@ const chatUI = `<!DOCTYPE html>
   .typing i:nth-child(2){animation-delay:.2s}.typing i:nth-child(3){animation-delay:.4s}
   @keyframes bounce{0%,60%,100%{transform:translateY(0)}30%{transform:translateY(-4px)}}
 
-  footer{border-top:1px solid var(--border);background:var(--panel);padding:12px 18px 14px;transition:background .2s}
+  footer{border-top:1px solid var(--border);background:var(--panel);padding:12px 16px 14px;transition:background .2s}
   .composer{max-width:860px;margin:0 auto;display:flex;flex-direction:column;gap:8px}
   #msg{resize:none;min-height:44px;max-height:150px;line-height:1.5}
   .actions{display:flex;gap:8px;align-items:center;justify-content:space-between;flex-wrap:wrap}
   .actions .left,.actions .right{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
   .hint{font-size:11px;color:var(--muted)}
-  .settings{margin-top:8px;display:none;gap:8px}
-  .settings.open{display:flex}
+  .settings{display:none}
+  .settings.open{display:flex;gap:8px;margin-top:8px}
   #key{flex:1;min-width:200px}
 
-  @media (max-width:640px){
+  @media (max-width:768px){
+    aside{position:fixed;left:0;top:0;z-index:50;transform:translateX(-100%)}
+    aside.open{transform:none}
+    .backdrop{position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:40}
+    .backdrop.show{display:block}
+    .hamb{display:inline-flex}
     .msg{max-width:94%}
     main{padding:12px}
-    header{padding:10px 12px}
+    .settings.open{flex-wrap:wrap}
   }
 </style>
 </head>
 <body>
-<header>
-  <div class="brand"><span class="mark">◆</span> Zebra AI Agent <span style="color:var(--muted);font-weight:400">企业控制台</span></div>
-  <div class="status"><span class="dot" id="dot"></span><span id="statusText">就绪</span></div>
-  <div class="session">会话 <code id="sid">-</code>
-    <button onclick="copySid()" title="复制会话 ID">复制</button>
-    <button onclick="newSession()" title="开始新会话">新会话</button>
-    <button id="themeBtn" onclick="toggleTheme()" title="切换亮/暗主题">☾ 暗色</button>
+<aside id="sidebar">
+  <div class="side-head"><b>会话历史</b>
+    <button onclick="newConversation()" title="新建会话">＋ 新建</button>
   </div>
-</header>
+  <div id="convList"></div>
+</aside>
+<div class="backdrop" id="backdrop" onclick="closeDrawers()"></div>
 
-<main>
-  <div class="chat" id="chat">
-    <div class="empty-hint" id="empty">
-      <div class="big">◆ Zebra AI Agent</div>
-      企业级 Agent 对话工作台<br>
-      支持工具调用 · RAG 知识库 · 记忆画像 · 五种推理模式<br>
-      输入问题开始对话，Enter 发送 / Shift+Enter 换行
+<div class="wrap">
+  <header>
+    <button class="hamb" onclick="toggleSidebar()" title="会话列表">☰</button>
+    <div class="brand"><span class="mark">◆</span> Zebra AI Agent <span style="color:var(--muted);font-weight:400">企业控制台</span></div>
+    <div class="status"><span class="dot" id="dot"></span><span id="statusText">就绪</span></div>
+    <div class="headbtns">
+      <button onclick="exportConv('txt')" title="导出为文本">TXT</button>
+      <button onclick="exportConv('json')" title="导出为 JSON">JSON</button>
+      <button id="themeBtn" onclick="toggleTheme()" title="切换亮/暗主题">☾ 暗色</button>
     </div>
-  </div>
-</main>
+  </header>
 
-<footer>
-  <div class="composer">
-    <textarea id="msg" rows="1" placeholder="输入你的问题…（Enter 发送 / Shift+Enter 换行）"></textarea>
-    <div class="actions">
-      <div class="left">
-        <select id="mode" title="推理模式">
-          <option value="">普通对话</option>
-          <option value="plan">规划-执行</option>
-          <option value="supervisor">多 Agent 路由</option>
-          <option value="reflect">反思</option>
-          <option value="react">ReAct</option>
-          <option value="debate">辩论</option>
-        </select>
-        <button id="btnSend" class="btn-primary" onclick="send()">发送</button>
-        <button id="btnStop" style="display:none" onclick="stop()">停止</button>
-        <button onclick="toggleSettings()" title="API Key 设置">设置</button>
-        <button onclick="clearChat()" title="清空对话并删除本地历史">清空</button>
+  <main>
+    <div class="chat" id="chat">
+      <div class="empty-hint" id="empty">
+        <div class="big">◆ Zebra AI Agent</div>
+        企业级 Agent 对话工作台<br>
+        支持工具调用 · RAG 知识库 · 记忆画像 · 五种推理模式<br>
+        输入问题开始对话，Enter 发送 / Shift+Enter 换行
       </div>
-      <span class="hint">SSE 流式 · session 自动续接 · 支持 Markdown</span>
     </div>
-    <div class="settings" id="settings">
-      <input id="key" type="password" placeholder="API Key (Bearer)">
-      <button onclick="toggleKey()" title="显示/隐藏">显示</button>
+  </main>
+
+  <footer>
+    <div class="composer">
+      <textarea id="msg" rows="1" placeholder="输入你的问题…（Enter 发送 / Shift+Enter 换行）"></textarea>
+      <div class="actions">
+        <div class="left">
+          <select id="mode" title="推理模式">
+            <option value="">普通对话</option>
+            <option value="plan">规划-执行</option>
+            <option value="supervisor">多 Agent 路由</option>
+            <option value="reflect">反思</option>
+            <option value="react">ReAct</option>
+            <option value="debate">辩论</option>
+          </select>
+          <button id="btnSend" class="btn-primary" onclick="send()">发送</button>
+          <button id="btnStop" style="display:none" onclick="stop()">停止</button>
+          <button onclick="toggleSettings()" title="API Key 设置">设置</button>
+          <button onclick="clearChat()" title="清空当前对话">清空</button>
+        </div>
+        <span class="hint">SSE 流式 · Markdown · 会话自动保存</span>
+      </div>
+      <div class="settings" id="settings">
+        <input id="key" type="password" placeholder="API Key (Bearer)">
+        <button onclick="toggleKey()" title="显示/隐藏">显示</button>
+      </div>
     </div>
-  </div>
-</footer>
+  </footer>
+</div>
 
 <script>
-let sessionID = localStorage.getItem('zebra_sid') || '';
+// ---- 多会话状态（localStorage 持久化）----
+let conversations = [];
+let activeId = null;
 let controller = null;
-let history = [];
-let currentAnswer = null; // 当前正在流式生成的回答气泡（工具 chip 挂这里）
+let currentAnswer = null;
+let toolCount = 0;
+const LS_CONVS = 'zebra_conversations';
 const chat = document.getElementById('chat');
 const empty = document.getElementById('empty');
 const keyEl = document.getElementById('key');
 const modeEl = document.getElementById('mode');
 const msgEl = document.getElementById('msg');
-const sidEl = document.getElementById('sid');
 keyEl.value = localStorage.getItem('zebra_key') || 'admin-key';
-updateSid();
 initTheme();
-loadHistory();
+loadConversations();
 
-function now() {
-  return new Date().toLocaleTimeString('zh-CN', { hour12: false });
-}
+function now() { return new Date().toLocaleTimeString('zh-CN', { hour12: false }); }
+function nowFull() { return new Date().toLocaleString('zh-CN', { hour12: false }); }
 function setStatus(text, state) {
   document.getElementById('statusText').textContent = text;
   document.getElementById('dot').className = 'dot' + (state ? ' ' + state : '');
 }
-function updateSid() {
-  sidEl.textContent = sessionID ? sessionID.slice(0, 8) + '…' : '-';
+function active() {
+  for (var i = 0; i < conversations.length; i++) if (conversations[i].id === activeId) return conversations[i];
+  return null;
 }
-function copySid() {
-  if (!sessionID) return;
-  navigator.clipboard.writeText(sessionID).then(function() { setStatus('会话已复制', ''); });
+function saveConvs() {
+  try { localStorage.setItem(LS_CONVS, JSON.stringify(conversations)); } catch(e) {}
 }
-function newSession() {
-  sessionID = '';
-  localStorage.removeItem('zebra_sid');
-  updateSid();
-  setStatus('新会话已开始', '');
+function convTitleOf(text) {
+  var t = text.replace(/\s+/g, ' ').trim();
+  return t.length > 14 ? t.slice(0, 14) + '…' : (t || '新对话');
+}
+
+function loadConversations() {
+  try { conversations = JSON.parse(localStorage.getItem(LS_CONVS) || '[]'); } catch(e) { conversations = []; }
+  if (!conversations.length) {
+    conversations.push({ id: 'c' + Date.now(), sid: '', title: '新对话', createdAt: nowFull(), messages: [] });
+    saveConvs();
+  }
+  activeId = conversations[conversations.length - 1].id;
+  renderSidebar();
+  renderChat();
+}
+function renderSidebar() {
+  var list = document.getElementById('convList');
+  list.innerHTML = '';
+  conversations.forEach(function(c) {
+    var el = document.createElement('div');
+    el.className = 'conv' + (c.id === activeId ? ' active' : '');
+    var del = document.createElement('button');
+    del.className = 'del'; del.textContent = '✕';
+    del.onclick = function(e) { e.stopPropagation(); deleteConversation(c.id); };
+    var t = document.createElement('div'); t.className = 't'; t.textContent = c.title;
+    var s = document.createElement('div'); s.className = 's';
+    s.textContent = (c.messages.length || 0) + ' 条 · ' + (c.sid ? c.sid.slice(0, 6) + '…' : '未连接');
+    el.appendChild(del); el.appendChild(t); el.appendChild(s);
+    el.onclick = function() { switchConversation(c.id); };
+    list.appendChild(el);
+  });
+}
+function newConversation() {
+  var c = { id: 'c' + Date.now(), sid: '', title: '新对话', createdAt: nowFull(), messages: [] };
+  conversations.push(c);
+  saveConvs();
+  activeId = c.id;
+  closeDrawers();
+  renderSidebar();
+  renderChat();
+  setStatus('新会话已创建', '');
+}
+function switchConversation(id) {
+  if (controller) stop();
+  activeId = id;
+  closeDrawers();
+  renderSidebar();
+  renderChat();
+}
+function deleteConversation(id) {
+  if (!confirm('删除该会话？此操作不可恢复。')) return;
+  conversations = conversations.filter(function(c) { return c.id !== id; });
+  if (!conversations.length) {
+    conversations.push({ id: 'c' + Date.now(), sid: '', title: '新对话', createdAt: nowFull(), messages: [] });
+  }
+  if (activeId === id) activeId = conversations[conversations.length - 1].id;
+  saveConvs();
+  renderSidebar();
+  renderChat();
+}
+function renderChat() {
+  chat.innerHTML = '';
+  chat.appendChild(empty);
+  var c = active();
+  if (!c || !c.messages.length) return;
+  empty.style.display = 'none';
+  c.messages.forEach(function(m) {
+    var b = bubble(m.role, m.role === 'user' ? '你' : 'Zebra', m.role === 'user' ? '>' : '◆');
+    b.innerHTML = renderText(m.text);
+    wireActions(b.parentNode, b, m.q || '');
+  });
+}
+function clearChat() {
+  var c = active();
+  if (c) { c.messages = []; saveConvs(); }
+  renderChat();
+}
+function closeDrawers() {
+  document.getElementById('sidebar').classList.remove('open');
+  document.getElementById('backdrop').classList.remove('show');
+}
+function toggleSidebar() {
+  var sb = document.getElementById('sidebar');
+  sb.classList.toggle('open');
+  document.getElementById('backdrop').classList.toggle('show', sb.classList.contains('open'));
 }
 
 // ---- 亮/暗主题 ----
@@ -214,34 +332,7 @@ function applyTheme(t) {
   localStorage.setItem('zebra_theme', t);
   document.getElementById('themeBtn').textContent = t === 'dark' ? '☼ 亮色' : '☾ 暗色';
 }
-function toggleTheme() {
-  applyTheme(document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark');
-}
-
-// ---- 历史持久化 ----
-function loadHistory() {
-  try {
-    history = JSON.parse(localStorage.getItem('zebra_history') || '[]');
-  } catch(e) { history = []; }
-  if (!history.length) return;
-  empty.style.display = 'none';
-  history.forEach(function(m) {
-    var b = bubble(m.role, m.role === 'user' ? '你' : 'Zebra', m.role === 'user' ? '>' : '◆');
-    b.innerHTML = renderText(m.text);
-    if (m.q) b.parentNode.dataset.q = m.q;
-  });
-}
-function saveHistory() {
-  if (history.length > 60) history = history.slice(history.length - 60);
-  try { localStorage.setItem('zebra_history', JSON.stringify(history)); } catch(e) {}
-}
-function clearChat() {
-  chat.innerHTML = '';
-  chat.appendChild(empty);
-  empty.style.display = '';
-  history = [];
-  localStorage.removeItem('zebra_history');
-}
+function toggleTheme() { applyTheme(document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark'); }
 
 // ---- 最小 Markdown 渲染（先转义再包装，防 XSS）----
 function esc(s) {
@@ -251,11 +342,11 @@ function renderText(raw) {
   var out = '';
   // Go 内嵌字符串不允许字面反引号，用 fromCharCode 构造代码块围栏
   var fence = String.fromCharCode(96).repeat(3);
+  var bt = String.fromCharCode(96);
   var parts = raw.split(fence);
   for (var i = 0; i < parts.length; i++) {
     if (i % 2 === 0) {
       var t = esc(parts[i]);
-      var bt = String.fromCharCode(96); // 反引号（Go 内嵌串不允许字面）
       t = t.replace(new RegExp(bt + '([^' + bt + '\\n]+)' + bt, 'g'), '<code class="inline">$1</code>');
       t = t.replace(/\*\*([^*\n]+)\*\*/g, '<strong>$1</strong>');
       out += t.replace(/\n/g, '<br>');
@@ -286,16 +377,17 @@ function bubble(role, name, avatar) {
   chat.insertBefore(wrap, empty);
   return b;
 }
+function addPhase(text) {
+  var p = document.createElement('div');
+  p.className = 'phase'; p.textContent = '◇ ' + text;
+  chat.insertBefore(p, empty);
+  scrollBottom();
+}
 function addTool(name) {
   var chip = document.createElement('span');
   chip.className = 'tool-chip'; chip.textContent = '▲ ' + name;
-  if (currentAnswer && currentAnswer.isConnected) {
-    currentAnswer.appendChild(chip);
-  } else {
-    var w = document.createElement('div');
-    w.appendChild(chip);
-    chat.insertBefore(w, empty);
-  }
+  if (currentAnswer && currentAnswer.isConnected) currentAnswer.appendChild(chip);
+  else { var w = document.createElement('div'); w.appendChild(chip); chat.insertBefore(w, empty); }
   scrollBottom();
 }
 function addMeta(text) {
@@ -312,7 +404,7 @@ function addError(text, retry) {
   if (retry) {
     var b = document.createElement('button');
     b.textContent = '重试';
-    b.onclick = function() { msgEl.value = retry; send(); };
+    b.onclick = function() { msgEl.value = retry; send(false); };
     e.appendChild(b);
   }
   chat.insertBefore(e, empty);
@@ -344,36 +436,34 @@ function setBusy(busy) {
 function wireActions(wrap, b, q) {
   if (!wrap) return;
   if (q) wrap.dataset.q = q;
-  var meta = wrap.querySelector('.meta-line');
-  var actions = meta.querySelector('.bubble-actions');
+  var actions = wrap.querySelector('.bubble-actions');
   var copy = document.createElement('button');
   copy.textContent = '复制';
-  copy.title = '复制内容';
   copy.onclick = function() { navigator.clipboard.writeText(b.innerText); setStatus('已复制', ''); };
   actions.appendChild(copy);
   if (wrap.classList.contains('assistant')) {
     var up = document.createElement('button');
     up.textContent = '赞';
-    up.onclick = function() { feedback(wrap, b, 1, up, down); };
     var down = document.createElement('button');
     down.textContent = '踩';
-    down.onclick = function() { feedback(wrap, b, -1, up, down); };
+    up.onclick = function() { feedback(1, up, down); };
+    down.onclick = function() { feedback(-1, up, down); };
     actions.appendChild(up); actions.appendChild(down);
     var retry = document.createElement('button');
     retry.textContent = '重试';
     retry.onclick = function() {
-      if (wrap.dataset.q) { msgEl.value = wrap.dataset.q; send(); }
+      if (wrap.dataset.q) { msgEl.value = wrap.dataset.q; send(false); }
     };
     actions.appendChild(retry);
   }
 }
-function feedback(wrap, b, rating, upBtn, downBtn) {
-  if (!sessionID) { setStatus('无会话，无法反馈', ''); return; }
-  var key = keyEl.value.trim();
+function feedback(rating, upBtn, downBtn) {
+  var c = active();
+  if (!c || !c.sid) { setStatus('无会话，无法反馈', ''); return; }
   fetch('/v1/feedback', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + key },
-    body: JSON.stringify({ session_id: sessionID, rating: rating })
+    headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + keyEl.value.trim() },
+    body: JSON.stringify({ session_id: c.sid, rating: rating })
   }).then(function(resp) {
     if (!resp.ok) throw new Error('HTTP ' + resp.status);
     var on = rating === 1 ? upBtn : downBtn;
@@ -381,13 +471,49 @@ function feedback(wrap, b, rating, upBtn, downBtn) {
     on.classList.add('on'); other.classList.remove('on');
     if (rating === -1) on.classList.add('bad');
     setStatus(rating === 1 ? '已赞' : '已踩（将回流评测集）', '');
-  }).catch(function(e) { setStatus('反馈失败', ''); });
+  }).catch(function() { setStatus('反馈失败', ''); });
+}
+
+// ---- 导出对话 ----
+function exportConv(kind) {
+  var c = active();
+  if (!c || !c.messages.length) { setStatus('当前会话为空', ''); return; }
+  var name = (c.title || '对话').replace(/\s+/g, '_');
+  var ts = new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-');
+  var content, mime;
+  if (kind === 'json') {
+    content = JSON.stringify({ title: c.title, createdAt: c.createdAt, messages: c.messages }, null, 2);
+    mime = 'application/json';
+    name += '-' + ts + '.json';
+  } else {
+    var lines = ['Zebra AI Agent 对话导出', '会话：' + (c.title || '未命名'), '时间：' + c.createdAt, '----'];
+    c.messages.forEach(function(m) {
+      lines.push('【' + (m.role === 'user' ? '你' : 'Zebra') + ' ' + m.time + '】');
+      lines.push(m.text);
+      lines.push('----');
+    });
+    content = lines.join('\n');
+    mime = 'text/plain';
+    name += '-' + ts + '.txt';
+  }
+  var blob = new Blob([content], { type: mime });
+  var a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = name;
+  document.body.appendChild(a); a.click(); a.remove();
+  setStatus('已导出 ' + name, '');
+}
+
+function toggleSettings() { document.getElementById('settings').classList.toggle('open'); }
+function toggleKey() {
+  if (keyEl.type === 'password') { keyEl.type = 'text'; event.target.textContent = '隐藏'; }
+  else { keyEl.type = 'password'; event.target.textContent = '显示'; }
 }
 
 msgEl.addEventListener('keydown', function(e) {
   if (e.key === 'Enter' && !e.shiftKey && !e.isComposing && e.keyCode !== 229) {
     e.preventDefault();
-    send();
+    send(false);
   }
 });
 msgEl.addEventListener('input', function() {
@@ -395,37 +521,47 @@ msgEl.addEventListener('input', function() {
   msgEl.style.height = Math.min(msgEl.scrollHeight, 150) + 'px';
 });
 
-async function send() {
-  var key = keyEl.value.trim();
-  localStorage.setItem('zebra_key', key);
+async function send(retried) {
+  if (controller) return;
   var text = msgEl.value.trim();
-  if (!text || controller) return;
+  if (!text) return;
   msgEl.value = '';
   msgEl.style.height = 'auto';
   empty.style.display = 'none';
+  var c = active();
+  if (!c) return;
+  if (!c.title || c.title === '新对话') { c.title = convTitleOf(text); renderSidebar(); }
   var q = text;
   var userBubble = bubble('user', '你', '>');
   userBubble.textContent = text;
   wireActions(userBubble.parentNode, userBubble, '');
-  history.push({ role: 'user', text: text, time: now() });
-  saveHistory();
   setBusy(true);
   typingIndicator(true);
-  var toolCount = 0;
+  toolCount = 0;
   controller = new AbortController();
-
-  var body = { message: text, stream: true, confirm_risky: true, session_id: sessionID, mode: modeEl.value };
   var answerEl = null;
   var raw = '';
+
+  var body = { message: text, stream: true, confirm_risky: true, session_id: c.sid, mode: modeEl.value };
   try {
     var resp = await fetch('/v1/chat/stream', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + key },
+      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + keyEl.value.trim() },
       body: JSON.stringify(body),
       signal: controller.signal
     });
     if (!resp.ok) {
       var t = await resp.text().catch(function() { return ''; });
+      // 会话过期自愈：自动新建会话并重试一次
+      if (!retried && (resp.status === 401 || resp.status === 404) && t.indexOf('会话') >= 0) {
+        c.sid = '';
+        addMeta('会话已过期，已自动新建并重试…');
+        controller = null;
+        setBusy(false); typingIndicator(false);
+        msgEl.value = text;
+        send(true);
+        return;
+      }
       addError('HTTP ' + resp.status + (t ? '：' + t.slice(0, 200) : ''), q);
       setBusy(false); typingIndicator(false); controller = null;
       return;
@@ -451,9 +587,11 @@ async function send() {
         try {
           var ev = JSON.parse(data);
           if (type === 'session') {
-            sessionID = ev;
-            localStorage.setItem('zebra_sid', sessionID);
-            updateSid();
+            c.sid = ev;
+            saveConvs(); renderSidebar();
+          } else if (type === 'phase') {
+            typingIndicator(false);
+            addPhase(ev.phase || '');
           } else if (type === 'delta') {
             typingIndicator(false);
             if (!answerEl) {
@@ -483,9 +621,12 @@ async function send() {
   if (answerEl) {
     answerEl.classList.remove('cursor');
     wireActions(answerEl.parentNode, answerEl, q);
-    history.push({ role: 'assistant', text: raw, time: now(), q: q });
-    saveHistory();
   }
+  if (raw) {
+    c.messages.push({ role: 'user', text: q, time: now() });
+    c.messages.push({ role: 'assistant', text: raw, time: now(), q: q });
+  }
+  saveConvs(); renderSidebar();
   currentAnswer = null;
   typingIndicator(false);
   setBusy(false);

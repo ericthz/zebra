@@ -562,6 +562,8 @@ curl -X POST :8080/v1/user/profile/resolve -H "Authorization: Bearer user-key" \
 | ✓ P55 | 反馈回流评测集 | `internal/eval/dataset.go` `server/feedback.go` | 踩→问答对进数据集 |
 | ✓ P56 | 红队/对抗性评测 | `test/eval/cases/redteam.json` | 注入/越狱用例安全分门槛 |
 | ✓ P57 | 画像冲突消解/合并 | `internal/memory/profile.go` `server/profile.go` | 冲突可查可裁决、自动合并 |
+| ✓ P60 | 流式阶段轨迹（phase 事件：plan/ReAct 思考与步骤） | `internal/agent/stream.go` `plan.go` `react.go` | 流式端点按 mode 分发五种模式 |
+| ✓ P61 | Web UI 多会话/导出/阶段展示/移动端抽屉 | `internal/server/ui.go` | 会话侧栏、TXT/JSON 导出、轨迹阶段行 |
 
 ---
 

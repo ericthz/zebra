@@ -189,11 +189,14 @@ func (s *APIServer) streamForMode(ctx context.Context, ag *agent.Agent, sess *Se
 			emit := func(ev agent.Event) { ch <- ev }
 			var reply string
 			var err error
+			streamed := false // plan/react 已在内部流式输出答案，无需补发
 			switch req.Mode {
 			case "plan":
 				reply, err = ag.PlanAndExecuteStream(ctx, req.Message, opts, emit)
+				streamed = true
 			case "react":
 				reply, err = ag.ReActStream(ctx, req.Message, opts, 6, emit)
+				streamed = true
 			case "supervisor":
 				emit(agent.Event{Type: agent.EventPhase, Phase: "多 Agent 路由中…"})
 				if s.deps.Supervisor == nil {
@@ -213,7 +216,7 @@ func (s *APIServer) streamForMode(ctx context.Context, ag *agent.Agent, sess *Se
 			}
 			if err != nil {
 				ch <- agent.Event{Type: agent.EventError, Message: err.Error(), Err: err}
-			} else if reply != "" {
+			} else if reply != "" && !streamed {
 				ch <- agent.Event{Type: agent.EventDelta, Content: reply}
 			}
 			ch <- agent.Event{Type: agent.EventDone}
