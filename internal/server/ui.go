@@ -84,7 +84,11 @@ const chatUI = `<!DOCTYPE html>
   .headbtns{display:flex;align-items:center;gap:6px;font-size:12px}
   .headbtns button{font-size:12px;padding:5px 9px}
 
-  main{flex:1;overflow-y:auto;padding:20px}
+  main{flex:1;overflow-y:auto;padding:20px;scrollbar-width:thin;scrollbar-gutter:stable}
+  main::-webkit-scrollbar{width:10px}
+  main::-webkit-scrollbar-track{background:transparent}
+  main::-webkit-scrollbar-thumb{background:var(--border);border-radius:5px;border:2px solid transparent;background-clip:content-box}
+  main::-webkit-scrollbar-thumb:hover{background:var(--accent);border:2px solid transparent;background-clip:content-box}
   .chat{max-width:860px;margin:0 auto;display:flex;flex-direction:column;gap:12px}
   .empty-hint{text-align:center;color:var(--muted);margin-top:52px;font-size:13px;line-height:2}
   .empty-hint .big{font-size:17px;color:var(--text)}
@@ -115,7 +119,8 @@ const chatUI = `<!DOCTYPE html>
             border-radius:10px;padding:8px 12px;margin:2px 0;font-size:12px}
   .phase{display:flex;gap:8px;align-items:baseline;color:var(--muted);border-left:3px solid var(--accent);padding-left:8px;line-height:1.7}
   .phase.skill{color:var(--accent)}
-  .tools-row{color:var(--tool);padding-left:11px;line-height:1.7;overflow-wrap:anywhere}
+  /* 工具行与阶段行共用蓝色左竖线，缩进一致（3px 竖线 + 8px 内边距） */
+  .tools-row{color:var(--tool);border-left:3px solid var(--accent);padding-left:8px;line-height:1.7;overflow-wrap:anywhere}
   .meta{font-size:12px;color:var(--muted);text-align:center;padding:2px 0}
   .err{background:rgba(248,113,113,.12);border:1px solid rgba(248,113,113,.35);color:var(--err);
        border-radius:10px;padding:9px 12px;font-size:13px;display:flex;gap:10px;align-items:center;justify-content:space-between}
@@ -303,13 +308,15 @@ function renderChat() {
   chat.innerHTML = '';
   chat.appendChild(empty);
   var c = active();
-  if (!c || !c.messages.length) return;
-  empty.style.display = 'none';
-  c.messages.forEach(function(m) {
-    var b = bubble(m.role, m.role === 'user' ? '你' : 'Zebra', m.role === 'user' ? '>' : '◆');
-    b.innerHTML = renderText(m.text);
-    wireActions(b.parentNode, b, m.q || '');
-  });
+  if (c && c.messages.length) {
+    empty.style.display = 'none';
+    c.messages.forEach(function(m) {
+      var b = bubble(m.role, m.role === 'user' ? '你' : 'Zebra', m.role === 'user' ? '>' : '◆');
+      b.innerHTML = renderText(m.text);
+      wireActions(b.parentNode, b, m.q || '');
+    });
+  }
+  scrollBottom(true); // 打开/切换会话后直接看最新内容
 }
 function clearChat() {
   var c = active();
@@ -433,10 +440,10 @@ function addError(text, retry) {
   chat.insertBefore(e, empty);
   scrollBottom();
 }
-function scrollBottom() {
+function scrollBottom(force) {
   var main = document.querySelector('main');
   var near = main.scrollHeight - main.scrollTop - main.clientHeight < 120;
-  if (near) main.scrollTop = main.scrollHeight;
+  if (force || near) main.scrollTop = main.scrollHeight;
 }
 function typingIndicator(on) {
   var t = document.getElementById('typing');
@@ -558,6 +565,7 @@ async function send(retried) {
   var userBubble = bubble('user', '你', '>');
   userBubble.textContent = text;
   wireActions(userBubble.parentNode, userBubble, '');
+  scrollBottom(true); // 发送后立即跳到最新位置，随后流式按"接近底部则跟随"
   setBusy(true);
   typingIndicator(true);
   toolCount = 0;
