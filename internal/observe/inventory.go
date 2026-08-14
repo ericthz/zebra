@@ -74,6 +74,7 @@ type Info struct {
 	ShadowCandidate string         // 影子评测候选模型（空=未启用）
 	ShadowSample    float64
 	RedisURL        string // 空=内存会话
+	Mode            string // 当前对话模式（空=不显示；Zebra CLI 传入，server 无全局模式）
 }
 
 // PrintInventory 打印能力清单（纯函数，便于测试与两端复用）。
@@ -83,15 +84,33 @@ func PrintInventory(w io.Writer, info Info) {
 		return Label(sym, code, name)
 	}
 
+	// 统计树总行数：模型/工具可选；模式可选且恒为末行（这样图标与冒号天然与前列对齐）
+	total := 7 // MCP + 技能 + 记忆 + 知识库 + 语音 + 影子评测 + Redis
+	if len(info.Models) > 0 {
+		total++
+	}
+	if info.Tools != nil {
+		total++
+	}
+	if info.Mode != "" {
+		total++
+	}
+	row := 0
+	parent := func() string { // 当前父行树前缀，随后行号 +1
+		p := parentBranch(row, total)
+		row++
+		return p
+	}
+
 	// 1. 模型
 	if len(info.Models) > 0 {
-		fmt.Fprintf(w, "├── %s: %s\n", lbl("◆", console.ColorModel, "模型"), strings.Join(info.Models, " → "))
+		fmt.Fprintf(w, "%s%s: %s\n", parent(), lbl("◆", console.ColorModel, "模型"), strings.Join(info.Models, " → "))
 	}
 
 	// 2. 工具（父级：数量；子项：树形分支逐行，名称 + 描述）
 	if info.Tools != nil {
 		names := info.Tools.Names()
-		fmt.Fprintf(w, "├── %s: %d 个\n", lbl("▲", console.ColorTool, "工具"), len(names))
+		fmt.Fprintf(w, "%s%s: %d 个\n", parent(), lbl("▲", console.ColorTool, "工具"), len(names))
 		descs := info.Tools.Descriptions()
 		maxName := 0
 		for _, n := range names {
@@ -107,9 +126,9 @@ func PrintInventory(w io.Writer, info Info) {
 
 	// 3. MCP 状态（父级：模式与连接数；子项：每个 MCP 工具逐行展示，与工具一致）
 	if info.MCPMode == "" {
-		fmt.Fprintf(w, "├── %s: 未启用（MCP_MODE 未设置）\n", lbl("●", console.ColorMCP, "MCP"))
+		fmt.Fprintf(w, "%s%s: 未启用（MCP_MODE 未设置）\n", parent(), lbl("●", console.ColorMCP, "MCP"))
 	} else {
-		fmt.Fprintf(w, "├── %s: 模式=%s · 已连接 %d 个工具\n", lbl("●", console.ColorMCP, "MCP"), info.MCPMode, info.MCPCount)
+		fmt.Fprintf(w, "%s%s: 模式=%s · 已连接 %d 个工具\n", parent(), lbl("●", console.ColorMCP, "MCP"), info.MCPMode, info.MCPCount)
 		maxName := 0
 		for _, t := range info.MCPTools {
 			if w := console.Width(t.Name); w > maxName {
@@ -123,9 +142,9 @@ func PrintInventory(w io.Writer, info Info) {
 
 	// 4. 技能（父级：数量；子项：树形分支逐行，名称 — 描述）
 	if len(info.Skills) == 0 {
-		fmt.Fprintf(w, "├── %s: 无（skills/ 目录为空或加载失败）\n", lbl("■", console.ColorSkill, "技能"))
+		fmt.Fprintf(w, "%s%s: 无（skills/ 目录为空或加载失败）\n", parent(), lbl("■", console.ColorSkill, "技能"))
 	} else {
-		fmt.Fprintf(w, "├── %s: %d 个\n", lbl("■", console.ColorSkill, "技能"), len(info.Skills))
+		fmt.Fprintf(w, "%s%s: %d 个\n", parent(), lbl("■", console.ColorSkill, "技能"), len(info.Skills))
 		maxName := 0
 		for _, sk := range info.Skills {
 			if w := console.Width(sk.Name); w > maxName {
@@ -138,25 +157,37 @@ func PrintInventory(w io.Writer, info Info) {
 	}
 
 	// 5. 记忆 / 知识库
-	fmt.Fprintf(w, "├── %s: %s\n", lbl("▣", console.ColorMemory, "记忆"), orDefault(info.MemMode, "工作记忆"))
-	fmt.Fprintf(w, "├── %s: %d 篇文档 / %d 块\n", lbl("▤", console.ColorKB, "知识库"), info.RAGDocs, info.RAGChunks)
+	fmt.Fprintf(w, "%s%s: %s\n", parent(), lbl("▣", console.ColorMemory, "记忆"), orDefault(info.MemMode, "工作记忆"))
+	fmt.Fprintf(w, "%s%s: %d 篇文档 / %d 块\n", parent(), lbl("▤", console.ColorKB, "知识库"), info.RAGDocs, info.RAGChunks)
 
 	// 6. 语音 / 影子评测 / Redis
 	if info.VoiceEnabled {
-		fmt.Fprintf(w, "├── %s: 已启用（ASR/TTS）\n", lbl("♪", console.ColorVoice, "语音"))
+		fmt.Fprintf(w, "%s%s: 已启用（ASR/TTS）\n", parent(), lbl("♪", console.ColorVoice, "语音"))
 	} else {
-		fmt.Fprintf(w, "├── %s: 未启用（VOICE_BASE_URL 未设置）\n", lbl("♪", console.ColorVoice, "语音"))
+		fmt.Fprintf(w, "%s%s: 未启用（VOICE_BASE_URL 未设置）\n", parent(), lbl("♪", console.ColorVoice, "语音"))
 	}
 	if info.ShadowCandidate != "" {
-		fmt.Fprintf(w, "├── %s: candidate=%s · sample=%.0f%%\n", lbl("◐", console.ColorShadow, "影子评测"), info.ShadowCandidate, info.ShadowSample*100)
+		fmt.Fprintf(w, "%s%s: candidate=%s · sample=%.0f%%\n", parent(), lbl("◐", console.ColorShadow, "影子评测"), info.ShadowCandidate, info.ShadowSample*100)
 	} else {
-		fmt.Fprintf(w, "├── %s: 未启用（ZEBRA_SHADOW_MODEL 未设置）\n", lbl("◐", console.ColorShadow, "影子评测"))
+		fmt.Fprintf(w, "%s%s: 未启用（ZEBRA_SHADOW_MODEL 未设置）\n", parent(), lbl("◐", console.ColorShadow, "影子评测"))
 	}
 	if info.RedisURL != "" {
-		fmt.Fprintf(w, "└── %s: %s（会话共享）\n", lbl("◎", console.ColorRedis, "Redis"), info.RedisURL)
+		fmt.Fprintf(w, "%s%s: %s（会话共享）\n", parent(), lbl("◎", console.ColorRedis, "Redis"), info.RedisURL)
 	} else {
-		fmt.Fprintf(w, "└── %s: 未启用（内存会话，单机）\n", lbl("◎", console.ColorRedis, "Redis"))
+		fmt.Fprintf(w, "%s%s: 未启用（内存会话，单机）\n", parent(), lbl("◎", console.ColorRedis, "Redis"))
 	}
+	// 7. 模式（可选末行：Zebra CLI 当前对话模式；图标/冒号与前列同一竖线）
+	if info.Mode != "" {
+		fmt.Fprintf(w, "%s%s: %s\n", parent(), lbl("◇", console.ColorModel, "模式"), info.Mode)
+	}
+}
+
+// parentBranch 父级树前缀：非末项 ├──，末项 └──。
+func parentBranch(i, total int) string {
+	if i == total-1 {
+		return "└── "
+	}
+	return "├── "
 }
 
 func orDefault(s, def string) string {

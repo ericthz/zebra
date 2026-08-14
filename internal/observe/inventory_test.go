@@ -130,3 +130,33 @@ func TestPrintInventoryDisabled(t *testing.T) {
 		}
 	}
 }
+
+// TestPrintInventoryModeRow Zebra CLI 模式行并入清单树末行：
+// 图标列（4）与冒号列（16）必须和上面各父行完全对齐。
+func TestPrintInventoryModeRow(t *testing.T) {
+	var buf bytes.Buffer
+	PrintInventory(&buf, Info{Mode: "Chat 普通对话（输入 /mode 切换，/help 查看全部）"})
+	out := buf.String()
+
+	var modeLine string
+	for _, l := range strings.Split(out, "\n") {
+		if strings.Contains(l, "◇ 模式") {
+			modeLine = l
+			break
+		}
+	}
+	if modeLine == "" {
+		t.Fatalf("缺少模式行:\n%s", out)
+	}
+	if !strings.HasPrefix(modeLine, "└── ") {
+		t.Fatalf("模式应为树末行（└──）: %q", modeLine)
+	}
+	iconIdx := strings.Index(modeLine, "◇")
+	colonIdx := strings.Index(modeLine, ":")
+	if got := console.Width(modeLine[:iconIdx]); got != 4 {
+		t.Fatalf("模式图标显示列 %d 应为 4: %q", got, modeLine)
+	}
+	if got := console.Width(modeLine[:colonIdx]); got != 16 {
+		t.Fatalf("模式冒号显示列 %d 应为 16: %q", got, modeLine)
+	}
+}

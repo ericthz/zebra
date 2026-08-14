@@ -213,10 +213,8 @@ func main() {
 		RAGDocs:      docsCount,
 		RAGChunks:    ragChunks,
 		VoiceEnabled: voice != nil,
+		Mode:         modeLabel(*mode) + "（输入 /mode 切换，/help 查看全部）",
 	})
-	// 模式行：2 空格缩进（清单树前缀占 4 格），标签补宽 2 格使冒号与清单各列对齐
-	modeLbl := console.Pad(console.Symbol("◇", console.ColorModel)+" 模式", observe.LabelWidth+2)
-	fmt.Printf("  %s: %s（输入 /mode 切换，/help 查看全部）\n", modeLbl, modeLabel(*mode))
 	fmt.Println(strings.Repeat("─", 60))
 	for {
 		// P38：raw 模式 + UTF-8 感知行编辑（中文退格不再残留字节残片）；
