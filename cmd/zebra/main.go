@@ -9,6 +9,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"flag"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -29,10 +30,15 @@ import (
 	"github.com/ericthz/zebra/internal/rag"
 	"github.com/ericthz/zebra/internal/safety"
 	"github.com/ericthz/zebra/internal/skill"
+	"github.com/ericthz/zebra/internal/supervisor"
 	"github.com/ericthz/zebra/internal/tool"
 )
 
 func main() {
+	// ---- 启动模式：与 Web UI 的模式选择一致 ----
+	mode := flag.String("mode", "chat", "启动模式: chat|plan|react|reflect|debate|supervisor")
+	flag.Parse()
+
 	// ---- P37 终端 banner ----
 	observe.PrintBanner(os.Stdout, "Zebra CLI — 本地命令行 Agent 客户端（输入 exit 退出）")
 
@@ -139,6 +145,11 @@ func main() {
 	// ---- 系统提示模板 ----
 	prompts := prompt.NewRegistry("zebra")
 	prompts.Register(&prompt.Template{Name: "assistant", Version: "v1", Text: `你是 zebra AI 助手，可以调用工具。回答简洁准确。角色：{role}。`})
+	prompts.Register(&prompt.Template{Name: "data", Version: "v1", Text: `你是 zebra 的【数据专家 Agent】。擅长计算、单位换算、翻译、日期时间等数据处理任务。调用合适的工具得出准确结果，回答简洁。角色：{role}。`})
+	prompts.Register(&prompt.Template{Name: "knowledge", Version: "v1", Text: `你是 zebra 的【知识专家 Agent】。擅长搜索资料、抓取网页、查阅文档等知识获取任务。调用合适的工具，基于事实回答并注明来源。角色：{role}。`})
+
+	// P31 执行痕迹：工具调用与技能注入在终端可见，学习 Agent 行为（worker 复用同一钩子）
+	toolHook, skillHook := traceHooks()
 
 	ag := agent.New(agent.Config{
 		Router:       router,
@@ -152,23 +163,32 @@ func main() {
 		Skills:       skillReg,
 		RAG:          ragIndex,
 		RewriteQuery: os.Getenv("ZEBRA_QUERY_REWRITE") == "1", // P48 查询改写
-		// P31 执行痕迹：工具调用与技能注入在终端可见，学习 Agent 行为
-		OnTool: func(name string, args map[string]interface{}, ok bool, err error) {
-			detail, _ := json.Marshal(args)
-			sym := console.Symbol("▲", console.ColorTool)
-			if ok {
-				fmt.Printf("  %s 工具调用: %s(%s) ✓\n", sym, name, detail)
-			} else {
-				fmt.Printf("  %s 工具调用: %s(%s) ✗ %v\n", sym, name, detail, err)
-			}
-		},
-		OnSkill: func(names []string) {
-			fmt.Printf("  %s 技能注入: %s\n", console.Symbol("■", console.ColorSkill), strings.Join(names, ", "))
-		},
+		OnTool:       toolHook,
+		OnSkill:      skillHook,
 	})
 
 	history := make([]provider.Message, 0)
 	ag.Bind("zebra", "admin", "local", &history)
+
+	// ---- P13 多 Agent Supervisor：数据/知识/常规 三个专业 worker（与 cmd/server 同构）----
+	// Zebra 单机版同样装配，让 /mode supervisor 与 Web UI 行为一致。
+	sup := supervisor.NewSupervisor(router,
+		&supervisor.Worker{
+			Name:        "data",
+			Description: "擅长计算、单位换算、翻译、日期时间等数据处理任务",
+			Build:       workerBuilder(router, prompts, mem, skillReg, ragIndex, "data", reg.Subset("calculator", "get_current_datetime", "generate_random_number", "convert_units", "translate_text")),
+		},
+		&supervisor.Worker{
+			Name:        "knowledge",
+			Description: "擅长搜索资料、抓取网页、查阅文档等知识获取任务",
+			Build:       workerBuilder(router, prompts, mem, skillReg, ragIndex, "knowledge", reg.Subset("web_search", "fetch_url", "read_file", "list_dir")),
+		},
+		&supervisor.Worker{
+			Name:        "general",
+			Description: "通用助手，擅长综合问答、文件操作、代码等一般任务",
+			Build:       workerBuilder(router, prompts, mem, skillReg, ragIndex, "assistant", reg.Subset()),
+		},
+	)
 
 	// ---- P31/P36 启动清单：与 cmd/server 同一渲染（行结构/符号/配色一致）----
 	memMode := "工作记忆"
@@ -192,6 +212,7 @@ func main() {
 		RAGChunks:    ragChunks,
 		VoiceEnabled: voice != nil,
 	})
+	fmt.Printf("  %s 模式    : %s（输入 /mode 切换，/help 查看全部）\n", console.Symbol("◇", console.ColorModel), modeLabel(*mode))
 	fmt.Println(strings.Repeat("─", 60))
 	for {
 		// P38：raw 模式 + UTF-8 感知行编辑（中文退格不再残留字节残片）；
@@ -207,8 +228,26 @@ func main() {
 		if in == "exit" {
 			break
 		}
+		// ---- REPL 命令：模式选择 / 帮助 ----
+		switch {
+		case in == "/help" || in == "help" || in == "?":
+			printHelp()
+			continue
+		case in == "/mode":
+			fmt.Printf("  当前模式: %s\n", modeLabel(*mode))
+			continue
+		case strings.HasPrefix(in, "/mode "):
+			name := strings.TrimSpace(strings.TrimPrefix(in, "/mode "))
+			if !validMode(name) {
+				fmt.Printf("  未知模式: %s（可用: chat|plan|react|reflect|debate|supervisor）\n", name)
+				continue
+			}
+			*mode = name
+			fmt.Printf("  已切换模式: %s\n", modeLabel(*mode))
+			continue
+		}
 		ctx := context.Background()
-		answer, err := ag.Run(ctx, in, agent.RunOptions{})
+		answer, err := runAgent(ctx, ag, sup, &history, *mode, in)
 		if err != nil {
 			fmt.Printf("✗ %v\n", err)
 			continue
@@ -234,4 +273,137 @@ func atoiDefault(s string, def int) int {
 		return def
 	}
 	return n
+}
+
+// workerBuilder 构造 supervisor 专业 worker 的"每请求新建" Agent 工厂
+// （与 cmd/server/workers.go 同构；worker 各有专属提示词与工具子集）。
+func workerBuilder(router *provider.Router, prompts *prompt.Registry, mem *memory.Manager, skillReg *skill.Registry, ragIndex *rag.Index, promptName string, reg *tool.Registry) func() *agent.Agent {
+	toolHook, skillHook := traceHooks()
+	return func() *agent.Agent {
+		return agent.New(agent.Config{
+			Router:       router,
+			Tools:        reg,
+			Prompts:      prompts,
+			Mem:          mem,
+			Window:       &agent.ContextWindow{MaxTokens: 4000, Summarizer: agent.PrefixSummarizer{MaxChars: 600}},
+			Moderator:    safety.NewKeywordModerator(),
+			MaxTurns:     5,
+			PromptName:   promptName,
+			Skills:       skillReg,
+			RAG:          ragIndex,
+			RewriteQuery: os.Getenv("ZEBRA_QUERY_REWRITE") == "1",
+			OnTool:       toolHook,
+			OnSkill:      skillHook,
+		})
+	}
+}
+
+// traceHooks 返回终端活动轨迹钩子：▲ 工具调用（含成败）、■ 技能注入。
+func traceHooks() (func(name string, args map[string]interface{}, ok bool, err error), func(names []string)) {
+	toolHook := func(name string, args map[string]interface{}, ok bool, err error) {
+		detail, _ := json.Marshal(args)
+		sym := console.Symbol("▲", console.ColorTool)
+		if ok {
+			fmt.Printf("  %s 工具调用: %s(%s) ✓\n", sym, name, detail)
+		} else {
+			fmt.Printf("  %s 工具调用: %s(%s) ✗ %v\n", sym, name, detail, err)
+		}
+	}
+	skillHook := func(names []string) {
+		fmt.Printf("  %s 技能注入: %s\n", console.Symbol("■", console.ColorSkill), strings.Join(names, ", "))
+	}
+	return toolHook, skillHook
+}
+
+// modeLabel 模式名 → 终端展示文案。
+func modeLabel(m string) string {
+	switch m {
+	case "chat":
+		return "chat 普通对话"
+	case "plan":
+		return "plan 规划-执行"
+	case "react":
+		return "react ReAct 推理-行动"
+	case "reflect":
+		return "reflect 回答后反思改进"
+	case "debate":
+		return "debate 双 Agent 辩论"
+	case "supervisor":
+		return "supervisor 多 Agent 路由"
+	}
+	return m
+}
+
+// validMode 判断模式名是否受支持。
+func validMode(m string) bool {
+	switch m {
+	case "chat", "plan", "react", "reflect", "debate", "supervisor":
+		return true
+	}
+	return false
+}
+
+// emitTerminal 把 Agent 流式事件打印为终端活动轨迹（与 Web UI 活动块对齐）：
+// ◇ 阶段（规划/执行步骤/思考/观察等）。技能/工具由 OnSkill/OnTool 钩子
+// 统一打印（含命中技能名与调用成败），这里跳过避免重复。
+func emitTerminal(ev agent.Event) {
+	switch ev.Type {
+	case agent.EventPhase:
+		fmt.Printf("  %s %s\n", console.Symbol("◇", console.ColorModel), ev.Phase)
+	}
+}
+
+// runAgent 按模式分发执行：chat 走普通对话；plan/react 走流式（活动轨迹）；
+// reflect/debate/supervisor 先打印阶段提示再执行。
+func runAgent(ctx context.Context, ag *agent.Agent, sup *supervisor.Supervisor, history *[]provider.Message, mode, input string) (string, error) {
+	opts := agent.RunOptions{}
+	switch mode {
+	case "chat":
+		return ag.Run(ctx, input, opts)
+	case "plan":
+		return ag.PlanAndExecuteStream(ctx, input, opts, emitTerminal)
+	case "react":
+		return ag.ReActStream(ctx, input, opts, 6, emitTerminal)
+	case "reflect":
+		emitTerminal(agent.Event{Type: agent.EventPhase, Phase: "回答后反思改进…"})
+		answer, err := ag.Run(ctx, input, opts)
+		if err != nil {
+			return "", err
+		}
+		return ag.Reflect(ctx, input, answer)
+	case "debate":
+		emitTerminal(agent.Event{Type: agent.EventPhase, Phase: "双 Agent 辩论中…"})
+		reply, _, err := ag.Debate(ctx, input, "", "")
+		return reply, err
+	case "supervisor":
+		if sup == nil {
+			return "", fmt.Errorf("多 Agent supervisor 未装配")
+		}
+		emitTerminal(agent.Event{Type: agent.EventPhase, Phase: "多 Agent 路由中…"})
+		// 先路由并展示结果，再执行 worker —— 与 supervisor.Run 同构，但顺序更利于学习：
+		// "◇ 多 Agent 路由中… → ◇ 已路由: data → ▲ 工具调用…"
+		w, rerr := sup.Route(ctx, input)
+		if rerr != nil {
+			return "", rerr
+		}
+		fmt.Printf("  %s 已路由: %s（%s）\n", console.Symbol("◇", console.ColorModel), w.Name, w.Description)
+		workerAg := w.Build()
+		workerAg.Bind("zebra", "admin", "local", history)
+		return workerAg.Run(ctx, input, opts)
+	}
+	return "", fmt.Errorf("未知模式: %s", mode)
+}
+
+// printHelp 打印 REPL 命令与模式说明。
+func printHelp() {
+	fmt.Println("  Zebra CLI 帮助")
+	fmt.Println("  命令:")
+	fmt.Println("    exit          退出")
+	fmt.Println("    /mode         查看当前模式")
+	fmt.Println("    /mode <名称>  切换对话模式")
+	fmt.Println("    /help         显示本帮助")
+	fmt.Println("  模式:")
+	for _, m := range []string{"chat", "plan", "react", "reflect", "debate", "supervisor"} {
+		fmt.Printf("    %s\n", modeLabel(m))
+	}
 }

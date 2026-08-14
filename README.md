@@ -262,6 +262,13 @@ MCP 工具，配置了可用 `QDRANT_URL` 或 `REDIS_URL` 则启用长期记忆�
 知识库；未就绪自动降级不阻断。诊断日志写入 `zebra.log`（`ZEBRA_LOG=off` 回退
 stderr），终端只显示清单与对话。
 
+Zebra CLI 与 Web UI 一样支持**多种对话模式**（`-mode` 启动参数或运行中
+`/mode <名称>` 切换）：`chat` 普通对话、`plan` 规划-执行、`react` ReAct
+推理-行动、`reflect` 反思改进、`debate` 双 Agent 辩论、`supervisor` 多 Agent
+路由（数据/知识/常规三个专业 Worker）。执行过程以终端活动轨迹展示：
+`◇` 阶段（规划/执行步骤/思考/观察）、`▲` 工具调用（含成败）、`■` 技能注入，
+与 Web UI 的活动轨迹块一一对应。`/help` 可查看全部命令。
+
 ### 4.3 企业版 HTTP 服务
 
 ```bash
