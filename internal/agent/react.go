@@ -36,8 +36,19 @@ var reactStepSchema = map[string]interface{}{
 }
 
 // ReAct 运行 ReAct 推理-行动循环，返回最终答案。
-// maxSteps<=0 时默认 6 步；工具执行复用 registry（权限/审计/高危确认）。
 func (a *Agent) ReAct(ctx context.Context, question string, opts RunOptions, maxSteps int) (string, error) {
+	return a.react(ctx, question, opts, maxSteps, nil)
+}
+
+// ReActStream ReAct 的流式版：思考/行动/观察以 phase/tool_call 事件推送，
+// 最终答案以 delta 输出（便于前端展示推理轨迹）。
+func (a *Agent) ReActStream(ctx context.Context, question string, opts RunOptions, maxSteps int, emit func(Event)) (string, error) {
+	return a.react(ctx, question, opts, maxSteps, emit)
+}
+
+// react ReAct 推理-行动循环核心。emit 非 nil 时上报 思考/行动/观察/结论。
+// maxSteps<=0 时默认 6 步；工具执行复用 registry（权限/审计/高危确认）。
+func (a *Agent) react(ctx context.Context, question string, opts RunOptions, maxSteps int, emit func(Event)) (string, error) {
 	if maxSteps <= 0 {
 		maxSteps = 6
 	}
@@ -69,15 +80,26 @@ func (a *Agent) ReAct(ctx context.Context, question string, opts RunOptions, max
 		// 无行动 → 输出答案（或异常）
 		if out.Action.Name == "" {
 			if out.Answer != "" {
+				if emit != nil {
+					emit(Event{Type: EventPhase, Phase: "得出结论"})
+					emit(Event{Type: EventDelta, Content: out.Answer})
+				}
 				return out.Answer, nil
 			}
 			return "", fmt.Errorf("ReAct 第 %d 步既无行动也无答案", step+1)
 		}
 
 		// 执行工具（权限/审计/高危确认全链路复用 toolLoop 同款路径）
+		if emit != nil && out.Thought != "" {
+			emit(Event{Type: EventPhase, Phase: "思考：" + out.Thought})
+		}
 		result, terr := a.cfg.Tools.Execute(ctx, out.Action.Name, out.Action.Args, a.user, a.role, opts.Confirm != nil)
 		if terr != nil {
 			result = "工具执行错误: " + terr.Error()
+		}
+		if emit != nil {
+			emit(Event{Type: EventTool, Name: out.Action.Name})
+			emit(Event{Type: EventPhase, Phase: "观察：" + truncateRunes(result, 120)})
 		}
 		if a.cfg.OnTool != nil {
 			a.cfg.OnTool(out.Action.Name, out.Action.Args, terr == nil, terr)

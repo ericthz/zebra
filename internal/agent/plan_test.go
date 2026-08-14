@@ -77,4 +77,42 @@ func TestPlanAndExecute(t *testing.T) {
 	}
 }
 
+// TestPlanAndExecuteStream P60：流式规划-执行按阶段推送 phase/delta 事件。
+func TestPlanAndExecuteStream(t *testing.T) {
+	prompts := prompt.NewRegistry("z")
+	prompts.Register(&prompt.Template{Name: "assistant", Version: "v1", Text: "你是助手 {role}"})
+	ag := New(Config{
+		Router: provider.NewRouter(&plannerProvider{}), Tools: tool.NewRegistry(),
+		Prompts: prompts, MaxTurns: 3, PromptName: "assistant",
+	})
+	hist := make([]provider.Message, 0)
+	ag.Bind("s", "admin", "u", &hist)
+
+	var evs []Event
+	out, err := ag.PlanAndExecuteStream(context.Background(), "复杂任务", RunOptions{}, func(ev Event) { evs = append(evs, ev) })
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(out, "按规划完成") {
+		t.Fatalf("流式汇总异常: %s", out)
+	}
+	phases, hasStep, deltaFound := 0, false, false
+	for _, ev := range evs {
+		switch ev.Type {
+		case EventPhase:
+			phases++
+			if strings.Contains(ev.Phase, "步骤甲") {
+				hasStep = true
+			}
+		case EventDelta:
+			if strings.Contains(ev.Content, "按规划完成") {
+				deltaFound = true
+			}
+		}
+	}
+	if phases < 4 || !hasStep || !deltaFound {
+		t.Fatalf("阶段事件不完整: phases=%d hasStep=%v delta=%v\n%+v", phases, hasStep, deltaFound, evs)
+	}
+}
+
 var _ = json.Marshal // 占位

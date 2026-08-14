@@ -160,7 +160,9 @@ func (s *APIServer) handleChatStream(w http.ResponseWriter, r *http.Request) {
 		flusher.Flush()
 	}
 
-	evs, err := ag.RunStream(ctx, req.Message, opts)
+	// 按 mode 分发：plan/react 推送阶段轨迹；supervisor/reflect/debate
+	// 在流式下输出最终结果（单 delta）；其余走原生流式。
+	evs, err := s.streamForMode(ctx, ag, sess, req, opts)
 	if err != nil {
 		s.persistHistory(sess)
 		fmt.Fprintf(w, "event: error\ndata: %s\n\n", err)
@@ -175,6 +177,51 @@ func (s *APIServer) handleChatStream(w http.ResponseWriter, r *http.Request) {
 	}
 	// P28：流式对话结束后同样写回历史
 	s.persistHistory(sess)
+}
+
+// streamForMode 按对话模式构造事件流。
+func (s *APIServer) streamForMode(ctx context.Context, ag *agent.Agent, sess *Session, req ChatRequest, opts agent.RunOptions) (<-chan agent.Event, error) {
+	switch req.Mode {
+	case "plan", "react", "supervisor", "reflect", "debate":
+		ch := make(chan agent.Event, 32)
+		go func() {
+			defer close(ch)
+			emit := func(ev agent.Event) { ch <- ev }
+			var reply string
+			var err error
+			switch req.Mode {
+			case "plan":
+				reply, err = ag.PlanAndExecuteStream(ctx, req.Message, opts, emit)
+			case "react":
+				reply, err = ag.ReActStream(ctx, req.Message, opts, 6, emit)
+			case "supervisor":
+				emit(agent.Event{Type: agent.EventPhase, Phase: "多 Agent 路由中…"})
+				if s.deps.Supervisor == nil {
+					err = fmt.Errorf("supervisor 未启用")
+					break
+				}
+				reply, _, err = s.deps.Supervisor.Run(ctx, req.Message, sess.ID, sess.Role, sess.User, sess.History(), opts)
+			case "reflect":
+				emit(agent.Event{Type: agent.EventPhase, Phase: "回答后反思改进…"})
+				reply, err = ag.Run(ctx, req.Message, opts)
+				if err == nil {
+					reply, err = ag.Reflect(ctx, req.Message, reply)
+				}
+			case "debate":
+				emit(agent.Event{Type: agent.EventPhase, Phase: "双 Agent 辩论中…"})
+				reply, _, err = ag.Debate(ctx, req.Message, "", "")
+			}
+			if err != nil {
+				ch <- agent.Event{Type: agent.EventError, Message: err.Error(), Err: err}
+			} else if reply != "" {
+				ch <- agent.Event{Type: agent.EventDelta, Content: reply}
+			}
+			ch <- agent.Event{Type: agent.EventDone}
+		}()
+		return ch, nil
+	default:
+		return ag.RunStream(ctx, req.Message, opts)
+	}
 }
 
 // persistHistory 若会话存储实现了 HistoryPersister，把最新历史写回。

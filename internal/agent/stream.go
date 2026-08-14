@@ -13,6 +13,7 @@ type EventType string
 const (
 	EventDelta EventType = "delta"     // 文本增量
 	EventTool  EventType = "tool_call" // 模型调用工具
+	EventPhase EventType = "phase"     // 阶段提示（规划/执行/思考/观察等）
 	EventDone  EventType = "done"      // 本轮完成
 	EventError EventType = "error"     // 出错
 )
@@ -23,6 +24,7 @@ type Event struct {
 	Content string                 `json:"content,omitempty"`
 	Name    string                 `json:"tool_name,omitempty"`
 	Args    map[string]interface{} `json:"tool_args,omitempty"`
+	Phase   string                 `json:"phase,omitempty"`   // phase 事件的阶段文案
 	Message string                 `json:"message,omitempty"` // error 时携带错误文本
 	Err     error                  `json:"-"`
 }

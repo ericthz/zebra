@@ -57,7 +57,7 @@ func (a *Agent) PlanAndExecute(ctx context.Context, userInput string, opts RunOp
 	// 阶段 2：逐步执行
 	var parts []string
 	for i, step := range plan.Steps {
-		out, serr := a.executeStep(ctx, step, opts)
+		out, serr := a.executeStep(ctx, step, opts, nil)
 		if serr != nil {
 			out = fmt.Sprintf("（步骤执行失败: %v）", serr)
 		}
@@ -66,6 +66,38 @@ func (a *Agent) PlanAndExecute(ctx context.Context, userInput string, opts RunOp
 
 	// 阶段 3：汇总
 	return fmt.Sprintf("按规划完成（共 %d 步）：\n%s", len(plan.Steps), strings.Join(parts, "\n")), nil
+}
+
+// PlanAndExecuteStream 规划-执行的流式版：执行过程以 phase/tool_call 事件
+// 推送给前端（规划中 → 执行步骤 i/N → 汇总），最终答案以 delta 输出。
+func (a *Agent) PlanAndExecuteStream(ctx context.Context, userInput string, opts RunOptions, emit func(Event)) (string, error) {
+	if emit == nil {
+		return a.PlanAndExecute(ctx, userInput, opts)
+	}
+	emit(Event{Type: EventPhase, Phase: "规划中…"})
+	plan, err := a.plan(ctx, userInput)
+	if err != nil {
+		return "", fmt.Errorf("规划失败: %w", err)
+	}
+	if len(plan.Steps) == 0 {
+		emit(Event{Type: EventPhase, Phase: "无需拆解，直接执行"})
+		return a.run(ctx, userInput, opts, emit)
+	}
+	emit(Event{Type: EventPhase, Phase: fmt.Sprintf("已规划：%s（共 %d 步）", plan.Summary, len(plan.Steps))})
+
+	var parts []string
+	for i, step := range plan.Steps {
+		emit(Event{Type: EventPhase, Phase: fmt.Sprintf("执行步骤 %d/%d：%s", i+1, len(plan.Steps), step.Title)})
+		out, serr := a.executeStep(ctx, step, opts, emit)
+		if serr != nil {
+			out = fmt.Sprintf("（步骤执行失败: %v）", serr)
+		}
+		parts = append(parts, fmt.Sprintf("步骤%d【%s】: %s", i+1, step.Title, out))
+	}
+	summary := fmt.Sprintf("按规划完成（共 %d 步）：\n%s", len(plan.Steps), strings.Join(parts, "\n"))
+	emit(Event{Type: EventPhase, Phase: "汇总完成"})
+	emit(Event{Type: EventDelta, Content: summary})
+	return summary, nil
 }
 
 // plan 阶段 1：让 LLM 输出 JSON 步骤列表。
@@ -126,7 +158,7 @@ func parsePlan(content string) (*Plan, error) {
 
 // executeStep 阶段 2：执行单个子任务（一次工具循环）。
 // 关键：不写历史/记忆，只返回该步骤的最终文本。
-func (a *Agent) executeStep(ctx context.Context, step PlanStep, opts RunOptions) (string, error) {
+func (a *Agent) executeStep(ctx context.Context, step PlanStep, opts RunOptions, emit func(Event)) (string, error) {
 	msgs := []provider.Message{}
 	if sys, err := a.cfg.Prompts.Render(a.cfg.PromptName, map[string]string{"role": a.role}); err == nil {
 		msgs = append(msgs, provider.Message{Role: "system", Content: sys})
@@ -136,7 +168,7 @@ func (a *Agent) executeStep(ctx context.Context, step PlanStep, opts RunOptions)
 		msgs = a.cfg.Window.Trim(msgs)
 	}
 
-	final, lastErr, _ := a.toolLoop(ctx, msgs, a.cfg.Tools.ToolsFor(a.role), opts, nil)
+	final, lastErr, _ := a.toolLoop(ctx, msgs, a.cfg.Tools.ToolsFor(a.role), opts, emit)
 	if lastErr != nil && final == "" {
 		return "", lastErr
 	}

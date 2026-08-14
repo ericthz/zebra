@@ -61,3 +61,29 @@ func TestReActMaxSteps(t *testing.T) {
 		t.Fatalf("死循环应触发最大步数保护: %v", err)
 	}
 }
+
+// TestReActStream P60：流式 ReAct 推送 思考/行动/观察/结论 轨迹。
+func TestReActStream(t *testing.T) {
+	ag := newReActAgent(reactProvider{})
+	var evs []Event
+	out, err := ag.ReActStream(context.Background(), "1+2 等于多少", RunOptions{}, 3, func(ev Event) { evs = append(evs, ev) })
+	if err != nil || out != "3" {
+		t.Fatalf("ReActStream 异常: %q %v", out, err)
+	}
+	var sawThink, sawTool, sawObserve, sawAnswer bool
+	for _, ev := range evs {
+		switch {
+		case ev.Type == EventPhase && strings.Contains(ev.Phase, "思考"):
+			sawThink = true
+		case ev.Type == EventTool && ev.Name == "calculator":
+			sawTool = true
+		case ev.Type == EventPhase && strings.Contains(ev.Phase, "观察"):
+			sawObserve = true
+		case ev.Type == EventDelta && ev.Content == "3":
+			sawAnswer = true
+		}
+	}
+	if !sawThink || !sawTool || !sawObserve || !sawAnswer {
+		t.Fatalf("ReAct 轨迹事件不完整: think=%v tool=%v observe=%v answer=%v\n%+v", sawThink, sawTool, sawObserve, sawAnswer, evs)
+	}
+}
