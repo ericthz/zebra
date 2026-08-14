@@ -26,7 +26,7 @@ const chatUI = `<!DOCTYPE html>
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Zebra AI Agent · AI Agent 工作台</title>
+<title>Zebra AI Agent · 工作台</title>
 <style>
   :root{
     --bg:#0a1120; --panel:#0f1b2e; --panel-2:#12203a; --border:#1e2f4d;
@@ -181,7 +181,7 @@ const chatUI = `<!DOCTYPE html>
 <div class="wrap">
   <header>
     <button class="hamb" onclick="toggleSidebar()" title="会话列表">☰</button>
-    <div class="brand"><span class="mark">◆</span> Zebra AI Agent <span style="color:var(--muted);font-weight:400">AI Agent 工作台</span></div>
+    <div class="brand"><span class="mark">◆</span> Zebra AI Agent <span style="color:var(--muted);font-weight:400">工作台</span></div>
     <div class="status"><span class="dot" id="dot"></span><span id="statusText">就绪</span></div>
     <div class="headbtns">
       <button onclick="exportConv('txt')" title="导出为文本">TXT</button>
@@ -668,39 +668,40 @@ async function send(retried) {
           if (lines[li].indexOf('data:') === 0) data += lines[li].slice(5).trim();
         }
         if (!data) continue;
-        try {
-          var ev = JSON.parse(data);
-          if (type === 'session') {
-            c.sid = ev;
-            saveConvs(); renderSidebar();
-          } else if (type === 'phase') {
-            typingIndicator(false);
-            activity.push({ t: 'phase', text: ev.phase || '' });
-            addPhase(ev.phase || '');
-          } else if (type === 'delta') {
-            typingIndicator(false);
-            if (!answerEl) {
-              answerEl = bubble('assistant', 'Zebra', '◆');
-              currentAnswer = answerEl;
-              answerEl.classList.add('cursor');
-            }
-            raw += ev.content;
-            answerEl.innerHTML = renderText(raw);
-            scrollBottom();
-          } else if (type === 'tool_call') {
-            toolCount++;
-            setStatus('生成中… · 工具 ×' + toolCount, 'busy');
-            activity.push({ t: 'tool', name: ev.tool_name || '' });
-            addTool(ev.tool_name || '');
-          } else if (type === 'skill') {
-            activity.push({ t: 'skill', name: ev.skill_name || ev.tool_name || '' });
-            addSkill(ev.skill_name || ev.tool_name || '');
-          } else if (type === 'done') {
-            if (answerEl) answerEl.classList.remove('cursor');
-          } else if (type === 'error') {
-            addError(ev.message || '未知错误', q);
+        var ev = null;
+        try { ev = JSON.parse(data); } catch(e) { /* 非 JSON 载荷（如裸字符串 session id）容错 */ }
+        if (type === 'session') {
+          c.sid = (typeof ev === 'string' && ev) || data.trim();
+          saveConvs(); renderSidebar();
+        } else if (!ev) {
+          continue;
+        } else if (type === 'phase') {
+          typingIndicator(false);
+          activity.push({ t: 'phase', text: ev.phase || '' });
+          addPhase(ev.phase || '');
+        } else if (type === 'delta') {
+          typingIndicator(false);
+          if (!answerEl) {
+            answerEl = bubble('assistant', 'Zebra', '◆');
+            currentAnswer = answerEl;
+            answerEl.classList.add('cursor');
           }
-        } catch(e) { /* 半包忽略 */ }
+          raw += ev.content;
+          answerEl.innerHTML = renderText(raw);
+          scrollBottom();
+        } else if (type === 'tool_call') {
+          toolCount++;
+          setStatus('生成中… · 工具 ×' + toolCount, 'busy');
+          activity.push({ t: 'tool', name: ev.tool_name || '' });
+          addTool(ev.tool_name || '');
+        } else if (type === 'skill') {
+          activity.push({ t: 'skill', name: ev.skill_name || ev.tool_name || '' });
+          addSkill(ev.skill_name || ev.tool_name || '');
+        } else if (type === 'done') {
+          if (answerEl) answerEl.classList.remove('cursor');
+        } else if (type === 'error') {
+          addError(ev.message || '未知错误', q);
+        }
       }
     }
   } catch (e) {

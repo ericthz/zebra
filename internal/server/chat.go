@@ -154,8 +154,10 @@ func (s *APIServer) handleChatStream(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Connection", "keep-alive")
 	flusher, _ := w.(http.Flusher)
 
-	// 先回传 session_id（客户端据此续接会话）
-	fmt.Fprintf(w, "event: session\ndata: %s\n\n", sess.ID)
+	// 先回传 session_id（客户端据此续接会话）。必须按 JSON 编码（引号包裹），
+	// 否则前端 JSON.parse 失败，会话 id 永远拿不到。
+	sidJSON, _ := json.Marshal(sess.ID)
+	fmt.Fprintf(w, "event: session\ndata: %s\n\n", sidJSON)
 	if flusher != nil {
 		flusher.Flush()
 	}
