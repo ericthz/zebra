@@ -313,10 +313,43 @@ function renderChat() {
     c.messages.forEach(function(m) {
       var b = bubble(m.role, m.role === 'user' ? '你' : 'Zebra', m.role === 'user' ? '>' : '◆');
       b.innerHTML = renderText(m.text);
-      wireActions(b.parentNode, b, m.q || '');
+      // bubble() 返回气泡 div：b → col → .msg 外层（wrap），按钮与活动块都挂在 wrap 上
+      var wrap = b.parentNode.parentNode;
+      wireActions(wrap, b, m.q || '');
+      // 活动轨迹随消息持久化：刷新/服务重启后按原顺序重放（阶段/技能/工具）
+      if (m.role === 'assistant' && m.activity && m.activity.length) {
+        var act = renderActivityBlock(m.activity);
+        if (act) chat.insertBefore(act, wrap);
+      }
     });
   }
   scrollBottom(true); // 打开/切换会话后直接看最新内容
+}
+// renderActivityBlock 从持久化事件重放活动轨迹块（与直播渲染同一结构）。
+function renderActivityBlock(events) {
+  var wrap = document.createElement('div');
+  wrap.className = 'activity';
+  var tools = {}, toolsRow = null;
+  events.forEach(function(ev) {
+    if (!ev) return;
+    if (ev.t === 'phase' && ev.text) {
+      var r = document.createElement('div');
+      r.className = 'phase'; r.textContent = '◇ ' + ev.text;
+      wrap.appendChild(r);
+    } else if (ev.t === 'skill' && ev.name) {
+      var s = document.createElement('div');
+      s.className = 'phase skill'; s.textContent = '■ 技能：' + ev.name;
+      wrap.appendChild(s);
+    } else if (ev.t === 'tool' && ev.name) {
+      tools[ev.name] = (tools[ev.name] || 0) + 1;
+      if (!toolsRow) { toolsRow = document.createElement('div'); toolsRow.className = 'tools-row'; wrap.appendChild(toolsRow); }
+      var names = Object.keys(tools), parts = [];
+      for (var i = 0; i < names.length; i++) parts.push(names[i] + '×' + tools[names[i]]);
+      toolsRow.textContent = '▲ 工具：' + parts.join(' · ');
+    }
+  });
+  if (!wrap.childNodes.length) return null;
+  return wrap;
 }
 function clearChat() {
   var c = active();
@@ -564,13 +597,14 @@ async function send(retried) {
   var q = text;
   var userBubble = bubble('user', '你', '>');
   userBubble.textContent = text;
-  wireActions(userBubble.parentNode, userBubble, '');
+  wireActions(userBubble.parentNode.parentNode, userBubble, '');
   scrollBottom(true); // 发送后立即跳到最新位置，随后流式按"接近底部则跟随"
   setBusy(true);
   typingIndicator(true);
   toolCount = 0;
   activityEl = null;
   tools = {};
+  var activity = []; // 本次活动轨迹（阶段/技能/工具，随消息持久化）
   controller = new AbortController();
   var answerEl = null;
   var raw = '';
@@ -624,6 +658,7 @@ async function send(retried) {
             saveConvs(); renderSidebar();
           } else if (type === 'phase') {
             typingIndicator(false);
+            activity.push({ t: 'phase', text: ev.phase || '' });
             addPhase(ev.phase || '');
           } else if (type === 'delta') {
             typingIndicator(false);
@@ -638,8 +673,10 @@ async function send(retried) {
           } else if (type === 'tool_call') {
             toolCount++;
             setStatus('生成中… · 工具 ×' + toolCount, 'busy');
+            activity.push({ t: 'tool', name: ev.tool_name || '' });
             addTool(ev.tool_name || '');
           } else if (type === 'skill') {
+            activity.push({ t: 'skill', name: ev.skill_name || ev.tool_name || '' });
             addSkill(ev.skill_name || ev.tool_name || '');
           } else if (type === 'done') {
             if (answerEl) answerEl.classList.remove('cursor');
@@ -655,11 +692,12 @@ async function send(retried) {
   }
   if (answerEl) {
     answerEl.classList.remove('cursor');
-    wireActions(answerEl.parentNode, answerEl, q);
+    wireActions(answerEl.parentNode.parentNode, answerEl, q);
   }
   if (raw) {
     c.messages.push({ role: 'user', text: q, time: now() });
-    c.messages.push({ role: 'assistant', text: raw, time: now(), q: q });
+    c.messages.push({ role: 'assistant', text: raw, time: now(), q: q,
+                      activity: activity.length ? activity : undefined });
   }
   saveConvs(); renderSidebar();
   currentAnswer = null;
