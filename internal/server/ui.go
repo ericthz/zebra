@@ -33,7 +33,7 @@ const chatUI = `<!DOCTYPE html>
     --text:#e2e8f0; --muted:#8494b0; --accent:#3b82f6; --accent-2:#2563eb;
     --user-bg:#1d4ed8; --user-text:#fff; --ok:#22c55e; --err:#f87171; --tool:#fbbf24;
     --code-bg:#0b1626; --hover:#172a4a; --shadow:0 4px 18px rgba(0,0,0,.25);
-    --scroll-thumb:rgba(148,163,184,.28); --scroll-thumb-hover:rgba(148,163,184,.48);
+    --scroll-thumb:rgba(148,163,184,.35); --scroll-thumb-hover:rgba(148,163,184,.55);
     --sidebar-w:264px;
   }
   [data-theme="light"]{
@@ -41,7 +41,7 @@ const chatUI = `<!DOCTYPE html>
     --text:#1a2332; --muted:#64748b; --accent:#2563eb; --accent-2:#1d4ed8;
     --user-bg:#2563eb; --user-text:#fff; --ok:#16a34a; --err:#dc2626; --tool:#b45309;
     --code-bg:#eef2f8; --hover:#eaf0f8; --shadow:0 4px 18px rgba(15,23,42,.08);
-    --scroll-thumb:rgba(15,23,42,.16); --scroll-thumb-hover:rgba(15,23,42,.32);
+    --scroll-thumb:rgba(15,23,42,.22); --scroll-thumb-hover:rgba(15,23,42,.38);
   }
   *{box-sizing:border-box}
   html,body{height:100%}
@@ -63,7 +63,7 @@ const chatUI = `<!DOCTYPE html>
         display:flex;flex-direction:column;height:100vh;transition:transform .25s,background .2s}
   .side-head{display:flex;align-items:center;justify-content:space-between;padding:12px 14px;border-bottom:1px solid var(--border)}
   .side-head b{font-size:13px}
-  #convList{flex:1;overflow-y:auto;padding:8px;scrollbar-width:thin}
+  #convList{flex:1;overflow-y:auto;padding:8px;scrollbar-width:thin;scrollbar-color:var(--scroll-thumb) transparent}
   #convList::-webkit-scrollbar{width:8px}
   #convList::-webkit-scrollbar-track{background:transparent}
   #convList::-webkit-scrollbar-thumb{background:var(--scroll-thumb);border-radius:4px}
@@ -90,7 +90,7 @@ const chatUI = `<!DOCTYPE html>
   .headbtns{display:flex;align-items:center;gap:6px;font-size:12px}
   .headbtns button{font-size:12px;padding:5px 9px}
 
-  main{flex:1;overflow-y:scroll;padding:20px;scrollbar-width:thin;scrollbar-gutter:stable}
+  main{flex:1;overflow-y:scroll;padding:20px;scrollbar-width:thin;scrollbar-gutter:stable;scrollbar-color:var(--scroll-thumb) transparent}
   main::-webkit-scrollbar{width:12px}
   main::-webkit-scrollbar-track{background:transparent}
   main::-webkit-scrollbar-thumb{background:var(--scroll-thumb);border-radius:6px;border:3px solid transparent;background-clip:content-box}
@@ -103,14 +103,14 @@ const chatUI = `<!DOCTYPE html>
   .msg{position:relative;width:100%;max-width:100%}
   .avatar{position:absolute;top:5px;z-index:1;width:34px;height:34px;border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:13px;color:#fff;
           border:1px solid rgba(255,255,255,.22);box-shadow:0 0 0 2px var(--bg),0 4px 10px rgba(0,0,0,.18)}
-  .msg.assistant .avatar{left:0;background:linear-gradient(135deg,var(--accent),#7c3aed);box-shadow:0 0 0 2px var(--bg),0 4px 12px rgba(124,58,237,.4)}
-  .msg.user .avatar{right:0;background:var(--user-bg);box-shadow:0 0 0 2px var(--bg),0 4px 12px rgba(37,99,235,.4)}
+  /* 头像在气泡外侧（探入聊天列两侧页边距，像常规对话组件：◇ 在左、> 在右） */
+  .msg.assistant .avatar{left:-46px;background:linear-gradient(135deg,var(--accent),#7c3aed);box-shadow:0 0 0 2px var(--bg),0 4px 12px rgba(124,58,237,.4)}
+  .msg.user .avatar{right:-46px;background:var(--user-bg);box-shadow:0 0 0 2px var(--bg),0 4px 12px rgba(37,99,235,.4)}
   .msg .col{width:100%;min-width:0}
   .msg.user .col{width:fit-content;margin-left:auto}
   .bubble{background:var(--panel-2);border:1px solid var(--border);border-radius:12px;padding:10px 13px;word-break:break-word;line-height:1.65;box-shadow:var(--shadow);transition:background .2s,border-color .2s}
   .msg.user .bubble{background:var(--user-bg);border-color:var(--user-bg);color:var(--user-text);border-top-right-radius:4px}
-  .msg.assistant .bubble{border-top-left-radius:4px;padding-left:48px}
-  .msg.user .bubble{padding-right:48px}
+  .msg.assistant .bubble{border-top-left-radius:4px}
   .bubble .inline{background:var(--code-bg);border:1px solid var(--border);border-radius:4px;padding:0 4px;font-size:.92em}
   .bubble pre.code{background:var(--code-bg);border:1px solid var(--border);border-radius:8px;padding:10px;overflow-x:auto;font-size:12.5px;line-height:1.5;margin:6px 0}
   .bubble pre.code code{background:none;border:none;padding:0}
@@ -149,6 +149,14 @@ const chatUI = `<!DOCTYPE html>
   .settings{display:none}
   .settings.open{display:flex;gap:8px;margin-top:8px}
   #key{flex:1;min-width:200px}
+
+  /* 窄屏：聊天列两侧页边距放不下外侧头像时，退回气泡边缘（加内边距避免遮字） */
+  @media (max-width:1360px){
+    .msg.assistant .avatar{left:0}
+    .msg.user .avatar{right:0}
+    .msg.assistant .bubble{padding-left:48px}
+    .msg.user .bubble{padding-right:48px}
+  }
 
   @media (max-width:768px){
     aside{position:fixed;left:0;top:0;z-index:50;transform:translateX(-100%)}
