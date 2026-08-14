@@ -115,4 +115,41 @@ func TestPlanAndExecuteStream(t *testing.T) {
 	}
 }
 
+// sloppyPlannerProvider 输出被 {"plan":{...}} 包裹、用 step_title 的规划（小模型风格）。
+type sloppyPlannerProvider struct{ calls int }
+
+func (p *sloppyPlannerProvider) Name() string { return "sloppy-planner" }
+func (p *sloppyPlannerProvider) Chat(_ context.Context, _ []provider.Message, _ []provider.Tool) (provider.Message, error) {
+	p.calls++
+	if p.calls == 1 {
+		return provider.Message{Content: "```json\n{\"plan\":{\"title\":\"天气计划\",\"steps\":[{\"step_title\":\"查天气\",\"task\":\"查天气\"}]}}\n```"}, nil
+	}
+	return provider.Message{Content: "天气结果"}, nil
+}
+func (p *sloppyPlannerProvider) ChatStream(context.Context, []provider.Message, []provider.Tool) (<-chan provider.StreamEvent, error) {
+	return nil, context.Canceled
+}
+
+// TestPlanAndExecuteSloppyModel P62：包裹+step_title 的不规范规划也能执行。
+func TestPlanAndExecuteSloppyModel(t *testing.T) {
+	prompts := prompt.NewRegistry("z")
+	prompts.Register(&prompt.Template{Name: "assistant", Version: "v1", Text: "你是助手 {role}"})
+	ag := New(Config{
+		Router: provider.NewRouter(&sloppyPlannerProvider{}), Tools: tool.NewRegistry(),
+		Prompts: prompts, MaxTurns: 3, PromptName: "assistant",
+	})
+	hist := make([]provider.Message, 0)
+	ag.Bind("s", "admin", "u", &hist)
+
+	out, err := ag.PlanAndExecute(context.Background(), "查天气", RunOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{"共 1 步", "查天气", "天气结果"} {
+		if !strings.Contains(out, want) {
+			t.Fatalf("归一化规划汇总缺 %q，实际:\n%s", want, out)
+		}
+	}
+}
+
 var _ = json.Marshal // 占位

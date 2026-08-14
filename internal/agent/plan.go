@@ -32,13 +32,15 @@ import (
 
 // PlanStep 规划出的一个子步骤。
 type PlanStep struct {
-	Title string `json:"title"` // 步骤标题（供人阅读）
-	Task  string `json:"task"`  // 给执行器的子任务描述
+	Title     string `json:"title"`      // 步骤标题（供人阅读）
+	StepTitle string `json:"step_title"` // 小模型常用别名，归一化到 Title
+	Task      string `json:"task"`       // 给执行器的子任务描述
 }
 
 // Plan 规划结果。
 type Plan struct {
 	Summary string     `json:"summary"`
+	Title   string     `json:"title"` // 小模型常用 title 代替 summary，归一化到 Summary
 	Steps   []PlanStep `json:"steps"`
 }
 
@@ -119,6 +121,15 @@ func (a *Agent) plan(ctx context.Context, userInput string) (*Plan, error) {
 	if err := json.Unmarshal(data, &p); err != nil {
 		return nil, err
 	}
+	// 归一化小模型的不规范字段（title→summary，step_title→title）
+	if p.Summary == "" {
+		p.Summary = p.Title
+	}
+	for i := range p.Steps {
+		if p.Steps[i].Title == "" {
+			p.Steps[i].Title = p.Steps[i].StepTitle
+		}
+	}
 	return &p, nil
 }
 
@@ -127,19 +138,21 @@ var planSchema = map[string]interface{}{
 	"type": "object",
 	"properties": map[string]interface{}{
 		"summary": map[string]interface{}{"type": "string"},
+		"title":   map[string]interface{}{"type": "string"}, // 小模型别名
 		"steps": map[string]interface{}{
 			"type": "array",
 			"items": map[string]interface{}{
 				"type": "object",
 				"properties": map[string]interface{}{
-					"title": map[string]interface{}{"type": "string"},
-					"task":  map[string]interface{}{"type": "string"},
+					"title":      map[string]interface{}{"type": "string"},
+					"step_title": map[string]interface{}{"type": "string"}, // 小模型别名
+					"task":       map[string]interface{}{"type": "string"},
 				},
-				"required": []interface{}{"title", "task"},
+				"required": []interface{}{"task"},
 			},
 		},
 	},
-	"required": []interface{}{"summary", "steps"},
+	"required": []interface{}{"steps"},
 }
 
 // parsePlan 从模型回复中稳健抽取并解析规划 JSON。
