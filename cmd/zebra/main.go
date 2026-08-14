@@ -321,7 +321,7 @@ func traceHooks() (func(name string, args map[string]interface{}, ok bool, err e
 func modeLabel(m string) string {
 	switch m {
 	case "chat":
-		return "Chat 普通对话"
+		return "chat 普通对话"
 	case "plan":
 		return "plan 规划-执行"
 	case "react":
