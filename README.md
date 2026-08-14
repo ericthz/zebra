@@ -8,11 +8,9 @@
 
 > 注意：这不是一个可直接上线的产品，而是一张 **"技能 → 原理 → 代码" 的对照图**。
 
-<p align="left">
-  <img src="docs/images/server_web.png" alt="Zebra Web 工作台" height="420">
-  <img src="docs/images/zebra_console.png" alt="Zebra 终端 CLI" height="420">
-</p>
-<p align="left"><em>Zebra Web 工作台（左）与 Zebra 终端 CLI（右）</em></p>
+<p align="left"><img src="docs/images/server_web.png" alt="Zebra Web 工作台" width="70%"></p>
+<p align="left"><img src="docs/images/zebra_console.png" alt="Zebra 终端 CLI" width="70%"></p>
+<p align="left"><em>Zebra Web 工作台（上）与 Zebra 终端 CLI（下）</em></p>
 
 ---
 
