@@ -100,6 +100,8 @@ const chatUI = `<!DOCTYPE html>
   .empty-hint .big{font-size:17px;color:var(--text)}
   .msg{display:flex;gap:10px;max-width:88%}
   .msg.user{align-self:flex-end;flex-direction:row-reverse}
+  /* 助手回复与规划/工具提示框同宽（满宽）：头像贴左边缘，与提示框左缘同一竖线 */
+  .msg.assistant{max-width:100%}
   .avatar{flex:none;width:34px;height:34px;border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:13px;color:#fff;
           border:1px solid rgba(255,255,255,.22);box-shadow:0 0 0 2px var(--bg),0 4px 10px rgba(0,0,0,.18)}
   .msg.user .avatar{background:var(--user-bg);box-shadow:0 0 0 2px var(--bg),0 4px 12px rgba(37,99,235,.4)}
@@ -154,6 +156,7 @@ const chatUI = `<!DOCTYPE html>
     .backdrop.show{display:block}
     .hamb{display:inline-flex}
     .msg{max-width:94%}
+    .msg.assistant{max-width:100%}
     main{padding:12px}
     .settings.open{flex-wrap:wrap}
   }
