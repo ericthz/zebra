@@ -38,6 +38,8 @@ func main() {
 	// ---- 启动模式：与 Web UI 的模式选择一致 ----
 	mode := flag.String("mode", "chat", "启动模式: chat|plan|react|reflect|debate|supervisor")
 	flag.Parse()
+	// ReAct 最大推理-行动步数（默认 6；REACT_MAX_STEPS 可调）
+	reactMaxSteps := atoiDefault(os.Getenv("REACT_MAX_STEPS"), 6)
 
 	// ---- P37 终端 banner ----
 	observe.PrintBanner(os.Stdout, "Zebra CLI — 本地命令行 Agent 客户端（输入 exit 退出）")
@@ -212,7 +214,9 @@ func main() {
 		RAGChunks:    ragChunks,
 		VoiceEnabled: voice != nil,
 	})
-	fmt.Printf("  %s 模式    : %s（输入 /mode 切换，/help 查看全部）\n", console.Symbol("◇", console.ColorModel), modeLabel(*mode))
+	// 模式行：2 空格缩进（清单树前缀占 4 格），标签补宽 2 格使冒号与清单各列对齐
+	modeLbl := console.Pad(console.Symbol("◇", console.ColorModel)+" 模式", observe.LabelWidth+2)
+	fmt.Printf("  %s: %s（输入 /mode 切换，/help 查看全部）\n", modeLbl, modeLabel(*mode))
 	fmt.Println(strings.Repeat("─", 60))
 	for {
 		// P38：raw 模式 + UTF-8 感知行编辑（中文退格不再残留字节残片）；
@@ -247,7 +251,7 @@ func main() {
 			continue
 		}
 		ctx := context.Background()
-		answer, err := runAgent(ctx, ag, sup, &history, *mode, in)
+		answer, err := runAgent(ctx, ag, sup, &history, *mode, reactMaxSteps, in)
 		if err != nil {
 			fmt.Printf("✗ %v\n", err)
 			continue
@@ -319,7 +323,7 @@ func traceHooks() (func(name string, args map[string]interface{}, ok bool, err e
 func modeLabel(m string) string {
 	switch m {
 	case "chat":
-		return "chat 普通对话"
+		return "Chat 普通对话"
 	case "plan":
 		return "plan 规划-执行"
 	case "react":
@@ -355,7 +359,7 @@ func emitTerminal(ev agent.Event) {
 
 // runAgent 按模式分发执行：chat 走普通对话；plan/react 走流式（活动轨迹）；
 // reflect/debate/supervisor 先打印阶段提示再执行。
-func runAgent(ctx context.Context, ag *agent.Agent, sup *supervisor.Supervisor, history *[]provider.Message, mode, input string) (string, error) {
+func runAgent(ctx context.Context, ag *agent.Agent, sup *supervisor.Supervisor, history *[]provider.Message, mode string, reactMaxSteps int, input string) (string, error) {
 	opts := agent.RunOptions{}
 	switch mode {
 	case "chat":
@@ -363,7 +367,10 @@ func runAgent(ctx context.Context, ag *agent.Agent, sup *supervisor.Supervisor, 
 	case "plan":
 		return ag.PlanAndExecuteStream(ctx, input, opts, emitTerminal)
 	case "react":
-		return ag.ReActStream(ctx, input, opts, 6, emitTerminal)
+		if reactMaxSteps <= 0 {
+			reactMaxSteps = 6 // agent 层默认兜底
+		}
+		return ag.ReActStream(ctx, input, opts, reactMaxSteps, emitTerminal)
 	case "reflect":
 		emitTerminal(agent.Event{Type: agent.EventPhase, Phase: "回答后反思改进…"})
 		answer, err := ag.Run(ctx, input, opts)

@@ -195,7 +195,11 @@ func (s *APIServer) streamForMode(ctx context.Context, ag *agent.Agent, sess *Se
 				reply, err = ag.PlanAndExecuteStream(ctx, req.Message, opts, emit)
 				streamed = true
 			case "react":
-				reply, err = ag.ReActStream(ctx, req.Message, opts, 6, emit)
+				maxSteps := s.deps.ReActMaxSteps
+				if maxSteps <= 0 {
+					maxSteps = 6
+				}
+				reply, err = ag.ReActStream(ctx, req.Message, opts, maxSteps, emit)
 				streamed = true
 			case "supervisor":
 				emit(agent.Event{Type: agent.EventPhase, Phase: "多 Agent 路由中…"})

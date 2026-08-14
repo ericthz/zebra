@@ -19,6 +19,14 @@ import (
 // labelWidth 标签列定宽（显示宽度）：标题与内容的间距，保持紧凑。
 const labelWidth = 12
 
+// LabelWidth 清单标签列定宽（显示宽度），供清单外部行（如 CLI 模式行）对齐冒号。
+const LabelWidth = labelWidth
+
+// Label 生成清单行首标签：符号上色 + 标签列定宽（与 PrintInventory 内部一致）。
+func Label(sym string, code int, name string) string {
+	return console.Pad(console.Symbol(sym, code)+" "+name, labelWidth)
+}
+
 // childTrunkIcon 工具/技能子项树干：竖线定位到行首图标（▲/■）的正下方。
 // 父行 "├── "(4 格) 后图标在第 5 列，故子项前缀 "│"(第 1 列树干) + 3 个空格，
 // 分支起点在第 5 列，与图标垂直对齐。
@@ -72,7 +80,7 @@ type Info struct {
 func PrintInventory(w io.Writer, info Info) {
 	fmt.Fprintln(w, console.Symbol("──", console.ColorTitle)+" "+orDefault(info.Title, "Zebra 启动清单"))
 	lbl := func(sym string, code int, name string) string { // 符号上色 + 标签列定宽
-		return console.Pad(console.Symbol(sym, code)+" "+name, labelWidth)
+		return Label(sym, code, name)
 	}
 
 	// 1. 模型

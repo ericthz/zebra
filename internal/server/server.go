@@ -34,37 +34,38 @@ import (
 
 // Deps 服务依赖（全部可替换，方便测试与生产替换实现）。
 type Deps struct {
-	Router       *provider.Router     // C15 多模型路由
-	Tools        *tool.Registry       // D20 工具权限
-	Prompts      *prompt.Registry     // C16 提示词
-	Mem          *memory.Manager      // C12 记忆
-	Window       *agent.ContextWindow // C11 上下文工程
-	Moderator    safety.Moderator     // D18 内容审核
-	Audit        safety.AuditLog      // D20 审计
-	Sessions     SessionStore         // A2 会话
-	Keys         *KeyStore            // A3 API Key
-	Rate         *RateLimiter         // B6 限流
-	Logger       *slog.Logger         // B5 日志
-	Metrics      *Metrics             // B5 指标
-	MaxTurns     int
-	PromptName   string
-	Skills       *skill.Registry         // P1 技能注册表（nil 关闭技能检索）
-	Notifier     notify.Notifier         // P4 主动出站：任务完成通知（nil 关闭）
-	Cost         *cost.Tracker           // P5 成本归因（nil 关闭）
-	Cache        *cache.SemanticCache    // P5 语义缓存（nil 关闭）
-	RAG          *rag.Index              // P8 知识库检索（nil 关闭）
-	Model        string                  // 主模型名（成本归因用）
-	TaskStore    task.Store              // P12 异步任务存储（nil 关闭异步 API）
-	Supervisor   *supervisor.Supervisor  // P13 多 Agent（nil 关闭 supervisor 模式）
-	Feedback     *feedback.InMemoryStore // P16 反馈闭环（nil 关闭反馈 API）
-	Reload       func() error            // P18 配置热更新（nil 关闭重载端点）
-	Shadow       *eval.ShadowEvaluator   // P21 在线评测/影子模式（nil 关闭）
-	Profile      *memory.ProfileStore    // P22 用户画像（nil 关闭画像 API 与注入）
-	ProfileTTL   time.Duration           // P22 画像事实保鲜期（<=0 永不过期）
-	Extractor    memory.Extractor        // P27 画像抽取器（nil 用规则抽取）
-	Voice        *provider.VoiceClient   // P25 语音交互（nil 关闭语音 API）
-	KG           *kg.Graph               // P52 知识图谱（nil 关闭图谱 API）
-	EvalCasesDir string                  // P55 反馈回流评测数据集目录（空=关闭回流）
+	Router        *provider.Router     // C15 多模型路由
+	Tools         *tool.Registry       // D20 工具权限
+	Prompts       *prompt.Registry     // C16 提示词
+	Mem           *memory.Manager      // C12 记忆
+	Window        *agent.ContextWindow // C11 上下文工程
+	Moderator     safety.Moderator     // D18 内容审核
+	Audit         safety.AuditLog      // D20 审计
+	Sessions      SessionStore         // A2 会话
+	Keys          *KeyStore            // A3 API Key
+	Rate          *RateLimiter         // B6 限流
+	Logger        *slog.Logger         // B5 日志
+	Metrics       *Metrics             // B5 指标
+	MaxTurns      int
+	ReActMaxSteps int // ReAct 最大推理-行动步数（<=0 默认 6）
+	PromptName    string
+	Skills        *skill.Registry         // P1 技能注册表（nil 关闭技能检索）
+	Notifier      notify.Notifier         // P4 主动出站：任务完成通知（nil 关闭）
+	Cost          *cost.Tracker           // P5 成本归因（nil 关闭）
+	Cache         *cache.SemanticCache    // P5 语义缓存（nil 关闭）
+	RAG           *rag.Index              // P8 知识库检索（nil 关闭）
+	Model         string                  // 主模型名（成本归因用）
+	TaskStore     task.Store              // P12 异步任务存储（nil 关闭异步 API）
+	Supervisor    *supervisor.Supervisor  // P13 多 Agent（nil 关闭 supervisor 模式）
+	Feedback      *feedback.InMemoryStore // P16 反馈闭环（nil 关闭反馈 API）
+	Reload        func() error            // P18 配置热更新（nil 关闭重载端点）
+	Shadow        *eval.ShadowEvaluator   // P21 在线评测/影子模式（nil 关闭）
+	Profile       *memory.ProfileStore    // P22 用户画像（nil 关闭画像 API 与注入）
+	ProfileTTL    time.Duration           // P22 画像事实保鲜期（<=0 永不过期）
+	Extractor     memory.Extractor        // P27 画像抽取器（nil 用规则抽取）
+	Voice         *provider.VoiceClient   // P25 语音交互（nil 关闭语音 API）
+	KG            *kg.Graph               // P52 知识图谱（nil 关闭图谱 API）
+	EvalCasesDir  string                  // P55 反馈回流评测数据集目录（空=关闭回流）
 }
 
 // APIServer HTTP 服务。

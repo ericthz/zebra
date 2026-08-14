@@ -322,6 +322,7 @@ curl :8080/readyz    # ready
 | `HTTP_TIMEOUT` | `60` | LLM 请求超时秒数 |
 | `ZEBRA_SUMMARIZER` | 空 | `llm` 时启用 LLM 对话摘要压缩 |
 | `ZEBRA_QUERY_REWRITE` | 空 | `1` 时启用查询改写（提升检索） |
+| `REACT_MAX_STEPS` | `6` | ReAct 推理-行动最大步数（达到上限未收敛报错中止） |
 
 ### 5.2 服务与安全
 
