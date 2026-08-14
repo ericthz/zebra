@@ -12,12 +12,26 @@ services:
   zebra:
     build: .
     depends_on: [ollama, qdrant]
+    restart: unless-stopped
     environment:
       OLLAMA_BASE_URL: http://ollama:11434
       QDRANT_URL: http://qdrant:6333
       ADMIN_KEY: ${ADMIN_KEY:-admin-key}
       USER_KEY: ${USER_KEY:-user-key}
+      EXEC_WORKDIR: /app/workspace
+      # 可选：影子评测 / 语音 / Redis（取消注释即启用）
+      # ZEBRA_SHADOW_MODEL: qwen2.5:7b
+      # VOICE_BASE_URL: https://api.openai.com/v1
+      # REDIS_URL: redis:6379
+    # 数据目录挂载：改 skills/prompts/docs/plugins 可热更新；沙箱工作区持久化
+    volumes:
+      - ./skills:/app/skills:ro
+      - ./prompts:/app/prompts:ro
+      - ./docs:/app/docs:ro
+      - ./plugins:/app/plugins:ro
+      - zebra_workspace:/app/workspace
     ports: ["8080:8080"]
 
 volumes:
   ollama:
+  zebra_workspace:

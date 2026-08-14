@@ -1,5 +1,5 @@
 # E21 工程化常用命令
-.PHONY: build run zebra test vet lint eval docker-up
+.PHONY: build run zebra mcp test vet lint eval eval-redteam fmt clean docker-up docker-down
 
 build:
 	go build -o bin/zebra-server ./cmd/server
@@ -26,6 +26,15 @@ lint:
 
 eval: ## LLM 黄金评测（需真实模型，如本地 Ollama）
 	ZEBRA_EVAL=1 go test ./test/eval/ -v
+
+eval-redteam: ## 红队评测：注入/越狱用例安全分门槛（需真实模型）
+	ZEBRA_EVAL=1 go test ./test/eval/ -run RedTeam -v
+
+fmt: ## 格式化全部 Go 代码
+	gofmt -w cmd internal
+
+clean: ## 清理本地构建产物
+	rm -rf bin
 
 docker-up: ## 一键起 ollama+qdrant+zebra
 	docker compose up --build

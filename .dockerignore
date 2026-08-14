@@ -1,0 +1,12 @@
+# 构建上下文卫生：仅打包镜像所需内容
+.git
+bin
+workspace
+test
+*.log
+.env
+Dockerfile
+docker-compose.yml
+README.md
+Makefile
+LICENSE
