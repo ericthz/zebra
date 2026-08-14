@@ -26,7 +26,7 @@ const chatUI = `<!DOCTYPE html>
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Zebra AI Agent · 企业控制台</title>
+<title>Zebra AI Agent · AI Agent 工作台</title>
 <style>
   :root{
     --bg:#0a1120; --panel:#0f1b2e; --panel-2:#12203a; --border:#1e2f4d;
@@ -181,7 +181,7 @@ const chatUI = `<!DOCTYPE html>
 <div class="wrap">
   <header>
     <button class="hamb" onclick="toggleSidebar()" title="会话列表">☰</button>
-    <div class="brand"><span class="mark">◆</span> Zebra AI Agent <span style="color:var(--muted);font-weight:400">企业控制台</span></div>
+    <div class="brand"><span class="mark">◆</span> Zebra AI Agent <span style="color:var(--muted);font-weight:400">AI Agent 工作台</span></div>
     <div class="status"><span class="dot" id="dot"></span><span id="statusText">就绪</span></div>
     <div class="headbtns">
       <button onclick="exportConv('txt')" title="导出为文本">TXT</button>
