@@ -98,18 +98,19 @@ const chatUI = `<!DOCTYPE html>
   .chat{max-width:960px;margin:0 auto;display:flex;flex-direction:column;gap:12px}
   .empty-hint{text-align:center;color:var(--muted);margin-top:52px;font-size:13px;line-height:2}
   .empty-hint .big{font-size:17px;color:var(--text)}
-  .msg{display:flex;gap:10px;max-width:88%}
-  .msg.user{align-self:flex-end;flex-direction:row-reverse}
-  /* 助手回复与规划/工具提示框同宽（满宽）：头像贴左边缘，与提示框左缘同一竖线 */
-  .msg.assistant{max-width:100%}
-  .avatar{flex:none;width:34px;height:34px;border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:13px;color:#fff;
+  /* 头像不占宽度：绝对定位在消息行左右边缘（◇ 左 / > 右），纵向对齐、突出显示；
+     气泡因此整行铺满，与规划/工具提示框左右边线完全对齐 */
+  .msg{position:relative;width:100%;max-width:100%}
+  .avatar{position:absolute;top:5px;z-index:1;width:34px;height:34px;border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:13px;color:#fff;
           border:1px solid rgba(255,255,255,.22);box-shadow:0 0 0 2px var(--bg),0 4px 10px rgba(0,0,0,.18)}
-  .msg.user .avatar{background:var(--user-bg);box-shadow:0 0 0 2px var(--bg),0 4px 12px rgba(37,99,235,.4)}
-  .msg.assistant .avatar{background:linear-gradient(135deg,var(--accent),#7c3aed);box-shadow:0 0 0 2px var(--bg),0 4px 12px rgba(124,58,237,.4)}
-  .msg > div{min-width:0}
+  .msg.assistant .avatar{left:0;background:linear-gradient(135deg,var(--accent),#7c3aed);box-shadow:0 0 0 2px var(--bg),0 4px 12px rgba(124,58,237,.4)}
+  .msg.user .avatar{right:0;background:var(--user-bg);box-shadow:0 0 0 2px var(--bg),0 4px 12px rgba(37,99,235,.4)}
+  .msg .col{width:100%;min-width:0}
+  .msg.user .col{width:fit-content;margin-left:auto}
   .bubble{background:var(--panel-2);border:1px solid var(--border);border-radius:12px;padding:10px 13px;word-break:break-word;line-height:1.65;box-shadow:var(--shadow);transition:background .2s,border-color .2s}
   .msg.user .bubble{background:var(--user-bg);border-color:var(--user-bg);color:var(--user-text);border-top-right-radius:4px}
-  .msg.assistant .bubble{border-top-left-radius:4px}
+  .msg.assistant .bubble{border-top-left-radius:4px;padding-left:48px}
+  .msg.user .bubble{padding-right:48px}
   .bubble .inline{background:var(--code-bg);border:1px solid var(--border);border-radius:4px;padding:0 4px;font-size:.92em}
   .bubble pre.code{background:var(--code-bg);border:1px solid var(--border);border-radius:8px;padding:10px;overflow-x:auto;font-size:12.5px;line-height:1.5;margin:6px 0}
   .bubble pre.code code{background:none;border:none;padding:0}
@@ -155,8 +156,6 @@ const chatUI = `<!DOCTYPE html>
     .backdrop{position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:40}
     .backdrop.show{display:block}
     .hamb{display:inline-flex}
-    .msg{max-width:94%}
-    .msg.assistant{max-width:100%}
     main{padding:12px}
     .settings.open{flex-wrap:wrap}
   }
@@ -418,7 +417,7 @@ function bubble(role, name, avatar) {
   var av = document.createElement('div');
   av.className = 'avatar'; av.textContent = avatar;
   var col = document.createElement('div');
-  col.style.flex = '1';
+  col.className = 'col';
   var b = document.createElement('div');
   b.className = 'bubble';
   var meta = document.createElement('div');
