@@ -87,6 +87,77 @@ type Info struct {
 	ShadowSample    float64
 	RedisURL        string // 空=内存会话
 	Mode            string // 当前对话模式（空=不显示；Zebra CLI 传入，server 无全局模式）
+	Compact         bool   // 精简模式：工具/MCP/技能只显示个数，子项不展开
+	REPL            bool   // 交互式终端（有 /tools 等命令）：精简模式下个数行尾提示查看命令
+}
+
+// compactHint Compact 且 REPL 时返回行尾提示"（hint）"，否则空串。
+// server 无 REPL 命令，精简时不给提示，避免误导。
+func compactHint(info Info, hint string) string {
+	if info.Compact && info.REPL {
+		return "（" + hint + "）"
+	}
+	return ""
+}
+
+// PrintToolDetails 打印工具完整清单（名称 + 描述），供 REPL /tools 命令复用
+// （tree=true 与 PrintInventory 展开时的树形子项一致；false 为 REPL 平铺靠左）。
+func PrintToolDetails(w io.Writer, reg *tool.Registry, tree bool) {
+	if reg == nil {
+		return
+	}
+	names := reg.Names()
+	descs := reg.Descriptions()
+	maxName := 0
+	for _, n := range names {
+		if w := console.Width(n); w > maxName {
+			maxName = w
+		}
+	}
+	for i, n := range names {
+		fmt.Fprintf(w, "%s%s: %s\n", indent(tree, i, len(names)), console.Pad(n, maxName+2), descs[n])
+	}
+}
+
+// PrintMCPDetails 打印 MCP 已连接工具完整清单，供 REPL /mcp 命令复用。
+func PrintMCPDetails(w io.Writer, tools []Item, tree bool) {
+	if len(tools) == 0 {
+		return
+	}
+	maxName := 0
+	for _, t := range tools {
+		if w := console.Width(t.Name); w > maxName {
+			maxName = w
+		}
+	}
+	for i, t := range tools {
+		fmt.Fprintf(w, "%s%s: %s\n", indent(tree, i, len(tools)), console.Pad(t.Name, maxName+2), t.Description)
+	}
+}
+
+// PrintSkillDetails 打印技能完整清单（名称 + 描述），供 REPL /skills 命令复用。
+func PrintSkillDetails(w io.Writer, skills []*skill.Skill, tree bool) {
+	if len(skills) == 0 {
+		return
+	}
+	maxName := 0
+	for _, sk := range skills {
+		if w := console.Width(sk.Name); w > maxName {
+			maxName = w
+		}
+	}
+	for i, sk := range skills {
+		fmt.Fprintf(w, "%s%s: %s\n", indent(tree, i, len(skills)), console.Pad(sk.Name, maxName+2), sk.Description)
+	}
+}
+
+// indent 返回子项行前缀：树形（清单展开）用树干+分支竖线；平铺（REPL 命令）
+// 去掉竖线与树形、不缩进，靠左对齐。
+func indent(tree bool, i, total int) string {
+	if !tree {
+		return ""
+	}
+	return childTrunkIcon + branch(i, total)
 }
 
 // PrintInventory 打印能力清单（纯函数，便于测试与两端复用）。
@@ -119,52 +190,32 @@ func PrintInventory(w io.Writer, info Info) {
 		fmt.Fprintf(w, "%s%s: %s\n", parent(), lbl("◆", console.ColorModel, "模型"), strings.Join(info.Models, " → "))
 	}
 
-	// 2. 工具（父级：数量；子项：树形分支逐行，名称 + 描述）
+	// 2. 工具（父级：数量；子项：树形分支逐行，名称 + 描述。Compact 只显示个数，REPL 同行提示）
 	if info.Tools != nil {
 		names := info.Tools.Names()
-		fmt.Fprintf(w, "%s%s: %d 个\n", parent(), lbl("▲", console.ColorTool, "工具"), len(names))
-		descs := info.Tools.Descriptions()
-		maxName := 0
-		for _, n := range names {
-			if w := console.Width(n); w > maxName {
-				maxName = w
-			}
-		}
-		for i, n := range names {
-			// 名称补宽到组内最长，使冒号像父级一样对齐在同一竖列
-			fmt.Fprintf(w, "%s%s%s: %s\n", childTrunkIcon, branch(i, len(names)), console.Pad(n, maxName+2), descs[n])
+		fmt.Fprintf(w, "%s%s: %d 个%s\n", parent(), lbl("▲", console.ColorTool, "工具"), len(names), compactHint(info, "输入 /tools 查看全部"))
+		if !info.Compact {
+			PrintToolDetails(w, info.Tools, true)
 		}
 	}
 
-	// 3. MCP 状态（父级：模式与连接数；子项：每个 MCP 工具逐行展示，与工具一致）
+	// 3. MCP 状态（父级：模式与连接数；子项：每个 MCP 工具逐行展示。Compact 只显示个数，REPL 同行提示）
 	if info.MCPMode == "" {
 		fmt.Fprintf(w, "%s%s: 未启用（MCP_MODE 未设置）\n", parent(), lbl("●", console.ColorMCP, "MCP"))
 	} else {
-		fmt.Fprintf(w, "%s%s: 模式=%s · 已连接 %d 个工具\n", parent(), lbl("●", console.ColorMCP, "MCP"), info.MCPMode, info.MCPCount)
-		maxName := 0
-		for _, t := range info.MCPTools {
-			if w := console.Width(t.Name); w > maxName {
-				maxName = w
-			}
-		}
-		for i, t := range info.MCPTools {
-			fmt.Fprintf(w, "%s%s%s: %s\n", childTrunkIcon, branch(i, len(info.MCPTools)), console.Pad(t.Name, maxName+2), t.Description)
+		fmt.Fprintf(w, "%s%s: 模式=%s · 已连接 %d 个工具%s\n", parent(), lbl("●", console.ColorMCP, "MCP"), info.MCPMode, info.MCPCount, compactHint(info, "输入 /mcp 查看全部"))
+		if !info.Compact {
+			PrintMCPDetails(w, info.MCPTools, true)
 		}
 	}
 
-	// 4. 技能（父级：数量；子项：树形分支逐行，名称 — 描述）
+	// 4. 技能（父级：数量；子项：树形分支逐行，名称 — 描述。Compact 只显示个数，REPL 同行提示）
 	if len(info.Skills) == 0 {
 		fmt.Fprintf(w, "%s%s: 无（skills/ 目录为空或加载失败）\n", parent(), lbl("■", console.ColorSkill, "技能"))
 	} else {
-		fmt.Fprintf(w, "%s%s: %d 个\n", parent(), lbl("■", console.ColorSkill, "技能"), len(info.Skills))
-		maxName := 0
-		for _, sk := range info.Skills {
-			if w := console.Width(sk.Name); w > maxName {
-				maxName = w
-			}
-		}
-		for i, sk := range info.Skills {
-			fmt.Fprintf(w, "%s%s%s: %s\n", childTrunkIcon, branch(i, len(info.Skills)), console.Pad(sk.Name, maxName+2), sk.Description)
+		fmt.Fprintf(w, "%s%s: %d 个%s\n", parent(), lbl("■", console.ColorSkill, "技能"), len(info.Skills), compactHint(info, "输入 /skills 查看全部"))
+		if !info.Compact {
+			PrintSkillDetails(w, info.Skills, true)
 		}
 	}
 

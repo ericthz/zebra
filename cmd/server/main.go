@@ -546,7 +546,7 @@ func main() {
 		VoiceEnabled:    voice != nil,
 		ShadowCandidate: shadowCandidate,
 		ShadowSample:    shadowSample,
-		RedisURL:        os.Getenv("REDIS_URL"),
+		Compact:         true, // 工具/MCP/技能只显示个数，明细走 HTTP API（GET /api/v1/tools 等）
 	})
 
 	addr = envOr("ADDR", ":8080")
