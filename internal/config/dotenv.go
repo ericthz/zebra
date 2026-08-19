@@ -36,8 +36,13 @@ func Parse(data []byte) (map[string]string, error) {
 		if line == "" || strings.HasPrefix(line, "#") {
 			continue // 空行与注释
 		}
+		// bash 风格 export 前缀：仅当 "export" 后紧跟空白才算（否则 "exported=1"
+		// 这类合法 KEY 会被误当 export 前缀截断）。
 		if strings.HasPrefix(line, "export") {
-			line = strings.TrimSpace(line[len("export"):]) // bash 风格前缀
+			rest := line[len("export"):]
+			if rest == "" || rest[0] == ' ' || rest[0] == '\t' {
+				line = strings.TrimSpace(rest)
+			}
 		}
 		idx := strings.IndexByte(line, '=')
 		if idx <= 0 {

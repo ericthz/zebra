@@ -98,7 +98,7 @@ func (t *Tracker) Snapshot() string {
 		fmt.Fprintf(&b, "zebra_cost_user_tokens_in{user=%q} %d\n", u, c.inTokens)
 		fmt.Fprintf(&b, "zebra_cost_user_tokens_out{user=%q} %d\n", u, c.outTokens)
 	}
-	// 按会话
+	// 按会话（含美元估价：Estimate 把 token 用量按模型单价换算成成本）
 	sess := make([]string, 0, len(t.perSess))
 	for s := range t.perSess {
 		sess = append(sess, s)
@@ -108,6 +108,8 @@ func (t *Tracker) Snapshot() string {
 		c := t.perSess[s]
 		fmt.Fprintf(&b, "zebra_cost_session_tokens_in{session=%q,model=%q} %d\n", s, c.model, c.inTokens)
 		fmt.Fprintf(&b, "zebra_cost_session_tokens_out{session=%q,model=%q} %d\n", s, c.model, c.outTokens)
+		fmt.Fprintf(&b, "zebra_cost_session_usd{session=%q,model=%q} %g\n", s, c.model,
+			Estimate(c.model, int(c.inTokens), int(c.outTokens)))
 	}
 	return b.String()
 }

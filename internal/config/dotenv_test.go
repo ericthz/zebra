@@ -48,6 +48,31 @@ func TestParseErrors(t *testing.T) {
 	}
 }
 
+// TestExportPrefixNotMistaken 验证：以 export 开头的 KEY 不被误当 export 前缀截断。
+func TestExportPrefixNotMistaken(t *testing.T) {
+	data := []byte(`
+exported=1
+export=2
+exported_key=3
+export EXPORTED_WITH_PREFIX=4
+`)
+	vars, err := Parse(data)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := map[string]string{
+		"exported":             "1",
+		"export":               "2",
+		"exported_key":         "3",
+		"EXPORTED_WITH_PREFIX": "4",
+	}
+	for k, v := range want {
+		if vars[k] != v {
+			t.Fatalf("Parse[%s] = %q, want %q（全部: %v）", k, vars[k], v, vars)
+		}
+	}
+}
+
 func TestLoadPrecedence(t *testing.T) {
 	dir := t.TempDir()
 	envFile := filepath.Join(dir, ".env")

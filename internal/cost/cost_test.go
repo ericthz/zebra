@@ -33,6 +33,18 @@ func TestEstimate(t *testing.T) {
 	}
 }
 
+// TestSnapshotIncludesUSD 验证：快照输出按会话的美元估价（Estimate 接线）。
+func TestSnapshotIncludesUSD(t *testing.T) {
+	tr := NewTracker()
+	tr.Record("alice", "s1", "gpt-4o-mini", 1_000_000, 1_000_000)
+
+	snap := tr.Snapshot()
+	// gpt-4o-mini 1M/1M token ≈ 0.75 美元
+	if !contains(snap, `zebra_cost_session_usd{session="s1",model="gpt-4o-mini"} 0.75`) {
+		t.Fatalf("快照缺美元估价: %s", snap)
+	}
+}
+
 func contains(s, sub string) bool {
 	for i := 0; i+len(sub) <= len(s); i++ {
 		if s[i:i+len(sub)] == sub {

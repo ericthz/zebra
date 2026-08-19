@@ -50,6 +50,11 @@ func newBM25(chunks []Chunk) *bm25 {
 	}
 	if len(chunks) > 0 {
 		b.avgLen = float64(total) / float64(len(chunks))
+		if b.avgLen <= 0 {
+			// 语料全是空块：avgLen=0 会让 score 分母出现 0/0 → NaN，
+			// NaN 会污染融合分并让排序失效。兜底为 1 保持数值稳定。
+			b.avgLen = 1
+		}
 	}
 	return b
 }
@@ -70,8 +75,8 @@ func (b *bm25) score(query string, idx int) float64 {
 			continue // 文档里没有这个词 → 该项不贡献
 		}
 		denom := f + b.k1*(1-b.b+b.b*float64(b.docLen[idx])/b.avgLen)
-		if denom == 0 {
-			continue
+		if denom <= 0 || math.IsNaN(denom) {
+			continue // 分母异常（如除零残留 NaN）→ 该项不贡献
 		}
 		s += b.idf(t) * f * (b.k1 + 1) / denom
 	}

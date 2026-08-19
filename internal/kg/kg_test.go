@@ -36,3 +36,26 @@ func TestGraphQuery(t *testing.T) {
 		t.Fatal("无关实体应返回空")
 	}
 }
+
+func TestGraphSearch(t *testing.T) {
+	g := NewGraph()
+	g.Add(Triple{Subject: "zebra", Predicate: "支持", Object: "工具调用"})
+	g.Add(Triple{Subject: "工具调用", Predicate: "属于", Object: "Agent能力"})
+
+	// 查询文本含实体"zebra"，应命中其出边
+	out := g.Search("zebra 有哪些能力？")
+	if len(out) != 1 || out[0].Object != "工具调用" {
+		t.Fatalf("Search(zebra) 应命中 1 条关系，实际 %v", out)
+	}
+
+	// 查询含两个实体（zebra 与 工具调用），应去重返回两条
+	out = g.Search("zebra 与 工具调用 什么关系？")
+	if len(out) != 2 {
+		t.Fatalf("Search 应返回 2 条去重关系，实际 %v", out)
+	}
+
+	// 无命中 → 空
+	if len(g.Search("你好")) != 0 {
+		t.Fatal("无关查询应返回空")
+	}
+}

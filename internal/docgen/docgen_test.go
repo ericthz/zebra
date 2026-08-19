@@ -92,6 +92,29 @@ func TestWritePDF(t *testing.T) {
 	}
 }
 
+// TestWritePDFASCIISanitize 最小 PDF 引擎不支持 CID 字体：中文应被替换为占位符，
+// 且字节仍是合法 ASCII（不产生乱码字节流）。
+func TestWritePDFASCIISanitize(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "cjk.pdf")
+	if err := WritePDF(path, "周报", []string{"本周进展良好", "下周计划：完成报告"}); err != nil {
+		t.Fatal(err)
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	s := string(data)
+	if strings.Contains(s, "周报") || strings.Contains(s, "本周进展") {
+		t.Fatal("中文不应原样进入 PDF 内容流（无 CID 字体会乱码）")
+	}
+	// 替换后仍为合法 PDF：结构标记齐全
+	for _, want := range []string{"xref", "trailer", "startxref", "%%EOF"} {
+		if !strings.Contains(s, want) {
+			t.Fatalf("替换中文后 PDF 结构被破坏，缺少 %q", want)
+		}
+	}
+}
+
 func TestCharts(t *testing.T) {
 	labels := []string{"周一", "周二", "周三"}
 	values := []float64{10, 25, 8}

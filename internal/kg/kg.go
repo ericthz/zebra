@@ -62,6 +62,32 @@ func (g *Graph) Query(entity string) []Triple {
 	return out
 }
 
+// entityRule 从自然语言查询里粗提候选实体（中文/英文单词片段）。
+var entityRule = regexp.MustCompile(`[\p{Han}A-Za-z0-9]{1,24}`)
+
+// Search 从查询文本中提取候选实体并反查图谱，返回去重后的相关三元组。
+// 用于把知识图谱接入 Agent 检索：问题里的实体（如"zebra"）在图谱中
+// 有出/入边时，这些关系能直接服务关系类问题（A 依赖谁 / 谁属于 B）。
+// 无命中返回空切片（不影响正常注入）。
+func (g *Graph) Search(query string) []Triple {
+	seen := map[string]bool{}
+	var out []Triple
+	for _, m := range entityRule.FindAllString(query, -1) {
+		for _, t := range g.Query(m) {
+			k := t.Subject + "\x00" + t.Predicate + "\x00" + t.Object
+			if seen[k] {
+				continue
+			}
+			seen[k] = true
+			out = append(out, t)
+			if len(out) >= 8 {
+				return out
+			}
+		}
+	}
+	return out
+}
+
 // Size 三元组总数。
 func (g *Graph) Size() int {
 	g.mu.RLock()

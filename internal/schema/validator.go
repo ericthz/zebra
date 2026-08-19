@@ -32,8 +32,8 @@ func Validate(data []byte, sch map[string]interface{}) error {
 func check(v interface{}, sch map[string]interface{}, path string) error {
 	typ, _ := sch["type"].(string)
 
-	// enum 约束
-	if enum, ok := sch["enum"].([]interface{}); ok {
+	// enum 约束（兼容 []string 与 []interface{} 两种声明形态，见 enumValues）
+	if enum := enumValues(sch); len(enum) > 0 {
 		for _, e := range enum {
 			if jsonEqual(v, e) {
 				return nil // 命中 enum 即通过（不再检查类型，enums 已隐含）
@@ -49,11 +49,9 @@ func check(v interface{}, sch map[string]interface{}, path string) error {
 			return fmt.Errorf("%s: 期望 object，实际 %T", path, v)
 		}
 		// required
-		if req, ok := sch["required"].([]interface{}); ok {
-			for _, name := range req {
-				if _, exists := obj[fmt.Sprint(name)]; !exists {
-					return fmt.Errorf("%s: 缺少必填字段 %s", path, name)
-				}
+		for _, name := range requiredNames(sch) {
+			if _, exists := obj[name]; !exists {
+				return fmt.Errorf("%s: 缺少必填字段 %s", path, name)
 			}
 		}
 		// properties
@@ -113,4 +111,39 @@ func jsonEqual(a, b interface{}) bool {
 	ab, _ := json.Marshal(a)
 	bb, _ := json.Marshal(b)
 	return string(ab) == string(bb)
+}
+
+// enumValues 归一化 enum 声明，兼容 []string 与 []interface{} 两种形态。
+// 历史上 schema 混用两种类型；只按 []interface{} 断言会导致 []string 声明的
+// enum 静默失效（P2-D：如 debate.go 的 winner、memory/extract.go 的类型枚举）。
+// 返回 []interface{} 以便 jsonEqual 深度比较。
+func enumValues(sch map[string]interface{}) []interface{} {
+	if enum, ok := sch["enum"].([]string); ok {
+		out := make([]interface{}, 0, len(enum))
+		for _, e := range enum {
+			out = append(out, e)
+		}
+		return out
+	}
+	if enum, ok := sch["enum"].([]interface{}); ok {
+		return enum
+	}
+	return nil
+}
+
+// requiredNames 归一化 required 字段，兼容 []string 与 []interface{} 两种声明形态。
+// 历史上各处 schema 混用两种类型，若只按 []interface{} 断言会导致 []string 声明的
+// 必填字段被静默跳过（不校验）。
+func requiredNames(sch map[string]interface{}) []string {
+	if req, ok := sch["required"].([]string); ok {
+		return req
+	}
+	if req, ok := sch["required"].([]interface{}); ok {
+		names := make([]string, 0, len(req))
+		for _, n := range req {
+			names = append(names, fmt.Sprint(n))
+		}
+		return names
+	}
+	return nil
 }

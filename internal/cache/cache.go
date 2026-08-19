@@ -35,6 +35,7 @@ type SemanticCache struct {
 }
 
 type cacheItem struct {
+	scope  string // 租户/用户命名空间（A4 隔离：跨用户答案不得互命）
 	query  string
 	answer string
 	vec    []float32
@@ -42,12 +43,17 @@ type cacheItem struct {
 
 // New 构造语义缓存。
 // threshold 建议 0.90~0.95（过高难命中，过低易误命中）。
+// 六12：maxEntries<=0 会让 Put 的淘汰逻辑越界 panic（负下标）或缓存永不
+// 保留内容，这里强制下限 1。
 func New(embed memory.Embedder, threshold float64, maxEntries int) *SemanticCache {
+	if maxEntries <= 0 {
+		maxEntries = 1
+	}
 	return &SemanticCache{embed: embed, threshold: threshold, maxEntries: maxEntries}
 }
 
-// Get 检索缓存；命中返回 (answer, true)。
-func (c *SemanticCache) Get(ctx context.Context, query string) (string, bool) {
+// Get 检索缓存（限定 scope 命名空间）；命中返回 (answer, true)。
+func (c *SemanticCache) Get(ctx context.Context, scope, query string) (string, bool) {
 	vec, err := c.embed.Embed(ctx, query)
 	if err != nil {
 		c.miss()
@@ -59,6 +65,9 @@ func (c *SemanticCache) Get(ctx context.Context, query string) (string, bool) {
 	best := -1.0
 	var bestAnswer string
 	for _, it := range c.items {
+		if it.scope != scope {
+			continue // 只在自己命名空间内比较，防跨租户泄漏（A4）
+		}
 		if sim := memory.Cosine(vec, it.vec); sim > best {
 			best = sim
 			bestAnswer = it.answer
@@ -73,14 +82,14 @@ func (c *SemanticCache) Get(ctx context.Context, query string) (string, bool) {
 }
 
 // Put 写入一条缓存（达到上限淘汰最旧）。
-func (c *SemanticCache) Put(ctx context.Context, query, answer string) {
+func (c *SemanticCache) Put(ctx context.Context, scope, query, answer string) {
 	vec, err := c.embed.Embed(ctx, query)
 	if err != nil || answer == "" {
 		return
 	}
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	c.items = append(c.items, cacheItem{query: query, answer: answer, vec: vec})
+	c.items = append(c.items, cacheItem{scope: scope, query: query, answer: answer, vec: vec})
 	if len(c.items) > c.maxEntries {
 		c.items = c.items[len(c.items)-c.maxEntries:]
 	}

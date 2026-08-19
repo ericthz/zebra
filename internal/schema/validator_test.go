@@ -48,3 +48,25 @@ func TestValidateEnumAndArray(t *testing.T) {
 		t.Fatal("数组元素类型错误应报错")
 	}
 }
+
+// TestValidateEnumStringSlice P2-D：enum 用 []string 声明时也必须生效
+// （历史 bug：只断言 []interface{}，[]string 声明的 enum 被静默跳过）。
+func TestValidateEnumStringSlice(t *testing.T) {
+	sch := map[string]interface{}{
+		"type": "object",
+		"properties": map[string]interface{}{
+			"winner": map[string]interface{}{
+				"type": "string",
+				"enum": []string{"left", "right", "tie"},
+			},
+		},
+	}
+	// 合法
+	if err := Validate([]byte(`{"winner":"right"}`), sch); err != nil {
+		t.Fatalf("合法 enum 值应通过: %v", err)
+	}
+	// enum 外值必须报错（旧实现会静默通过）
+	if err := Validate([]byte(`{"winner":"admin"}`), sch); err == nil {
+		t.Fatal("[]string 声明的 enum 外值应报错")
+	}
+}

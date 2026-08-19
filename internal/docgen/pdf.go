@@ -58,18 +58,32 @@ func pdfContent(title string, lines []string) string {
 	var b strings.Builder
 	b.WriteString("BT\n/F1 18 Tf\n1 0 0 1 72 800 Tm\n")
 	if title != "" {
-		b.WriteString("(" + pdfEscape(title) + ") Tj\n")
+		b.WriteString("(" + pdfEscape(pdfASCII(title)) + ") Tj\n")
 	}
 	y := 770
 	for _, l := range lines {
 		if y < 60 {
 			break // 超出页面底部停止（单页）
 		}
-		fmt.Fprintf(&b, "1 0 0 1 72 %d Tm\n/F1 11 Tf\n(%s) Tj\n", y, pdfEscape(l))
+		fmt.Fprintf(&b, "1 0 0 1 72 %d Tm\n/F1 11 Tf\n(%s) Tj\n", y, pdfEscape(pdfASCII(l)))
 		y -= 22
 	}
 	b.WriteString("ET\n")
 	return b.String()
+}
+
+// pdfASCII 把非 ASCII 字符替换为占位符（最小 PDF 引擎不支持 CID 字体，
+// 直接塞 UTF-8 字节会乱码；替换后至少保证文件结构合法可打开）。
+func pdfASCII(s string) string {
+	repl := make([]rune, 0, len(s))
+	for _, r := range s {
+		if r > 0x7E || r < 0x20 {
+			repl = append(repl, '?')
+			continue
+		}
+		repl = append(repl, r)
+	}
+	return string(repl)
 }
 
 // pdfEscape 转义 PDF 字符串中的特殊字符（括号/反斜杠）。
