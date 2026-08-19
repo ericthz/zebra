@@ -263,16 +263,22 @@ func main() {
 			console.Symbol("◉", console.ColorModel), len(images))
 	}
 	fmt.Println(strings.Repeat("─", 60))
+	// 聊天历史：↑/↓ 在历史记录间选择（退出/EOF 时保留进程内历史）
+	var chatHistory []string
 	for {
 		// P38：raw 模式 + UTF-8 感知行编辑（中文退格不再残留字节残片）；
-		// 输入 / 前缀按 Tab 提示命令补全。非 TTY 自动回退标准行读取。
-		in, err := console.ReadLineWithCompletions(console.Symbol(">", console.ColorTitle)+" ", replCommands())
+		// 输入 / 前缀实时提示命令补全，↑/↓ 选择历史记录。非 TTY 回退标准行读取。
+		in, err := console.ReadLineFull(console.Symbol(">", console.ColorTitle)+" ", replCommands(), chatHistory)
 		if err != nil {
 			break // EOF / Ctrl-C / 中断
 		}
 		in = strings.TrimSpace(in)
 		if in == "" {
 			continue
+		}
+		// 追加历史（跳过空白；与上一条相同则不入，避免 ↑ 连续相同）
+		if len(chatHistory) == 0 || chatHistory[len(chatHistory)-1] != in {
+			chatHistory = append(chatHistory, in)
 		}
 		if in == "exit" {
 			break
