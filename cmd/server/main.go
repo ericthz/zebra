@@ -16,9 +16,12 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/ericthz/zebra/internal/agent"
@@ -38,11 +41,19 @@ import (
 	"github.com/ericthz/zebra/internal/rag"
 	"github.com/ericthz/zebra/internal/redis"
 	"github.com/ericthz/zebra/internal/safety"
+	"github.com/ericthz/zebra/internal/schedule"
 	"github.com/ericthz/zebra/internal/server"
 	"github.com/ericthz/zebra/internal/skill"
 	"github.com/ericthz/zebra/internal/supervisor"
 	"github.com/ericthz/zebra/internal/task"
 	"github.com/ericthz/zebra/internal/tool"
+)
+
+// 默认 API Key（仅限本地演示）：绑定非回环地址时若仍使用这些值，
+// 等同未配置——拒绝启动（防止已知凭据暴露到内网/公网，P0-1）。
+const (
+	defaultAdminKey = "admin-key"
+	defaultUserKey  = "user-key"
 )
 
 func main() {
@@ -77,12 +88,26 @@ func main() {
 	secrets := safety.EnvSecretStore{}
 	adminKey, _ := secrets.Get("ADMIN_KEY")
 	userKey, _ := secrets.Get("USER_KEY")
-	if adminKey == "" {
-		logger.Warn("ADMIN_KEY 未设置，使用默认 admin-key（仅限本地演示）")
-		adminKey = "admin-key"
-	}
-	if userKey == "" {
-		userKey = "user-key"
+
+	// 默认密钥仅限本地演示：当服务绑定非 127.0.0.1 地址（对外可访问）时，
+	// 未配置密钥——或配置的仍是仓库自带的默认值——直接拒绝启动（防止默认
+	// admin-key/user-key 暴露到内网/公网）。绑定本机回环时才允许默认密钥，
+	// 且给出显式告警。
+	addr := envOr("ADDR", ":8080")
+	if adminKey == "" || userKey == "" || adminKey == defaultAdminKey || userKey == defaultUserKey {
+		if !bindLocalOnly(addr) {
+			logger.Error("ADMIN_KEY/USER_KEY 未设置或仍为默认值，且服务绑定非本机地址，拒绝启动",
+				"addr", addr, "hint", "请设置非默认的 ADMIN_KEY/USER_KEY 环境变量，或仅绑定 127.0.0.1")
+			os.Exit(1)
+		}
+		if adminKey == "" || adminKey == defaultAdminKey {
+			logger.Warn("ADMIN_KEY 未设置或为默认值，使用默认 admin-key（仅限本地演示）")
+			adminKey = defaultAdminKey
+		}
+		if userKey == "" || userKey == defaultUserKey {
+			logger.Warn("USER_KEY 未设置或为默认值，使用默认 user-key（仅限本地演示）")
+			userKey = defaultUserKey
+		}
 	}
 
 	// ---- A3 API Key 注册（RBAC：admin / user 两级）----
@@ -139,12 +164,16 @@ func main() {
 	var pluginNames []string
 	if _, err := os.Stat("plugins"); err == nil {
 		if defs, lerr := plugin.Load("plugins"); lerr == nil && len(defs) > 0 {
-			pluginNames = plugin.Register(reg, defs, &http.Client{Timeout: 10 * time.Second})
+			pluginNames = plugin.Register(reg, defs)
 			logger.Info("已注册插件工具", "count", len(pluginNames))
 		}
 	}
 
-	reg.Register(&tool.FetchURLTool{}) // P6 SSRF 防护的抓取工具
+	// ---- D18 内容审核：提前创建，供 fetch_url 等工具抓取结果做审核（零配置即有防线）----
+	moderator := safety.NewKeywordModerator()
+	logger.Info("已启用内置敏感词审核", "默认词库", len(safety.DefaultBannedWords()))
+
+	reg.Register(&tool.FetchURLTool{Moderator: moderator, BlockFetch: false}) // P6 SSRF 防护的抓取工具
 	// ---- P2 本地执行：文件读写 + 命令执行（沙箱隔离 + 高危二次确认）----
 	// 工作目录白名单：默认 ./workspace；只读模式默认开启（写文件/命令需显式放开）。
 	execSandbox := tool.NewExecSandbox(envOr("EXEC_WORKDIR", "workspace"), envOr("EXEC_READONLY", "1") == "1")
@@ -154,6 +183,7 @@ func main() {
 	reg.Register(&tool.RunCommandTool{Sandbox: execSandbox})
 	// ---- P23 文档/图表产出：Word/PDF/SVG 图表（沙箱内落盘，admin-only）----
 	reg.Register(&tool.GenerateDocxTool{Sandbox: execSandbox})
+	reg.Register(&tool.GeneratePDFTool{Sandbox: execSandbox})
 	reg.Register(&tool.GenerateChartTool{Sandbox: execSandbox})
 
 	// ---- P1 技能体系：扫描 skills/ 目录注册技能（技能检索与注入由 Agent 完成）----
@@ -200,7 +230,9 @@ func main() {
 	var ragIndex *rag.Index
 	docsCount := 0
 	if emb := memory.NewEmbedderFromEnv(); emb != nil {
-		semanticCache = cache.New(emb, 0.92, 200)
+		semanticCache = cache.New(emb, 0.92, atoiDefault(os.Getenv("CACHE_MAX_ENTRIES"), 200))
+		// 语义缓存命中率暴露到 /metrics（zebra_cache_hits / zebra_cache_misses）
+		metrics.CacheStats = semanticCache.Stats
 
 		// ---- P8 RAG 知识库：加载 docs/ 目录文档（可选）----
 		ragIndex = rag.NewIndex(emb)
@@ -219,6 +251,12 @@ func main() {
 			logger.Warn("docs/ 目录无文档，RAG 知识库为空（仍可用，检索无命中）")
 		}
 	}
+	// ---- P41 RAG 二次精排：LLM 对混合检索候选逐条打分重排（ZEBRA_RAG_RERANK=1 开启）----
+	var reranker rag.Reranker
+	if ragIndex != nil && router != nil && os.Getenv("ZEBRA_RAG_RERANK") == "1" {
+		reranker = &rag.LLMReranker{Router: router, Timeout: 15 * time.Second}
+		logger.Info("已启用 RAG LLM 精排（混合检索 → 精排截断）")
+	}
 
 	// ---- P52 知识图谱：从 docs/ 规则抽取实体关系（独立于嵌入器）----
 	kgGraph := kg.NewGraph()
@@ -235,11 +273,10 @@ func main() {
 	var notifier notify.Notifier
 	if wh := os.Getenv("WEBHOOK_URL"); wh != "" {
 		notifier = notify.NewWebhookNotifier(wh, os.Getenv("WEBHOOK_SECRET"))
-		logger.Info("已启用 Webhook 通知", "url", wh)
+		logger.Info("已启用 Webhook 通知", "url", redactURL(wh))
 	}
 
 	// ---- 安全横切（D17/D18/D20）----
-	moderator := safety.NewKeywordModerator() // 空敏感词表 = 演示用
 	audit := safety.NewStdAuditLog(logger)
 	reg.SetAuditor(server.NewToolAuditor(audit, metrics)) // D20 审计 + P3 工具成功率指标
 
@@ -257,7 +294,7 @@ func main() {
 		}
 		sessions = server.NewRedisSessionStore(rc, 30*time.Minute)
 		taskStore = task.NewRedisTaskStore(rc)
-		logger.Info("会话/任务存储使用 Redis（水平扩展）", "addr", rurl)
+		logger.Info("会话/任务存储使用 Redis（水平扩展）", "addr", redactURL(rurl))
 	} else {
 		sessions = server.NewInMemoryStore(30 * time.Minute) // A2
 		taskStore = task.NewInMemoryStore()                  // P12 异步任务存储
@@ -291,6 +328,15 @@ func main() {
 	if n := profilePolicy.Apply(profileStore, time.Now()); n > 0 {
 		logger.Info("画像遗忘清理完成", "forgotten", n)
 	}
+	// 定时遗忘清扫（P22）：周期执行同策略，让 TTL 过期事实被物理清理，
+	// 防止画像只进不出、长期运行无限膨胀。PROFILE_SWEEP_MINUTES 可调。
+	sched := schedule.NewScheduler()
+	sched.Every("profile-sweep", time.Duration(atoiDefault(os.Getenv("PROFILE_SWEEP_MINUTES"), 60))*time.Minute, func(ctx context.Context) {
+		if n := profilePolicy.Apply(profileStore, time.Now()); n > 0 {
+			logger.Info("画像定时遗忘清理", "forgotten", n)
+		}
+	})
+	sched.Start(context.Background())
 
 	// ---- P25 语音交互：OpenAI 兼容 ASR/TTS（可选，VOICE_BASE_URL 开启）----
 	var voice *provider.VoiceClient
@@ -317,8 +363,8 @@ func main() {
 	if router != nil && prompts != nil {
 		supervisorInst = buildSupervisor(workerDeps{
 			router: router, prompts: prompts, mem: mem, window: &agent.ContextWindow{MaxTokens: 4000, Summarizer: windowSummarizer},
-			moderator: moderator, skills: skillReg, cache: semanticCache, rag: ragIndex,
-			model: envOr("OLLAMA_MODEL", "qwen3.5:0.8b-mlx"), maxTurns: 5, cost: costTracker,
+			moderator: moderator, skills: skillReg, cache: semanticCache, rag: ragIndex, reranker: reranker, kg: kgGraph,
+			model: envOr("OLLAMA_MODEL", "qwen3.5:0.8b-mlx"), maxTurns: 5, cost: costTracker, logger: logger,
 		}, reg)
 	}
 
@@ -360,7 +406,7 @@ func main() {
 			}
 			pluginNames = nil
 			if defs, err := plugin.Load("plugins"); err == nil && len(defs) > 0 {
-				pluginNames = plugin.Register(reg, defs, &http.Client{Timeout: 10 * time.Second})
+				pluginNames = plugin.Register(reg, defs)
 				logger.Info("热重载插件", "count", len(pluginNames))
 			}
 			return nil
@@ -388,8 +434,27 @@ func main() {
 				Client:  httpCli,
 			}
 		}
+		// Judge 独立评审模型（P3）：默认用生产 router，避免"生产模型自己评自己"
+		// 的偏置时可配 JUDGE_BASE_URL / JUDGE_MODEL 指到专门的评审小模型。
+		judgeRouter := router
+		if jb := os.Getenv("JUDGE_BASE_URL"); jb != "" {
+			var judgeProvider provider.Provider
+			if os.Getenv("JUDGE_OPENAI") == "1" {
+				judgeProvider = &provider.OpenAIProvider{
+					BaseURL: jb, Model: envOr("JUDGE_MODEL", "gpt-4o-mini"),
+					APIKey: os.Getenv("JUDGE_API_KEY"), Client: httpCli,
+				}
+			} else {
+				judgeProvider = &provider.OllamaProvider{
+					BaseURL: jb, Model: envOr("JUDGE_MODEL", "qwen3.5:0.8b-mlx"),
+					Client: httpCli,
+				}
+			}
+			judgeRouter = provider.NewRouter(judgeProvider)
+			logger.Info("已启用独立评审模型", "base", jb, "model", envOr("JUDGE_MODEL", ""))
+		}
 		sample := float64(atoiDefault(os.Getenv("ZEBRA_SHADOW_SAMPLE"), 10)) / 100
-		shadowEval = eval.NewShadowEvaluator(candidate, eval.NewJudge(router), eval.NewShadowStore(200), sample)
+		shadowEval = eval.NewShadowEvaluator(candidate, eval.NewJudge(judgeRouter), eval.NewShadowStore(200), sample)
 		shadowEval.Metrics = metrics.Inc
 		shadowEval.Log = logger
 		logger.Info("已启用影子评测", "candidate", shadowModel, "sample_rate", sample)
@@ -416,6 +481,7 @@ func main() {
 		Cost:          costTracker,
 		Cache:         semanticCache,
 		RAG:           ragIndex,
+		Reranker:      reranker,
 		Model:         envOr("OLLAMA_MODEL", "qwen3.5:0.8b-mlx"),
 		TaskStore:     taskStore,
 		Supervisor:    supervisorInst,
@@ -443,7 +509,7 @@ func main() {
 	}
 	shadowCandidate, shadowSample := "", 0.0
 	if shadowEval != nil {
-		shadowCandidate = shadowEval.Candidate.Name()
+		shadowCandidate = shadowEval.CandidateName()
 		shadowSample = shadowEval.SampleRate
 	}
 	memMode := "工作记忆"
@@ -471,12 +537,33 @@ func main() {
 		RedisURL:        os.Getenv("REDIS_URL"),
 	})
 
-	addr := envOr("ADDR", ":8080")
+	addr = envOr("ADDR", ":8080")
 	if err := api.Serve(context.Background(), addr); err != nil {
 		logger.Error("server exited", "err", err)
 		os.Exit(1)
 	}
 }
+
+// bindLocalOnly 判断监听地址是否仅绑定本机回环（127.0.0.1 / ::1 / localhost）。
+// 空 host（如 ":8080"）绑定全部接口，视为对外暴露。
+func bindLocalOnly(addr string) bool {
+	host := addr
+	if h, _, err := net.SplitHostPort(addr); err == nil {
+		host = h
+	}
+	if host == "" {
+		return false
+	}
+	ip := net.ParseIP(host)
+	if ip != nil {
+		return ip.IsLoopback()
+	}
+	return strings.EqualFold(host, "localhost")
+}
+
+// isDefaultKey 判断密钥是否仍为仓库自带的默认值（P0-1）：对外暴露绑定下，
+// 默认值等同未配置，必须拒绝启动。
+func isDefaultKey(k string) bool { return k == defaultAdminKey || k == defaultUserKey }
 
 func envOr(key, def string) string {
 	if v := os.Getenv(key); v != "" {
@@ -495,4 +582,16 @@ func atoiDefault(s string, def int) int {
 		return def
 	}
 	return n
+}
+
+// redactURL 启动日志脱敏（S-3）：剥掉 URL 里的 userinfo（REDIS_URL /
+// WEBHOOK_URL 常带密码）。剥不掉时原样返回——不能因解析失败打印空串
+// 造成运维困惑。
+func redactURL(u string) string {
+	parsed, err := url.Parse(u)
+	if err != nil || parsed.Host == "" {
+		return u
+	}
+	parsed.User = nil
+	return parsed.String()
 }

@@ -30,8 +30,7 @@ func (s *APIServer) handleReload(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := s.deps.Reload(); err != nil {
-		s.deps.Logger.Warn("热重载失败", "err", err)
-		http.Error(w, "reload failed: "+err.Error(), http.StatusInternalServerError)
+		s.writeAgentError(w, "热重载失败", err)
 		return
 	}
 	s.deps.Logger.Info("配置已热重载", "user", p.User)

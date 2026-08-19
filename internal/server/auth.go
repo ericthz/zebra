@@ -76,27 +76,63 @@ func (b *TokenBucket) Allow() bool {
 
 // RateLimiter 按 key（如 user/tenant）分桶限流。
 type RateLimiter struct {
-	mu      sync.Mutex
-	rate    float64
-	burst   float64
-	buckets map[string]*TokenBucket
+	mu       sync.Mutex
+	rate     float64
+	burst    float64
+	maxIdle  time.Duration // 桶闲置超时，超时后清扫（防 map 无限增长）
+	buckets  map[string]*TokenBucket
+	lastUsed map[string]time.Time // 每桶最近访问时间
+	ops      int64                // 触发清扫的计数器
 }
 
 // NewRateLimiter 构造。rate 每秒放行数，burst 突发容量。
+// maxIdle 为桶闲置清理阈值（0 = 默认 10 分钟）。
 func NewRateLimiter(rate, burst float64) *RateLimiter {
-	return &RateLimiter{rate: rate, burst: burst, buckets: make(map[string]*TokenBucket)}
+	return &RateLimiter{
+		rate: rate, burst: burst, maxIdle: 10 * time.Minute,
+		buckets: make(map[string]*TokenBucket), lastUsed: make(map[string]time.Time),
+	}
+}
+
+// SetMaxIdle 设置桶闲置清理阈值。
+func (l *RateLimiter) SetMaxIdle(d time.Duration) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	l.maxIdle = d
 }
 
 // Allow 对指定 key 限流判断。
 func (l *RateLimiter) Allow(key string) bool {
+	now := time.Now()
 	l.mu.Lock()
 	b, ok := l.buckets[key]
 	if !ok {
 		b = newTokenBucket(l.rate, l.burst)
 		l.buckets[key] = b
 	}
+	l.lastUsed[key] = now
+	// 渐进式清扫：每 1024 次访问顺带清理一次闲置桶，
+	// 防恶意随机 key 撑爆 map（无固定后台 goroutine，保持零依赖简单性）。
+	l.ops++
+	if l.ops%1024 == 0 {
+		l.sweepLocked(now)
+	}
 	l.mu.Unlock()
 	return b.Allow()
+}
+
+// sweepLocked 清理闲置超时的桶（调用方须持锁）。
+func (l *RateLimiter) sweepLocked(now time.Time) {
+	idle := l.maxIdle
+	if idle <= 0 {
+		return
+	}
+	for k, last := range l.lastUsed {
+		if now.Sub(last) > idle {
+			delete(l.buckets, k)
+			delete(l.lastUsed, k)
+		}
+	}
 }
 
 func minFloat(a, b float64) float64 {

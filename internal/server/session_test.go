@@ -70,3 +70,30 @@ func TestForgetUser(t *testing.T) {
 		t.Fatal("bob 的会话不应被误删")
 	}
 }
+
+// TestForgetWaitsForInFlightChat P0-2：ForgetUser 必须先等该会话在飞对话
+// 结束（持 runMu）再删除。若在飞对话先删后写，已删会话会"复活"。
+func TestForgetWaitsForInFlightChat(t *testing.T) {
+	store := NewInMemoryStore(time.Minute)
+	defer store.Stop()
+	sess, _ := store.Create("alice", "t1", "user", time.Minute)
+
+	// 模拟在飞对话：持 runMu 期间 Sleep（等价于 Agent 执行 + 写历史/记忆）
+	sess.runMu.Lock()
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		store.ForgetUser("alice") // 应阻塞直到上面 unlock
+	}()
+	select {
+	case <-done:
+		t.Fatal("ForgetUser 不应在会话锁未释放时完成（会复活会话）")
+	case <-time.After(30 * time.Millisecond):
+	}
+	sess.runMu.Unlock()
+	<-done // 锁释放后 ForgetUser 应立即完成
+
+	if _, ok := store.Get(sess.ID); ok {
+		t.Fatal("被遗忘会话不应存在")
+	}
+}

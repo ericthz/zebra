@@ -52,6 +52,9 @@ type Metrics struct {
 	count  map[string]int64
 	latSum map[string]float64 // 累计秒数
 	latN   map[string]int64   // 样本数
+
+	// CacheStats 可选：语义缓存命中/未命中采样（cmd/server 装配，输出 zebra_cache_hits/misses）。
+	CacheStats func() (hits, misses int64)
 }
 
 // NewMetrics 构造。
@@ -96,6 +99,11 @@ func (m *Metrics) Handler() http.HandlerFunc {
 			}
 			fmt.Fprintf(w, "zebra_%s_seconds_sum %f\n", strings.ReplaceAll(n, ":", "_"), m.latSum[n])
 			fmt.Fprintf(w, "zebra_%s_seconds_count %d\n", strings.ReplaceAll(n, ":", "_"), m.latN[n])
+		}
+		if m.CacheStats != nil {
+			hits, misses := m.CacheStats()
+			fmt.Fprintf(w, "zebra_cache_hits %d\n", hits)
+			fmt.Fprintf(w, "zebra_cache_misses %d\n", misses)
 		}
 	}
 }

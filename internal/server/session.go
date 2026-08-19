@@ -24,6 +24,14 @@ type Session struct {
 
 	mu      sync.RWMutex
 	history []provider.Message
+
+	// runMu 串行化同一会话的 Agent 执行：历史切片由 Agent 无锁就地
+	// 追加/读取，同一会话并发两个请求会数据竞争（多轮上下文撕裂）。
+	// 会话的对话本就是顺序的，串行执行语义正确且代价极小。
+	//
+	// 注意：Redis 会话存储每次 Get 都重建 Session，锁必须跨实例共享，
+	// 故用指针——由存储层按会话 ID 维护统一互斥体（见 RedisSessionStore）。
+	runMu *sync.Mutex
 }
 
 // Expired 是否过期。
@@ -74,14 +82,33 @@ func (s *InMemoryStore) cleanupLoop() {
 		case <-s.stop:
 			return
 		case <-t.C:
-			s.mu.Lock()
-			for id, sess := range s.items {
-				if sess.Expired() {
-					delete(s.items, id)
-				}
-			}
-			s.mu.Unlock()
+			s.cleanupExpired()
 		}
+	}
+}
+
+// cleanupExpired 删除过期会话（C-1：与 Delete/ForgetUser 同保证）。
+// 先快照过期会话，逐个取 runMu 后再删——防止在飞对话（持锁执行 rememberTurn/
+// Profile.Learn/persistHistory）被清理 tick 误删：否则该轮写回落到已脱离
+// map 的 *Session，用户整轮对话丢失。锁序与 chat 路径一致（runMu→map）。
+func (s *InMemoryStore) cleanupExpired() {
+	s.mu.RLock()
+	var expired []*Session
+	for _, sess := range s.items {
+		if sess.Expired() {
+			expired = append(expired, sess)
+		}
+	}
+	s.mu.RUnlock()
+
+	for _, sess := range expired {
+		sess.runMu.Lock() // 等待该会话所有在飞对话结束
+		s.mu.Lock()
+		if s.items[sess.ID] == sess { // 期间可能已被并发删除/续期
+			delete(s.items, sess.ID)
+		}
+		s.mu.Unlock()
+		sess.runMu.Unlock()
 	}
 }
 
@@ -104,6 +131,7 @@ func (s *InMemoryStore) Create(user, tenant, role string, ttl time.Duration) (*S
 	sess := &Session{
 		ID: newID(), Tenant: tenant, User: user, Role: role,
 		Created: time.Now(), Expires: time.Now().Add(ttl),
+		runMu: &sync.Mutex{},
 	}
 	s.mu.Lock()
 	s.items[sess.ID] = sess
@@ -111,23 +139,46 @@ func (s *InMemoryStore) Create(user, tenant, role string, ttl time.Duration) (*S
 	return sess, nil
 }
 
-// Delete 删除会话。
+// Delete 删除会话。删除前先获取该会话的 runMu（P0-2）：保证删除严格
+// 发生在所有在飞对话（持锁执行 rememberTurn/Profile.Learn/persistHistory）
+// 完成之后，否则 in-flight 的写回会让已删会话"复活"。
 func (s *InMemoryStore) Delete(id string) {
+	s.mu.RLock()
+	sess, ok := s.items[id]
+	s.mu.RUnlock()
+	if !ok {
+		return
+	}
+	sess.runMu.Lock()
+	defer sess.runMu.Unlock()
 	s.mu.Lock()
-	defer s.mu.Unlock()
 	delete(s.items, id)
+	s.mu.Unlock()
 }
 
 // ForgetUser 被遗忘权（P6）：删除某用户全部会话，返回被删会话 ID。
+// 先 RLock 快照该用户的会话（避免持 map 锁去拿 runMu 造成锁序反转：
+// chat 路径是 runMu→map，此处必须也是 runMu→map），逐个取 runMu 后再删。
 func (s *InMemoryStore) ForgetUser(user string) []string {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	var ids []string
-	for id, sess := range s.items {
+	s.mu.RLock()
+	var targets []*Session
+	for _, sess := range s.items {
 		if sess.User == user {
-			delete(s.items, id)
-			ids = append(ids, id)
+			targets = append(targets, sess)
 		}
+	}
+	s.mu.RUnlock()
+
+	var ids []string
+	for _, sess := range targets {
+		sess.runMu.Lock() // 等待该会话所有在飞对话结束（写历史/记忆/画像）
+		s.mu.Lock()
+		if s.items[sess.ID] == sess { // 仍存在才删（期间可能已被并发删除）
+			delete(s.items, sess.ID)
+			ids = append(ids, sess.ID)
+		}
+		s.mu.Unlock()
+		sess.runMu.Unlock()
 	}
 	return ids
 }
