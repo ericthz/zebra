@@ -43,6 +43,22 @@ func newReActAgent(p provider.Provider) *Agent {
 	return ag.Bind("s", "admin", "u", &hist)
 }
 
+// TestReactSystemPromptIncludesTools 验证 ReAct 系统提示注入了工具列表，
+// 避免模型凭名字猜工具（缺工具描述时大概率调错）。
+func TestReactSystemPromptIncludesTools(t *testing.T) {
+	p := reactSystemPrompt([]provider.Tool{{
+		Type: "function",
+		Function: provider.FunctionDef{
+			Name:        "calculator",
+			Description: "计算数学表达式",
+			Parameters:  map[string]interface{}{"type": "object"},
+		},
+	}})
+	if !strings.Contains(p, "calculator") || !strings.Contains(p, "计算数学表达式") {
+		t.Fatalf("系统提示应包含工具名与描述: %s", p)
+	}
+}
+
 func TestReAct(t *testing.T) {
 	ag := newReActAgent(reactProvider{})
 	got, err := ag.ReAct(context.Background(), "1+2 等于多少", RunOptions{}, 3)

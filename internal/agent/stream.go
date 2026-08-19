@@ -36,7 +36,7 @@ func (a *Agent) RunStream(ctx context.Context, userInput string, opts RunOptions
 	ch := make(chan Event, 32)
 	go func() {
 		defer close(ch)
-		_, err := a.run(ctx, userInput, opts, func(ev Event) { ch <- ev })
+		_, err := a.run(a.usageCtx(ctx), userInput, opts, func(ev Event) { ch <- ev })
 		if err != nil {
 			ch <- Event{Type: EventError, Message: err.Error(), Err: err}
 		}

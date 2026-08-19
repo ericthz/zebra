@@ -1,6 +1,7 @@
 package agent
 
 import (
+	"context"
 	"testing"
 
 	"github.com/ericthz/zebra/internal/provider"
@@ -33,7 +34,7 @@ func TestContextWindowTrim(t *testing.T) {
 		{Role: "assistant", Content: "第1轮回复" + repeat("字", 30)},
 		{Role: "user", Content: "第2轮"},
 	}
-	trimmed := w.Trim(msgs)
+	trimmed := w.Trim(context.Background(), msgs)
 	if total(trimmed) > w.MaxTokens {
 		t.Fatalf("裁剪后仍超预算: %d > %d", total(trimmed), w.MaxTokens)
 	}
@@ -55,7 +56,7 @@ func TestContextWindowSummarize(t *testing.T) {
 	for i := 0; i < 20; i++ {
 		msgs = append(msgs, provider.Message{Role: "user", Content: "内容内容内容内容"})
 	}
-	trimmed := w.Trim(msgs)
+	trimmed := w.Trim(context.Background(), msgs)
 	if total(trimmed) > w.MaxTokens {
 		t.Fatalf("摘要压缩后仍超预算: %d", total(trimmed))
 	}

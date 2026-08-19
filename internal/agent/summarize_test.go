@@ -67,7 +67,7 @@ func TestContextWindowLLMSummarize(t *testing.T) {
 		msgs = append(msgs, provider.Message{Role: "user", Content: "内容内容内容内容"})
 	}
 	before := total(msgs)
-	trimmed := w.Trim(msgs)
+	trimmed := w.Trim(context.Background(), msgs)
 	hasSummary := false
 	for _, m := range trimmed {
 		if strings.Contains(m.Content, "早期对话摘要") {
@@ -80,4 +80,60 @@ func TestContextWindowLLMSummarize(t *testing.T) {
 	if total(trimmed) >= before {
 		t.Fatalf("摘要压缩后应减少 token: %d -> %d", before, total(trimmed))
 	}
+}
+
+// cancelSummarizer 摘要时检查 ctx 是否已取消（验证 Trim 透传 ctx，不硬编码 Background）。
+type cancelSummarizer struct{ cancelled bool }
+
+func (c *cancelSummarizer) Summarize(ctx context.Context, _ []provider.Message) (string, error) {
+	if ctx.Err() != nil {
+		c.cancelled = true
+		return "", ctx.Err()
+	}
+	return "摘要", nil
+}
+
+// TestTrimPropagatesContext 验证：Trim 把调用方 ctx 透传给 Summarizer（取消传播）。
+func TestTrimPropagatesContext(t *testing.T) {
+	cs := &cancelSummarizer{}
+	w := &ContextWindow{MaxTokens: 1, Summarizer: cs}
+	msgs := make([]provider.Message, 0, 10)
+	for i := 0; i < 10; i++ {
+		msgs = append(msgs, provider.Message{Role: "user", Content: "很长很长的内容内容内容"})
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel() // 已取消的 ctx
+
+	_ = w.Trim(ctx, msgs)
+	if !cs.cancelled {
+		t.Fatal("Summarizer 应收到已取消的 ctx（Trim 不应使用 context.Background）")
+	}
+}
+
+// TestTrimSummarizeRecheckBudget 验证：摘要后复查预算，仍超则继续压缩（不死循环）。
+func TestTrimSummarizeRecheckBudget(t *testing.T) {
+	// 摘要器只压一点点：第一次摘要后仍超预算，循环应继续压缩直到有进展
+	cs := &shrinkSummarizer{shrink: 1} // 每次只减 1 token
+	w := &ContextWindow{MaxTokens: 5, Summarizer: cs}
+	msgs := make([]provider.Message, 0, 8)
+	for i := 0; i < 8; i++ {
+		msgs = append(msgs, provider.Message{Role: "user", Content: "内容内容内容内容"})
+	}
+	before := total(msgs)
+	trimmed := w.Trim(context.Background(), msgs)
+	if total(trimmed) >= before {
+		t.Fatalf("应持续压缩直到有进展: %d -> %d", before, total(trimmed))
+	}
+}
+
+// shrinkSummarizer 每次摘要只减少固定 token 数，用于验证循环复查。
+type shrinkSummarizer struct{ shrink int }
+
+func (s *shrinkSummarizer) Summarize(_ context.Context, msgs []provider.Message) (string, error) {
+	// 生成比原文短 shrink 个单位的内容
+	n := total(msgs) - s.shrink
+	if n < 0 {
+		n = 0
+	}
+	return strings.Repeat("短", n), nil
 }

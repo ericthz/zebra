@@ -64,6 +64,10 @@ func TestSelfConsistent(t *testing.T) {
 	if got != "选中回答" {
 		t.Fatalf("自一致性应择优，实际 %q", got)
 	}
+	// 六10：自一致性轮次必须写进会话历史（否则下一轮读不到上下文）
+	if h := *ag.history; len(h) != 2 || h[0].Role != "user" || h[0].Content != "问题" || h[1].Content != "选中回答" {
+		t.Fatalf("自一致性应记入历史，实际 %+v", h)
+	}
 }
 
 func TestSelfConsistentSingle(t *testing.T) {
@@ -74,6 +78,10 @@ func TestSelfConsistentSingle(t *testing.T) {
 	}
 	if got != "候选1" {
 		t.Fatalf("单样本应直接返回回答，实际 %q", got)
+	}
+	// 六10：单样本路径同样记历史
+	if h := *ag.history; len(h) != 2 || h[1].Content != "候选1" {
+		t.Fatalf("单样本自一致性应记入历史，实际 %+v", h)
 	}
 }
 

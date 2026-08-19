@@ -8,9 +8,12 @@
 package main
 
 import (
+	"log/slog"
+
 	"github.com/ericthz/zebra/internal/agent"
 	"github.com/ericthz/zebra/internal/cache"
 	"github.com/ericthz/zebra/internal/cost"
+	"github.com/ericthz/zebra/internal/kg"
 	"github.com/ericthz/zebra/internal/memory"
 	"github.com/ericthz/zebra/internal/prompt"
 	"github.com/ericthz/zebra/internal/provider"
@@ -31,9 +34,12 @@ type workerDeps struct {
 	skills    *skill.Registry
 	cache     *cache.SemanticCache
 	rag       *rag.Index
+	reranker  rag.Reranker
+	kg        *kg.Graph
 	model     string
 	maxTurns  int
 	cost      *cost.Tracker
+	logger    *slog.Logger
 }
 
 // builder 生成"每请求新建"的 Agent 工厂（避免共享实例，保证并发安全）。
@@ -43,12 +49,15 @@ func (d workerDeps) builder(promptName string, reg *tool.Registry) func() *agent
 		ag := agent.New(agent.Config{
 			Router: d.router, Tools: reg, Prompts: d.prompts, Mem: d.mem,
 			Window: d.window, Moderator: d.moderator, MaxTurns: d.maxTurns,
-			PromptName: promptName, Skills: d.skills, Cache: d.cache, RAG: d.rag,
+			PromptName: promptName, Skills: d.skills, Cache: d.cache, RAG: d.rag, Reranker: d.reranker, KG: d.kg,
 			Model: d.model,
 			OnUsage: func(m string, in, out int) { // P5 成本归因（按 worker 归组）
 				if d.cost != nil {
 					d.cost.Record("worker", "worker:"+promptName, m, in, out)
 				}
+			},
+			OnInjection: func(kind, hit string) { // D17 注入检测（worker 侧同规格）
+				d.logger.Warn("prompt.injection.detected", "worker", promptName, "kind", kind, "hit", hit)
 			},
 		})
 		return ag

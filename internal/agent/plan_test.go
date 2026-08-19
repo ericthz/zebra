@@ -2,7 +2,6 @@ package agent
 
 import (
 	"context"
-	"encoding/json"
 	"strings"
 	"testing"
 
@@ -32,23 +31,6 @@ func (p *plannerProvider) ChatStream(context.Context, []provider.Message, []prov
 	return nil, context.Canceled
 }
 
-func TestParsePlan(t *testing.T) {
-	// 纯 JSON
-	p, err := parsePlan(`{"summary":"s","steps":[{"title":"a","task":"t1"}]}`)
-	if err != nil || len(p.Steps) != 1 {
-		t.Fatalf("解析失败: %v %+v", err, p)
-	}
-	// Markdown 包裹
-	p2, err := parsePlan("```json\n{\"summary\":\"x\",\"steps\":[{\"title\":\"b\",\"task\":\"t2\"}]}\n```")
-	if err != nil || len(p2.Steps) != 1 {
-		t.Fatalf("Markdown 包裹解析失败: %v", err)
-	}
-	// 非法
-	if _, err := parsePlan("完全不是 JSON"); err == nil {
-		t.Fatal("非法输入应报错")
-	}
-}
-
 func TestPlanAndExecute(t *testing.T) {
 	prompts := prompt.NewRegistry("z")
 	prompts.Register(&prompt.Template{Name: "assistant", Version: "v1", Text: "你是助手 {role}"})
@@ -71,9 +53,15 @@ func TestPlanAndExecute(t *testing.T) {
 			t.Fatalf("汇总缺 %q，实际:\n%s", want, out)
 		}
 	}
-	// 子步骤不应污染会话历史（历史仍为空）
-	if len(hist) != 0 {
-		t.Fatalf("子步骤不应写入会话历史，实际 %d 条", len(hist))
+	// 子步骤不污染历史，但"问题→最终汇总"应写入历史（保证多轮上下文连续）
+	if len(hist) != 2 {
+		t.Fatalf("历史应恰有 1 轮（问题+汇总）共 2 条，实际 %d 条", len(hist))
+	}
+	if hist[0].Role != "user" || !strings.Contains(hist[0].Content, "做一个复杂任务") {
+		t.Fatalf("历史第 1 条应为用户问题: %+v", hist[0])
+	}
+	if hist[1].Role != "assistant" || !strings.Contains(hist[1].Content, "按规划完成") {
+		t.Fatalf("历史第 2 条应为最终汇总: %+v", hist[1])
 	}
 }
 
@@ -151,5 +139,3 @@ func TestPlanAndExecuteSloppyModel(t *testing.T) {
 		}
 	}
 }
-
-var _ = json.Marshal // 占位

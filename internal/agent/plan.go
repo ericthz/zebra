@@ -46,8 +46,13 @@ type Plan struct {
 
 // PlanAndExecute 规划-执行两阶段编排入口。
 func (a *Agent) PlanAndExecute(ctx context.Context, userInput string, opts RunOptions) (string, error) {
+	ctx = a.usageCtx(ctx) // F-3：规划/子步骤执行计入用量
+	// D18 输入审核（P2-A）：先于规划 LLM 调用与子步骤执行。
+	if err := a.checkInput(userInput); err != nil {
+		return "", err
+	}
 	// 阶段 1：规划
-	plan, err := a.plan(ctx, userInput)
+	plan, err := a.plan(ctx, userInput, opts.Images)
 	if err != nil {
 		return "", fmt.Errorf("规划失败: %w", err)
 	}
@@ -66,8 +71,14 @@ func (a *Agent) PlanAndExecute(ctx context.Context, userInput string, opts RunOp
 		parts = append(parts, fmt.Sprintf("步骤%d【%s】: %s", i+1, step.Title, out))
 	}
 
-	// 阶段 3：汇总
-	return fmt.Sprintf("按规划完成（共 %d 步）：\n%s", len(plan.Steps), strings.Join(parts, "\n")), nil
+	// 阶段 3：汇总（把"问题→最终汇总"写入历史与记忆，保证多轮上下文连续）
+	summary := fmt.Sprintf("按规划完成（共 %d 步）：\n%s", len(plan.Steps), strings.Join(parts, "\n"))
+	// D18 输出审核（P2-A）：先审核再持久化，违规汇总不进历史/记忆。
+	if err := a.checkOutput(summary); err != nil {
+		return "", err
+	}
+	a.rememberTurn(userInput, summary)
+	return summary, nil
 }
 
 // PlanAndExecuteStream 规划-执行的流式版：执行过程以 phase/tool_call 事件
@@ -76,8 +87,13 @@ func (a *Agent) PlanAndExecuteStream(ctx context.Context, userInput string, opts
 	if emit == nil {
 		return a.PlanAndExecute(ctx, userInput, opts)
 	}
+	ctx = a.usageCtx(ctx) // F-3：流式规划-执行计入用量
+	// D18 输入审核（P2-A）：与 run 同一道横切点。
+	if err := a.checkInput(userInput); err != nil {
+		return "", err
+	}
 	emit(Event{Type: EventPhase, Phase: "规划中…"})
-	plan, err := a.plan(ctx, userInput)
+	plan, err := a.plan(ctx, userInput, opts.Images)
 	if err != nil {
 		return "", fmt.Errorf("规划失败: %w", err)
 	}
@@ -97,22 +113,27 @@ func (a *Agent) PlanAndExecuteStream(ctx context.Context, userInput string, opts
 		parts = append(parts, fmt.Sprintf("步骤%d【%s】: %s", i+1, step.Title, out))
 	}
 	summary := fmt.Sprintf("按规划完成（共 %d 步）：\n%s", len(plan.Steps), strings.Join(parts, "\n"))
+	// D18 输出审核（P2-A）：先审核再持久化。
+	if err := a.checkOutput(summary); err != nil {
+		return "", err
+	}
 	emit(Event{Type: EventPhase, Phase: "汇总完成"})
 	emit(Event{Type: EventDelta, Content: summary})
+	a.rememberTurn(userInput, summary)
 	return summary, nil
 }
 
 // plan 阶段 1：让 LLM 输出 JSON 步骤列表。
 // P17 结构化输出强约束：用 StructuredChat（优先 response_format 强约束，
 // 回退普通调用 + schema 校验），保证拿到合法规划 JSON。
-func (a *Agent) plan(ctx context.Context, userInput string) (*Plan, error) {
+func (a *Agent) plan(ctx context.Context, userInput string, images []string) (*Plan, error) {
 	prompt := fmt.Sprintf(`你是一个任务规划器。请把下面的用户请求拆解为 2~5 个有序的执行步骤。
 只输出 JSON，不要其它内容：
 {"summary":"一句话总结计划","steps":[{"title":"步骤标题","task":"给执行器的具体子任务描述"}]}
 用户请求：%s`, userInput)
 
 	data, err := provider.StructuredChat(ctx, a.cfg.Router, []provider.Message{
-		{Role: "user", Content: prompt},
+		a.userMessage(prompt, images),
 	}, planSchema)
 	if err != nil {
 		return nil, err
@@ -155,30 +176,18 @@ var planSchema = map[string]interface{}{
 	"required": []interface{}{"steps"},
 }
 
-// parsePlan 从模型回复中稳健抽取并解析规划 JSON。
-func parsePlan(content string) (*Plan, error) {
-	start := strings.IndexByte(content, '{')
-	end := strings.LastIndexByte(content, '}')
-	if start < 0 || end <= start {
-		return nil, fmt.Errorf("模型未返回规划 JSON")
-	}
-	var p Plan
-	if err := json.Unmarshal([]byte(content[start:end+1]), &p); err != nil {
-		return nil, err
-	}
-	return &p, nil
-}
-
 // executeStep 阶段 2：执行单个子任务（一次工具循环）。
 // 关键：不写历史/记忆，只返回该步骤的最终文本。
+// 多模态（C14）：把 opts.Images 一并带给子步骤，让"分析这张图"类子任务
+// 能真正看到图（否则子步骤只见文字任务描述，仍是半实现）。
 func (a *Agent) executeStep(ctx context.Context, step PlanStep, opts RunOptions, emit func(Event)) (string, error) {
 	msgs := []provider.Message{}
 	if sys, err := a.cfg.Prompts.Render(a.cfg.PromptName, map[string]string{"role": a.role}); err == nil {
 		msgs = append(msgs, provider.Message{Role: "system", Content: sys})
 	}
-	msgs = append(msgs, provider.Message{Role: "user", Content: step.Task})
+	msgs = append(msgs, a.userMessage(step.Task, opts.Images))
 	if a.cfg.Window != nil {
-		msgs = a.cfg.Window.Trim(msgs)
+		msgs = a.cfg.Window.Trim(ctx, msgs)
 	}
 
 	final, lastErr, _ := a.toolLoop(ctx, msgs, a.cfg.Tools.ToolsFor(a.role), opts, emit)
