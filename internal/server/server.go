@@ -187,7 +187,8 @@ func (s *APIServer) Handler() http.Handler {
 	if s.deps.KG != nil {
 		mux.HandleFunc("GET /v1/knowledge", s.handleKnowledge) // P52 知识图谱查询
 	}
-	mux.HandleFunc("/", uiHandler()) // P14 前端 Web UI（公开）
+	mux.HandleFunc("/favicon.svg", faviconHandler()) // P14 浏览器标签图标（品牌 Z logo）
+	mux.HandleFunc("/", uiHandler())                 // P14 前端 Web UI（公开）
 	mux.HandleFunc("/healthz", HealthzHandler())
 	mux.HandleFunc("/readyz", ReadyzHandler(s.deps.Logger, map[string]func() error{
 		"llm":   func() error { return s.llmReadyCheck() },
@@ -205,7 +206,7 @@ func (s *APIServer) Handler() http.Handler {
 	h = Recover(s.deps.Logger)(h)
 	h = AccessLog(s.deps.Logger, s.deps.Metrics)(h)
 	h = RateLimit(s.deps.Rate)(h)
-	h = Auth(s.deps.Keys, "/", "/healthz", "/readyz", "/metrics")(h)
+	h = Auth(s.deps.Keys, "/", "/favicon.svg", "/healthz", "/readyz", "/metrics")(h)
 	h = RequestID(h)
 	return h
 }
