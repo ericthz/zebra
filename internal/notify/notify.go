@@ -64,6 +64,11 @@ func (w *WebhookNotifier) Send(ctx context.Context, ev Event) error {
 		return err
 	}
 
+	// 幂等键在循环外生成一次，且由事件内容派生（确定性）：
+	// 若在重试循环内用 time.Now() 生成，每次重试键都不同，接收方去重会失效。
+	idemSum := sha256.Sum256(body)
+	idempotencyKey := fmt.Sprintf("%s:%x", ev.Type, idemSum[:16])
+
 	var lastErr error
 	for attempt := 0; attempt <= w.MaxRetries; attempt++ {
 		if attempt > 0 {
@@ -78,8 +83,8 @@ func (w *WebhookNotifier) Send(ctx context.Context, ev Event) error {
 			return err
 		}
 		req.Header.Set("Content-Type", "application/json")
-		// 幂等键：同一事件重试时接收方可据此去重
-		req.Header.Set("X-Idempotency-Key", fmt.Sprintf("%s:%d", ev.Type, time.Now().UnixNano()))
+		// 同一事件的所有重试携带同一个幂等键，接收方可据此去重
+		req.Header.Set("X-Idempotency-Key", idempotencyKey)
 		if w.Secret != "" {
 			// HMAC 签名：接收方校验，防伪造推送
 			mac := hmac.New(sha256.New, []byte(w.Secret))

@@ -15,6 +15,8 @@ package server
 import (
 	"context"
 	"encoding/json"
+	"errors"
+	"fmt"
 	"net/http"
 	"strings"
 	"time"
@@ -34,8 +36,11 @@ type TaskSubmitRequest struct {
 // handleSubmitTask 提交异步任务：立即返回 task_id，后台执行。
 func (s *APIServer) handleSubmitTask(w http.ResponseWriter, r *http.Request) {
 	var req TaskSubmitRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, "bad request", http.StatusBadRequest)
+	if err := decodeJSON(w, r, &req); err != nil {
+		return
+	}
+	if strings.TrimSpace(req.Message) == "" {
+		http.Error(w, "bad request: message 必填", http.StatusBadRequest)
 		return
 	}
 	p, ok := principal(r.Context())
@@ -51,7 +56,11 @@ func (s *APIServer) handleSubmitTask(w http.ResponseWriter, r *http.Request) {
 
 	id, err := s.tasks.Submit(p.User, sess.ID, req.Message)
 	if err != nil {
-		http.Error(w, "submit failed: "+err.Error(), http.StatusInternalServerError)
+		if errors.Is(err, task.ErrQueueFull) {
+			http.Error(w, err.Error(), http.StatusServiceUnavailable)
+			return
+		}
+		s.writeAgentError(w, "任务提交失败", err)
 		return
 	}
 	json.NewEncoder(w).Encode(map[string]string{"task_id": id, "session_id": sess.ID})
@@ -60,9 +69,19 @@ func (s *APIServer) handleSubmitTask(w http.ResponseWriter, r *http.Request) {
 // taskRun 由 Manager 注入的任务执行函数：
 // 反序列化检查点 → 构建 Agent → 执行 → 序列化新检查点。
 func (s *APIServer) taskRun(ctx context.Context, user, session, prompt string, cp []byte) (string, []byte, error) {
+	// F-5：以会话现有历史为"上文"基础（"继续上一条分析"类任务需要读到
+	// 该会话已有多轮对话）。防御性拷贝，避免与并发聊天写历史竞态。
 	hist := make([]provider.Message, 0)
+	if sess, ok := s.deps.Sessions.Get(session); ok {
+		hist = append(hist, (*sess.History())...)
+	}
 	if len(cp) > 0 {
-		_ = json.Unmarshal(cp, &hist) // 检查点恢复（断点续跑）
+		// 检查点恢复（断点续跑）。解析失败不得静默当空历史重跑——
+		// 那会"丢失上文"继续执行（违背断点续跑语义），应让任务失败
+		// 便于排查（P2-13）。
+		if err := json.Unmarshal(cp, &hist); err != nil {
+			return "", nil, fmt.Errorf("检查点解析失败: %w", err)
+		}
 	}
 	role := "user"
 	if sess, ok := s.deps.Sessions.Get(session); ok {

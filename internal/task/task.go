@@ -62,6 +62,8 @@ type Store interface {
 }
 
 // InMemoryStore 内存任务存储（并发安全）。
+// 防御性拷贝：写入存副本、读取返回副本，绝不让外部拿到/改动内部共享指针
+// （修复 P12 数据竞争：execute 改共享 *Task 与 Get/List 并发读同一指针）。
 type InMemoryStore struct {
 	mu    sync.RWMutex
 	tasks map[string]*Task
@@ -75,7 +77,8 @@ func NewInMemoryStore() *InMemoryStore {
 func (s *InMemoryStore) Create(t *Task) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	s.tasks[t.ID] = t
+	cp := *t // 副本入库存，解耦调用方持有的指针
+	s.tasks[t.ID] = &cp
 	return nil
 }
 
@@ -83,14 +86,19 @@ func (s *InMemoryStore) Get(id string) (*Task, bool) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	t, ok := s.tasks[id]
-	return t, ok
+	if !ok {
+		return nil, false
+	}
+	cp := *t // 副本返回，防调用方与写方竞争
+	return &cp, true
 }
 
 func (s *InMemoryStore) Update(t *Task) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	t.Updated = time.Now()
-	s.tasks[t.ID] = t
+	cp := *t
+	cp.Updated = time.Now()
+	s.tasks[t.ID] = &cp
 	return nil
 }
 
@@ -100,7 +108,8 @@ func (s *InMemoryStore) List(user string) []*Task {
 	var out []*Task
 	for _, t := range s.tasks {
 		if t.User == user {
-			out = append(out, t)
+			cp := *t // 副本返回
+			out = append(out, &cp)
 		}
 	}
 	return out
@@ -176,6 +185,10 @@ func (m *Manager) Stop() {
 	m.wg.Wait()
 }
 
+// ErrQueueFull 任务队列已满（容量 64）：立即返回，不阻塞提交方（P2-11）。
+// 调用方应给客户端 503/429，提示稍后重试。
+var ErrQueueFull = fmt.Errorf("任务队列已满，请稍后重试")
+
 // Submit 提交任务，返回任务 ID。
 func (m *Manager) Submit(user, session, prompt string) (string, error) {
 	t := &Task{
@@ -185,7 +198,18 @@ func (m *Manager) Submit(user, session, prompt string) (string, error) {
 	if err := m.store.Create(t); err != nil {
 		return "", err
 	}
-	m.queue <- t
+	// 非阻塞入队：队列满立即返回错误，而不是无限阻塞 HTTP 请求（P2-11）。
+	// 先落库（任务必然可查），入队失败时把状态标记为 failed，避免留下
+	// "永久 pending"的孤儿任务。
+	select {
+	case m.queue <- t:
+	default:
+		t.Status = StatusFailed
+		t.Error = ErrQueueFull.Error()
+		t.Progress = "提交失败：队列已满"
+		_ = m.store.Update(t)
+		return "", ErrQueueFull
+	}
 	return t.ID, nil
 }
 
@@ -196,7 +220,17 @@ func (m *Manager) Get(id string) (*Task, bool) { return m.store.Get(id) }
 func (m *Manager) List(user string) []*Task { return m.store.List(user) }
 
 // execute 执行一个任务并更新状态/进度/结果/检查点。
+// 后台 goroutine 执行：任何 panic 都不能拖垮整个进程（六2），
+// 统一 recover 并落为失败状态。
 func (m *Manager) execute(t *Task) {
+	defer func() {
+		if r := recover(); r != nil {
+			t.Status = StatusFailed
+			t.Error = fmt.Sprintf("任务执行 panic: %v", r)
+			t.Progress = "任务异常终止"
+			m.store.Update(t)
+		}
+	}()
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
