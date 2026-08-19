@@ -40,9 +40,16 @@ func NewQdrantMemory(baseURL, collection string, vector int, embed Embedder) *Qd
 	}
 }
 
+// 编译期断言：实现 Memory、TenantScoped 与 UserScoped（P6 被遗忘权）。
+var (
+	_ Memory       = (*QdrantMemory)(nil)
+	_ TenantScoped = (*QdrantMemory)(nil)
+	_ UserScoped   = (*QdrantMemory)(nil)
+)
+
 // ForTenant 返回绑定到指定租户的隔离实例（A4）。
 // 逐字段克隆（不复制内部锁），共享底层 HTTP client 与嵌入器。
-func (m *QdrantMemory) ForTenant(tenant string) *QdrantMemory {
+func (m *QdrantMemory) ForTenant(tenant string) Memory {
 	return &QdrantMemory{
 		baseURL: m.baseURL,
 		collect: m.collect + "_" + sanitize(tenant),
@@ -67,16 +74,26 @@ func (m *QdrantMemory) Store(ctx context.Context, content string, meta map[strin
 	}})
 }
 
-// Retrieve 语义检索相似记忆。
-func (m *QdrantMemory) Retrieve(ctx context.Context, query string, limit int) ([]string, error) {
+// Retrieve 语义检索属于指定 user 的记忆（P1-A 用户隔离）。
+// Qdrant payload 里存了 user（Store 写入），检索时用 filter 精确匹配，
+// 防止检索到同租户其他用户的对话（A4 纵深防御）。
+func (m *QdrantMemory) Retrieve(ctx context.Context, user, query string, limit int) ([]string, error) {
 	vec, err := m.embed.Embed(ctx, query)
 	if err != nil {
 		return nil, fmt.Errorf("embedding 失败: %w", err)
 	}
-	body, _ := json.Marshal(map[string]interface{}{
+	body := map[string]interface{}{
 		"vector": vec, "limit": limit, "with_payload": true,
-	})
-	resp, err := m.do(ctx, http.MethodPost, m.url("/points/search"), body)
+	}
+	if user != "" {
+		body["filter"] = map[string]interface{}{
+			"must": []map[string]interface{}{{
+				"key": "user", "match": map[string]interface{}{"value": user},
+			}},
+		}
+	}
+	raw, _ := json.Marshal(body)
+	resp, err := m.do(ctx, http.MethodPost, m.url("/points/search"), raw)
 	if err != nil {
 		return nil, err
 	}
@@ -108,6 +125,23 @@ func (m *QdrantMemory) Clear(ctx context.Context) error {
 	m.mu.Lock()
 	m.initOnce = false
 	m.mu.Unlock()
+	return nil
+}
+
+// ForgetUser 按用户删除全部记忆（P6 被遗忘权）。
+// Qdrant 支持按 payload filter 删除点，只删该用户的记录，不误伤同集合其他用户。
+func (m *QdrantMemory) ForgetUser(ctx context.Context, user string) error {
+	filter := map[string]interface{}{
+		"must": []map[string]interface{}{{
+			"key": "user", "match": map[string]interface{}{"value": user},
+		}},
+	}
+	body, _ := json.Marshal(map[string]interface{}{"filter": filter})
+	resp, err := m.do(ctx, http.MethodPost, m.url("/points/delete"), body)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
 	return nil
 }
 

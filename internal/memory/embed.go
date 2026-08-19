@@ -30,6 +30,9 @@ func (e *OllamaEmbedder) Embed(ctx context.Context, text string) ([]float32, err
 		return nil, err
 	}
 	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("embeddings HTTP %d", resp.StatusCode)
+	}
 	var out struct {
 		Embedding []float64 `json:"embedding"`
 	}
@@ -63,6 +66,9 @@ func (e *OpenAIEmbedder) Embed(ctx context.Context, text string) ([]float32, err
 		return nil, err
 	}
 	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("embeddings HTTP %d", resp.StatusCode)
+	}
 	var out struct {
 		Data []struct {
 			Embedding []float64 `json:"embedding"`

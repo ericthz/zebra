@@ -25,7 +25,7 @@ func TestProfileInjection(t *testing.T) {
 	ag := New(Config{Prompts: prompts, Profile: profile, ProfileTTL: time.Hour})
 	ag.Bind("sess-1", "user", "alice", nil)
 
-	msgs := ag.buildMessages(context.Background(), "你好", nil)
+	msgs := ag.buildMessages(context.Background(), "你好", nil, nil)
 	var profileMsg string
 	for _, m := range msgs {
 		if m.Role == "system" && strings.Contains(m.Content, "画像") {
@@ -41,7 +41,7 @@ func TestProfileInjection(t *testing.T) {
 
 	// TTL 过期后不再注入（读时惰性遗忘）
 	ag.cfg.ProfileTTL = time.Nanosecond
-	msgs = ag.buildMessages(context.Background(), "你好", nil)
+	msgs = ag.buildMessages(context.Background(), "你好", nil, nil)
 	for _, m := range msgs {
 		if strings.Contains(m.Content, "画像") {
 			t.Fatalf("TTL 过期后不应注入画像: %s", m.Content)
@@ -51,7 +51,7 @@ func TestProfileInjection(t *testing.T) {
 	// 用户隔离：bob 无画像 → 不注入
 	ag.Bind("sess-2", "user", "bob", nil)
 	ag.cfg.ProfileTTL = time.Hour
-	for _, m := range ag.buildMessages(context.Background(), "你好", nil) {
+	for _, m := range ag.buildMessages(context.Background(), "你好", nil, nil) {
 		if strings.Contains(m.Content, "画像") {
 			t.Fatalf("bob 不应看到 alice 画像")
 		}
@@ -99,5 +99,42 @@ func TestProfileLearnViaLLMExtractor(t *testing.T) {
 	facts := profile.FactsFor("alice", time.Now(), time.Hour)
 	if len(facts) != 1 || facts[0].Key != "name" || facts[0].Value != "大明" {
 		t.Fatalf("LLM 抽取结果未入库: %+v", facts)
+	}
+}
+
+// TestProfileConsolidatedOnLearn 验证：画像学习后 Consolidate 接线生效，
+// 同分类"取值归一化相同"的冗余事实被合并（preference：火锅 与 吃火锅）。
+func TestProfileConsolidatedOnLearn(t *testing.T) {
+	prompts := prompt.NewRegistry("zebra")
+	prompts.Register(&prompt.Template{Name: "assistant", Version: "v1", Text: "你是 zebra 助手。"})
+	router := provider.NewRouter(&factsProvider{
+		reply: `{"facts":[{"key":"preference","value":"火锅","confidence":0.85}]}`,
+	})
+	profile := memory.NewProfileStore()
+	hist := []provider.Message{}
+
+	ag := New(Config{
+		Router:     router,
+		Tools:      tool.NewRegistry(),
+		Prompts:    prompts,
+		Profile:    profile,
+		ProfileTTL: time.Hour,
+		PromptName: "assistant",
+		Extractor:  &memory.LLMExtractor{Router: router},
+	})
+	ag.Bind("sess-1", "user", "alice", &hist)
+
+	// 先手工写入一条等价事实（同分类、取值归一化后相同）
+	profile.Learn("alice", []memory.Fact{
+		{Key: "preference", Value: "吃火锅", Category: "preference", Confidence: 0.8},
+	}, time.Now())
+
+	// 再经一轮对话学习"火锅" → Consolidate 应合并掉低置信度那条
+	if _, err := ag.Run(context.Background(), "你记住，我爱吃火锅。", RunOptions{}); err != nil {
+		t.Fatal(err)
+	}
+	facts := profile.FactsFor("alice", time.Now(), time.Hour)
+	if len(facts) != 1 {
+		t.Fatalf("归一化相同的事实应合并为 1 条，实际 %d: %+v", len(facts), facts)
 	}
 }

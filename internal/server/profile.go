@@ -8,7 +8,6 @@
 package server
 
 import (
-	"encoding/json"
 	"net/http"
 	"time"
 
@@ -51,7 +50,10 @@ func (s *APIServer) handleForgetProfile(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	var req ProfileForgetRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.Key == "" {
+	if err := decodeJSON(w, r, &req); err != nil {
+		return
+	}
+	if req.Key == "" {
 		http.Error(w, "bad request: key 必填", http.StatusBadRequest)
 		return
 	}
@@ -87,7 +89,10 @@ func (s *APIServer) handleResolveProfile(w http.ResponseWriter, r *http.Request)
 		return
 	}
 	var req ProfileResolveRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.Key == "" {
+	if err := decodeJSON(w, r, &req); err != nil {
+		return
+	}
+	if req.Key == "" {
 		http.Error(w, "bad request: key 必填", http.StatusBadRequest)
 		return
 	}

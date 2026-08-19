@@ -39,6 +39,22 @@ func (w *WorkingMemory) Add(sessionID, userInput, assistant string) {
 	w.items[sessionID] = list
 }
 
+// ReplaceLast 覆写某会话最近一条摘要（F-4：reflect 修订版替换原回答）。
+// 用于"同一轮的回答被改进"场景：避免追加成两条"用户: X"造成召回重复/冲突。
+// 无记录时退化为 Add。
+func (w *WorkingMemory) ReplaceLast(sessionID, userInput, assistant string) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	list := w.items[sessionID]
+	if len(list) == 0 {
+		summary := fmt.Sprintf("用户: %s\n助手: %s", userInput, assistant)
+		w.items[sessionID] = append(list, workingItem{at: time.Now(), summary: summary})
+		return
+	}
+	// 覆写最近一条的助手部分（保留原时间戳）
+	list[len(list)-1].summary = fmt.Sprintf("用户: %s\n助手: %s", userInput, assistant)
+}
+
 // Recent 返回会话最近的 n 条摘要。
 func (w *WorkingMemory) Recent(sessionID string, n int) []string {
 	w.mu.RLock()

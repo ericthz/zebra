@@ -15,6 +15,7 @@ import (
 	"encoding/json"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/ericthz/zebra/internal/redis"
@@ -34,6 +35,10 @@ type RedisMemory struct {
 	client *redis.Client
 	key    string // zebra:mem:<tenant>
 	max    int    // 每租户保留条数
+
+	// mu 串行化 Store 的"读整组→改→写回"，防止同进程内并发写互相覆盖丢数据
+	// （跨进程/多副本的原子性需 Redis WATCH/MULTI 或换列表结构，见头注释）。
+	mu sync.Mutex
 }
 
 // NewRedisMemory 构造（tenant 用于 A4 租户隔离）。
@@ -48,6 +53,8 @@ func (m *RedisMemory) ForTenant(tenant string) Memory {
 
 // Store 追加一条记忆（保留最近 max 条）。
 func (m *RedisMemory) Store(ctx context.Context, content string, meta map[string]string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock() // 读改写互斥，防并发写覆盖
 	entries := m.load(ctx)
 	entries = append(entries, memEntry{Content: content, Meta: meta, Time: time.Now()})
 	if len(entries) > m.max {
@@ -56,8 +63,9 @@ func (m *RedisMemory) Store(ctx context.Context, content string, meta map[string
 	return m.save(ctx, entries)
 }
 
-// Retrieve 按关键词重叠打分返回最相关的 limit 条（无向量，关键词近似）。
-func (m *RedisMemory) Retrieve(ctx context.Context, query string, limit int) ([]string, error) {
+// Retrieve 按关键词重叠打分返回该 user 最相关的 limit 条（P1-A 用户隔离，
+// 只检索 meta.user == user 的条目，防止跨用户泄露）。user 为空时不按用户过滤。
+func (m *RedisMemory) Retrieve(ctx context.Context, user, query string, limit int) ([]string, error) {
 	entries := m.load(ctx)
 	q := memTokens(query)
 	scored := make([]struct {
@@ -65,6 +73,9 @@ func (m *RedisMemory) Retrieve(ctx context.Context, query string, limit int) ([]
 		score   int
 	}, 0, len(entries))
 	for _, e := range entries {
+		if user != "" && e.Meta["user"] != user {
+			continue
+		}
 		s := 0
 		seen := map[string]bool{}
 		for t := range memTokens(e.Content) {
@@ -96,6 +107,24 @@ func (m *RedisMemory) Retrieve(ctx context.Context, query string, limit int) ([]
 func (m *RedisMemory) Clear(ctx context.Context) error {
 	_, err := m.client.Del(ctx, m.key)
 	return err
+}
+
+// ForgetUser 按用户删除全部记忆（P6 被遗忘权）。
+// Redis 版按 meta.user 过滤，保留其他用户的条目，不误伤同租户其他用户。
+func (m *RedisMemory) ForgetUser(ctx context.Context, user string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	entries := m.load(ctx)
+	kept := entries[:0]
+	for _, e := range entries {
+		if e.Meta["user"] != user {
+			kept = append(kept, e)
+		}
+	}
+	if len(kept) == len(entries) {
+		return nil // 该用户本无记忆
+	}
+	return m.save(ctx, kept)
 }
 
 func (m *RedisMemory) load(ctx context.Context) []memEntry {
@@ -136,8 +165,9 @@ func memTokens(s string) map[string]bool {
 	return out
 }
 
-// 编译期断言：实现 Memory 与 TenantScoped。
+// 编译期断言：实现 Memory、TenantScoped 与 UserScoped。
 var (
 	_ Memory       = (*RedisMemory)(nil)
 	_ TenantScoped = (*RedisMemory)(nil)
+	_ UserScoped   = (*RedisMemory)(nil)
 )

@@ -41,7 +41,7 @@ func SetupManager(logger *slog.Logger) (*Manager, bool) {
 		logger.Warn("Qdrant 不可用，降级为仅工作记忆", "err", err)
 		return mem, false
 	}
-	_, perr := qmem.Retrieve(ctx, "ping", 1)
+	_, perr := qmem.Retrieve(ctx, "", "ping", 1)
 	if perr == nil {
 		mem = NewManager(working, qmem)
 		logger.Info("长期记忆已启用", "qdrant", q, "collection", envOr("QDRANT_COLLECTION", "zebra_mem"))

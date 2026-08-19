@@ -36,12 +36,12 @@ func (s *APIServer) handleForget(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// 3. 清空该租户长期记忆（向量集合）
+	// 3. 清空该用户长期记忆（按 user 过滤，不误删同租户其他用户）
 	if s.deps.Mem != nil {
 		ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
 		defer cancel()
-		if err := s.deps.Mem.ForgetTenant(ctx, p.Tenant); err != nil {
-			s.deps.Logger.Warn("忘记租户长期记忆失败", "tenant", p.Tenant, "err", err)
+		if err := s.deps.Mem.ForgetUser(ctx, p.User); err != nil {
+			s.deps.Logger.Warn("忘记用户长期记忆失败", "user", p.User, "err", err)
 		}
 	}
 
