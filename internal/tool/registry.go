@@ -67,6 +67,35 @@ func (r *Registry) Names() []string {
 	return out
 }
 
+// RiskLevel 返回指定工具的风险等级（未注册或非高危返回 0）。
+// 供二次确认环节判断"该工具是否真的需要确认"，避免对普通工具误判。
+func (r *Registry) RiskLevel(name string) int {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	t, ok := r.tools[name]
+	if !ok {
+		return 0
+	}
+	if risky, isRisky := t.(Risky); isRisky {
+		return risky.RiskLevel()
+	}
+	return 0
+}
+
+// AllowedRolesOf 返回工具自身声明的可用角色（未实现 Risky 接口返回空）。
+func (r *Registry) AllowedRolesOf(name string) []string {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	t, ok := r.tools[name]
+	if !ok {
+		return nil
+	}
+	if risky, isRisky := t.(Risky); isRisky {
+		return risky.AllowedRoles()
+	}
+	return nil
+}
+
 // Descriptions 返回 工具名 → 描述 的映射（供启动清单逐项展示工具说明）。
 func (r *Registry) Descriptions() map[string]string {
 	r.mu.RLock()
@@ -104,7 +133,9 @@ func (r *Registry) DenyTool(role, name string) {
 
 // Subset 返回只包含指定工具的子注册表（P13 多 Agent 专业化）：
 // 未在 names 中的工具不复制；names 为空表示复制全部。
-// 同时复制角色白名单 allow，保持权限语义一致。
+// 同时复制角色白名单 allow，保持权限语义一致；审计器 audit 一并复制
+// （S-4：supervisor/worker 用 Subset 得到子注册表，若审计不复制则其工具
+// 调用审计事件丢失，D20 审计链路断裂）。
 func (r *Registry) Subset(names ...string) *Registry {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
@@ -125,6 +156,7 @@ func (r *Registry) Subset(names ...string) *Registry {
 		}
 		out.allow[role] = cp
 	}
+	out.audit = r.audit
 	return out
 }
 

@@ -44,8 +44,8 @@ func TestHTTPPluginTool(t *testing.T) {
 	}))
 	defer ts.Close()
 
-	toolDef := Def{Name: "echo", Description: "echo", URL: ts.URL}
-	pt := &HTTPPluginTool{def: toolDef, client: ts.Client()}
+	toolDef := Def{Name: "echo", Description: "echo", URL: ts.URL, AllowHosts: []string{"127.0.0.1"}}
+	pt := &HTTPPluginTool{def: toolDef}
 	out, err := pt.Execute(context.Background(), map[string]interface{}{"text": "hi"})
 	if err != nil || out != "echo:hi" {
 		t.Fatalf("插件执行异常: %q %v", out, err)
@@ -53,6 +53,27 @@ func TestHTTPPluginTool(t *testing.T) {
 	// 参数不匹配 → 服务端 400 → 报错
 	if _, err := pt.Execute(context.Background(), map[string]interface{}{"text": "x"}); err == nil {
 		t.Fatal("服务端 400 应报错")
+	}
+
+	// SSRF：未加白名单的内网地址应被拦截（复用 P6）
+	blocked := &HTTPPluginTool{def: Def{Name: "bad", URL: "http://127.0.0.1:9999/hook"}}
+	if _, err := blocked.Execute(context.Background(), map[string]interface{}{}); err == nil {
+		t.Fatal("内网插件 URL 应被 SSRF 拦截")
+	}
+}
+
+// TestHTTPPluginRedirectSSRF 六8：初始 URL 校验通过后，恶意服务器 302 到
+// 内网，重定向目标必须再次过 SSRF（否则 Agent 成为内网代理）。
+func TestHTTPPluginRedirectSSRF(t *testing.T) {
+	// 跳转到 127.0.0.1 的回环地址（内网）
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, "http://127.0.0.1:9999/internal", http.StatusFound)
+	}))
+	defer ts.Close()
+
+	pt := &HTTPPluginTool{def: Def{Name: "r", URL: ts.URL, AllowHosts: []string{"127.0.0.1"}}}
+	if _, err := pt.Execute(context.Background(), map[string]interface{}{}); err == nil {
+		t.Fatal("重定向到内网应被 SSRF 拦截（六8）")
 	}
 }
 
@@ -62,7 +83,7 @@ func TestRegister(t *testing.T) {
 		{Name: "p1", URL: "http://x"},
 		{Name: "", URL: "http://y"}, // 非法定义跳过
 	}
-	names := Register(reg, defs, nil)
+	names := Register(reg, defs)
 	if len(names) != 1 || names[0] != "p1" {
 		t.Fatalf("Register 异常: %v", names)
 	}

@@ -124,3 +124,33 @@ func TestRegistryDescriptions(t *testing.T) {
 		t.Fatalf("描述数量错误: %v", descs)
 	}
 }
+
+// fakeAuditor 供测试的审计实现。
+type fakeAuditor struct {
+	calls int
+}
+
+func (f *fakeAuditor) LogToolCall(_, _, _ string, _ int, _ map[string]interface{}, _ string, _ error) {
+	f.calls++
+}
+
+// TestSubsetCopiesAudit S-4：Subset 必须复制审计器，否则 supervisor/worker
+// 子注册表的工具调用不会产生审计事件（D20 审计链路断裂）。
+func TestSubsetCopiesAudit(t *testing.T) {
+	r := NewRegistry()
+	r.Register(fakeTool{})
+	aud := &fakeAuditor{}
+	r.SetAuditor(aud)
+
+	sub := r.Subset("fake")
+	if sub.audit == nil {
+		t.Fatal("Subset 应复制审计器")
+	}
+	// 子注册表执行工具 → 审计必须被记录
+	if _, err := sub.Execute(context.Background(), "fake", map[string]interface{}{"qty": 1}, "u", "user", false); err != nil {
+		t.Fatalf("执行失败: %v", err)
+	}
+	if aud.calls != 1 {
+		t.Fatalf("审计应记录 1 次调用，实际 %d", aud.calls)
+	}
+}

@@ -59,9 +59,8 @@ func ValidateArgs(t Tool, args map[string]interface{}) error {
 	schema := t.Parameters()
 	props, _ := schema["properties"].(map[string]interface{})
 
-	if required, ok := schema["required"].([]interface{}); ok {
-		for _, name := range required {
-			field := fmt.Sprint(name)
+	if required := requiredArgs(schema); len(required) > 0 {
+		for _, field := range required {
 			if _, exists := args[field]; !exists {
 				return fmt.Errorf("缺少必填参数: %s", field)
 			}
@@ -80,6 +79,22 @@ func ValidateArgs(t Tool, args map[string]interface{}) error {
 		if !typeMatches(value, want) {
 			return fmt.Errorf("参数 %s 类型错误: 期望 %s，实际 %s", name, want, reflect.TypeOf(value).Kind())
 		}
+	}
+	return nil
+}
+
+// requiredArgs 归一化 schema.required，兼容 []string 与 []interface{} 两种声明形态
+// （与 internal/schema 保持一致，避免 []string 声明的必填参数被静默跳过）。
+func requiredArgs(schema map[string]interface{}) []string {
+	if req, ok := schema["required"].([]string); ok {
+		return req
+	}
+	if req, ok := schema["required"].([]interface{}); ok {
+		names := make([]string, 0, len(req))
+		for _, n := range req {
+			names = append(names, fmt.Sprint(n))
+		}
+		return names
 	}
 	return nil
 }

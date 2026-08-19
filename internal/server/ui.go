@@ -150,6 +150,7 @@ const chatUI = `<!DOCTYPE html>
   .actions{display:flex;gap:8px;align-items:center;justify-content:space-between;flex-wrap:wrap}
   .actions .left,.actions .right{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
   .hint{font-size:11px;color:var(--muted)}
+  .confirm-toggle{font-size:11px;color:var(--muted);display:inline-flex;align-items:center;gap:4px;cursor:pointer;user-select:none}
   .settings{display:none}
   .settings.open{display:flex;gap:8px;align-items:center;margin-top:8px}
   #key{flex:1;min-width:200px}
@@ -222,6 +223,9 @@ const chatUI = `<!DOCTYPE html>
           <button id="btnStop" class="icon-btn" style="display:none" onclick="stop()" data-ic-prepend="square" data-ic-size="13">停止</button>
           <button class="icon-btn" onclick="toggleSettings()" title="API Key 设置" data-ic-prepend="settings" data-ic-size="14">设置</button>
           <button class="icon-btn" onclick="clearChat()" title="清空当前对话" data-ic-prepend="trash-2" data-ic-size="14">清空</button>
+          <label class="confirm-toggle" title="高危工具（写文件/执行命令/出文档）需用户显式授权">
+            <input type="checkbox" id="confirmRisky"> 允许高危操作
+          </label>
         </div>
         <span class="hint">SSE 流式 · Markdown · 会话自动保存</span>
       </div>
@@ -248,7 +252,8 @@ const empty = document.getElementById('empty');
 const keyEl = document.getElementById('key');
 const modeEl = document.getElementById('mode');
 const msgEl = document.getElementById('msg');
-keyEl.value = localStorage.getItem('zebra_key') || 'admin-key';
+// 读取本地保存的 API Key；无则留空（强制用户输入，不再内置默认密钥）。
+keyEl.value = localStorage.getItem('zebra_key') || '';
 
 // ---- Lucide 风格内联 SVG 图标（ISC 协议，currentColor 随亮/暗主题自动变色）----
 var ICONS = {
@@ -696,7 +701,7 @@ async function send(retried) {
   var answerEl = null;
   var raw = '';
 
-  var body = { message: text, stream: true, confirm_risky: true, session_id: c.sid, mode: modeEl.value };
+  var body = { message: text, stream: true, confirm_risky: document.getElementById('confirmRisky').checked, session_id: c.sid, mode: modeEl.value };
   try {
     var resp = await fetch('/v1/chat/stream', {
       method: 'POST',

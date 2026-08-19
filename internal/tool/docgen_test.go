@@ -62,4 +62,25 @@ func TestDocgenTools(t *testing.T) {
 	}); err == nil {
 		t.Fatal("labels/values 长度不一致应报错")
 	}
+
+	// 5. 生成 PDF 摘要（最小引擎：合法 PDF 头 + xref 结构，中文被占位）
+	pdf := &GeneratePDFTool{Sandbox: sb}
+	out, err = pdf.Execute(ctx, map[string]interface{}{
+		"path":  "report.pdf",
+		"title": "Weekly Summary",
+		"lines": []interface{}{"Line one: progress.", "中文行会被替换为占位符"},
+	})
+	if err != nil || !strings.Contains(out, "已生成 PDF") {
+		t.Fatalf("pdf 工具失败: %v %s", err, out)
+	}
+	pdfData, err := os.ReadFile(filepath.Join(sb.WorkDir, "report.pdf"))
+	if err != nil || !strings.HasPrefix(string(pdfData), "%PDF-1.4") || !strings.Contains(string(pdfData), "xref") {
+		t.Fatalf("PDF 内容异常: %v %s", err, string(pdfData[:min(len(pdfData), 64)]))
+	}
+
+	// 6. 只读模式拒绝 PDF 生成
+	roPdf := &GeneratePDFTool{Sandbox: ro}
+	if _, err := roPdf.Execute(ctx, map[string]interface{}{"path": "x.pdf", "lines": []interface{}{"a"}}); err == nil {
+		t.Fatal("只读模式应拒绝 PDF 生成")
+	}
 }

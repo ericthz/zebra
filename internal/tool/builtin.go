@@ -230,7 +230,14 @@ func (r *RandomTool) Execute(_ context.Context, args map[string]interface{}) (st
 	if min > max {
 		return "", fmt.Errorf("min 不能大于 max")
 	}
-	return fmt.Sprintf("%d", time.Now().UnixNano()%int64(max-min+1)+int64(min)), nil
+	// 防御：极端输入（如 min/max 接近整数边界）会使 max-min+1 溢出为
+	// 0 或负数，导致模零 panic。改用安全区间计算；溢出时退化为
+	// 64 位全区间取模，保证永不 panic（min==max 仍返回该值）。
+	span := int64(max) - int64(min) + 1
+	if span <= 0 {
+		return fmt.Sprintf("%d", time.Now().UnixNano()), nil
+	}
+	return fmt.Sprintf("%d", time.Now().UnixNano()%span+int64(min)), nil
 }
 
 // ---------------- 单位换算 ----------------

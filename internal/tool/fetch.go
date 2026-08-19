@@ -5,18 +5,18 @@
 // 必须做 SSRF 校验，否则 Agent 可能被诱导访问内网（云元数据、内网服务）。
 //
 // 安全设计：
-//  1. CheckSSRF：协议白名单 + 内网 IP 拦截 + 可选域名白名单（P6）
+//  1. CheckSSRF：协议白名单 + 内网 IP 拦截 + 可选域名白名单（P6）+ DNS 解析后校验
 //  2. 大小限制：只读前 MaxBytes，防下载巨文件撑爆内存
 //  3. 超时：单次请求带超时，防挂起
 //  4. 内容类型：默认仅文本类（HTML/JSON/纯文本），防二进制
-//
-// 生产演化方向：抓取结果先过内容审核（D18）与注入防护（D17）再交给模型。
+//  5. 抓取结果先过内容审核（D18）与注入防护（D17）再交给模型
 package tool
 
 import (
 	"context"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"strings"
 	"time"
@@ -26,8 +26,10 @@ import (
 
 // FetchURLTool 抓取 URL 内容。
 type FetchURLTool struct {
-	AllowHosts []string // 域名白名单（空 = 不限域名，但拦截内网）
-	MaxBytes   int      // 响应体大小上限
+	AllowHosts []string         // 域名白名单（空 = 不限域名，但拦截内网）
+	MaxBytes   int              // 响应体大小上限
+	Moderator  safety.Moderator // 内容审核器（nil = 跳过，但注入检测始终生效）
+	BlockFetch bool             // 命中敏感词/注入时拒绝返回内容（false = 返回摘要说明）
 }
 
 func (t *FetchURLTool) Name() string { return "fetch_url" }
@@ -50,8 +52,11 @@ func (t *FetchURLTool) Execute(ctx context.Context, args map[string]interface{})
 	if raw == "" {
 		return "", fmt.Errorf("缺少 url 参数")
 	}
-	// P6 SSRF 第一道防线：协议 + 内网 + 白名单校验
-	if err := safety.CheckSSRF(raw, t.AllowHosts); err != nil {
+	// P6 SSRF 第一道防线：协议 + 内网 + 白名单校验。
+	// 返回解析后的安全 IP，供 DialContext 绑定，消除"校验时解析公网 IP、
+	// 连接时重绑内网 IP"的 DNS 重绑定 TOCTOU 窗口。
+	safeIPs, err := safety.ResolveSSRF(raw, t.AllowHosts)
+	if err != nil {
 		return "", err
 	}
 
@@ -60,7 +65,39 @@ func (t *FetchURLTool) Execute(ctx context.Context, args map[string]interface{})
 		maxBytes = 64 * 1024
 	}
 
-	client := &http.Client{Timeout: 10 * time.Second}
+	// 连接绑定解析出的安全 IP（保留 Host 头与 TLS SNI 为原主机名）：
+	// 只有 ResolveSSRF 解析/校验过的目标才能被连接，杜绝重绑定。
+	dialer := &net.Dialer{Timeout: 10 * time.Second}
+	transport := &http.Transport{
+		DialContext: func(dctx context.Context, network, addr string) (net.Conn, error) {
+			_, port, err := net.SplitHostPort(addr)
+			if err != nil {
+				return nil, err
+			}
+			// 白名单放行（safeIPs==nil）时按标准解析走；否则必须命中安全 IP
+			if len(safeIPs) > 0 {
+				dest := net.JoinHostPort(safeIPs[0].String(), port)
+				return dialer.DialContext(dctx, network, dest)
+			}
+			// 白名单域名：直接按原地址连接（可信域名）
+			return dialer.DialContext(dctx, network, addr)
+		},
+	}
+	client := &http.Client{
+		Timeout:   10 * time.Second,
+		Transport: transport,
+		// 重定向也必须过 SSRF：初始 URL 校验通过后，恶意服务器可通过 302
+		// 把请求重定向到内网（云元数据/内网服务），故对每个跳转目标再次校验。
+		CheckRedirect: func(req *http.Request, via []*http.Request) error {
+			if len(via) >= 10 {
+				return fmt.Errorf("重定向次数过多")
+			}
+			if err := safety.CheckSSRF(req.URL.String(), t.AllowHosts); err != nil {
+				return err
+			}
+			return nil
+		},
+	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, raw, nil)
 	if err != nil {
 		return "", err
@@ -94,5 +131,24 @@ func (t *FetchURLTool) Execute(ctx context.Context, args map[string]interface{})
 	if text == "" {
 		return "（页面无内容）", nil
 	}
+
+	// D18 内容审核：抓取结果先过审核器，命中敏感词则拒绝（防把违规内容喂给模型）
+	if t.Moderator != nil {
+		if allowed, reason := t.Moderator.Check(text); !allowed {
+			if t.BlockFetch {
+				return "", fmt.Errorf("抓取内容未通过内容审核：%s", reason)
+			}
+			return "（抓取内容命中敏感内容，已拦截不返回原文：" + reason + "）", nil
+		}
+	}
+
+	// D17 注入检测：外部网页可能夹带"忽略以上指令"类恶意文本，检测后拒收
+	if hit, _ := safety.DetectInjection(text); hit {
+		if t.BlockFetch {
+			return "", fmt.Errorf("抓取内容疑似夹带指令注入，已拒绝")
+		}
+		return "（抓取内容疑似夹带指令注入，已拦截不返回原文）", nil
+	}
+
 	return text, nil
 }

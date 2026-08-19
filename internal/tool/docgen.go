@@ -104,18 +104,60 @@ func (t *GenerateChartTool) Execute(_ context.Context, args map[string]interface
 	return ToResult(fmt.Sprintf("已生成图表 %s（%d 个数据点）", path, len(values))), nil
 }
 
+// GeneratePDFTool 生成 PDF 摘要文档（P23 产出族第三件）。
+// 说明：最小 PDF 引擎仅支持 ASCII，中文字符会被替换为占位符，避免乱码。
+type GeneratePDFTool struct{ Sandbox *ExecSandbox }
+
+func (t *GeneratePDFTool) Name() string { return "generate_pdf" }
+func (t *GeneratePDFTool) Description() string {
+	return "生成 PDF 文档：指定输出路径、标题、正文行列表。注意：PDF 引擎仅支持 ASCII 文本，中文将被替换为占位符。"
+}
+func (t *GeneratePDFTool) Parameters() map[string]interface{} {
+	return map[string]interface{}{
+		"type": "object",
+		"properties": map[string]interface{}{
+			"path":  map[string]interface{}{"type": "string", "description": "输出文件路径（相对工作目录，如 report.pdf）"},
+			"title": map[string]interface{}{"type": "string", "description": "文档标题（可选）"},
+			"lines": map[string]interface{}{"type": "array", "items": map[string]interface{}{"type": "string"}, "description": "正文行列表"},
+		},
+		"required": []string{"path", "lines"},
+	}
+}
+func (t *GeneratePDFTool) Execute(_ context.Context, args map[string]interface{}) (string, error) {
+	if t.Sandbox.ReadOnly {
+		return "", fmt.Errorf("当前为只读模式，禁止生成文件")
+	}
+	path := StringArg(args, "path")
+	lines := StringSliceArg(args, "lines")
+	if path == "" || len(lines) == 0 {
+		return "", fmt.Errorf("缺少 path 或 lines")
+	}
+	abs, err := t.Sandbox.safePath(path)
+	if err != nil {
+		return "", err
+	}
+	if err := docgen.WritePDF(abs, StringArg(args, "title"), lines); err != nil {
+		return "", err
+	}
+	return ToResult(fmt.Sprintf("已生成 PDF 文档 %s（标题: %s，行: %d 行）", path, StringArg(args, "title"), len(lines))), nil
+}
+
 // RiskLevel 生成文件与写文件同级：高危（需二次确认）。
 func (t *GenerateDocxTool) RiskLevel() int  { return 2 }
 func (t *GenerateChartTool) RiskLevel() int { return 2 }
+func (t *GeneratePDFTool) RiskLevel() int   { return 2 }
 
 // AllowedRoles 仅 admin 可用（与本地写文件一致）。
 func (t *GenerateDocxTool) AllowedRoles() []string  { return []string{"admin"} }
 func (t *GenerateChartTool) AllowedRoles() []string { return []string{"admin"} }
+func (t *GeneratePDFTool) AllowedRoles() []string   { return []string{"admin"} }
 
 // 编译期断言。
 var (
 	_ Tool  = (*GenerateDocxTool)(nil)
 	_ Tool  = (*GenerateChartTool)(nil)
+	_ Tool  = (*GeneratePDFTool)(nil)
 	_ Risky = (*GenerateDocxTool)(nil)
 	_ Risky = (*GenerateChartTool)(nil)
+	_ Risky = (*GeneratePDFTool)(nil)
 )

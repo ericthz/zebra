@@ -1,7 +1,9 @@
 package tool
 
 import (
+	"bytes"
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -43,6 +45,38 @@ func TestPathTraversal(t *testing.T) {
 	}
 	if !strings.HasPrefix(ok, sb.WorkDir) {
 		t.Fatalf("合法路径应落在工作目录内: %s", ok)
+	}
+}
+
+// TestPathSymlinkEscape 工作目录内的 symlink 指向外部 → 必须被拦截（五8）。
+func TestPathSymlinkEscape(t *testing.T) {
+	sb, root := newTestSandbox(t, false)
+
+	// 工作目录外建一个敏感文件，再在工作目录内建指向它的 symlink
+	secret := filepath.Join(root, "secret.txt")
+	if err := os.WriteFile(secret, []byte("TOP-SECRET"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	link := filepath.Join(sb.WorkDir, "leak.txt")
+	if err := os.Symlink(secret, link); err != nil {
+		t.Fatal(err)
+	}
+
+	// 读 symlink 应被拦截（EvalSymlinks 发现真实路径在工作目录外）
+	if _, err := sb.safePath("leak.txt"); err == nil {
+		t.Fatal("symlink 指向工作目录外应被拦截")
+	}
+
+	// 工作目录内的 symlink 指向内部文件 → 应放行
+	inner := filepath.Join(sb.WorkDir, "inner.txt")
+	if err := os.WriteFile(inner, []byte("ok"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink("inner.txt", filepath.Join(sb.WorkDir, "link-inner.txt")); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := sb.safePath("link-inner.txt"); err != nil {
+		t.Fatalf("指向工作目录内部的 symlink 应放行: %v", err)
 	}
 }
 
@@ -111,5 +145,93 @@ func TestRunCommand(t *testing.T) {
 	rcT := &RunCommandTool{Sandbox: sbTimeout}
 	if _, err := rcT.Execute(context.Background(), map[string]interface{}{"command": "sleep 5"}); err == nil {
 		t.Fatal("超时命令应报错")
+	}
+}
+
+// TestRunCommandKillsChildGroup 六9：超时强杀必须连 shell 的后台子进程一起
+// 终止（Setpgid + kill(-pgid)）。若只杀 shell，后台 sleep 会成为孤儿存活，
+// 违背"超时整组强杀"的承诺。
+func TestRunCommandKillsChildGroup(t *testing.T) {
+	if os.Getenv("ZEBRA_SKIP_PROCGROUP") != "" {
+		t.Skip("跳过进程组强杀验证")
+	}
+	// 用写文件探针验证子进程已死：后台子进程先睡眠，超时后被强杀；
+	// 若存活，会在其醒来后写入 marker。等待超过子进程睡眠时长后检查。
+	sb := NewExecSandbox(t.TempDir(), false)
+	sb.Timeout = 200 * time.Millisecond
+	rc := &RunCommandTool{Sandbox: sb}
+	marker := filepath.Join(sb.WorkDir, "child-survived")
+	// 前台 sleep 5 负责触发超时；后台子进程 sleep 1 后在 shell 被杀时
+	// 应随进程组一并终止，不会醒来写 marker。
+	cmd := fmt.Sprintf("sh -c '(sleep 1 && touch %s) & sleep 5'", marker)
+	if _, err := rc.Execute(context.Background(), map[string]interface{}{"command": cmd}); err == nil {
+		t.Fatal("超时命令应报错")
+	}
+	// 等 1.5s（> 子进程 1s 睡眠）：若子进程没被杀，marker 会出现
+	time.Sleep(1500 * time.Millisecond)
+	if _, err := os.Stat(marker); err == nil {
+		t.Fatal("超时后后台子进程仍存活（进程组未强杀，六9）")
+	}
+}
+
+// TestReadFileHugeNoOOM 六6：read_file 读取超大文件不得占满内存——
+// LimitReader 只读 cap+1 字节即返回截断结果。
+func TestReadFileHugeNoOOM(t *testing.T) {
+	sb, _ := newTestSandbox(t, false)
+	read := &ReadFileTool{Sandbox: sb}
+
+	// 在沙箱内造一个 32MB 的大文件
+	huge := filepath.Join(sb.WorkDir, "huge.bin")
+	if err := os.WriteFile(huge, bytes.Repeat([]byte{'x'}, 32<<20), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	done := make(chan struct{})
+	var out string
+	var err error
+	go func() {
+		defer close(done)
+		out, err = read.Execute(context.Background(), map[string]interface{}{"path": "huge.bin"})
+	}()
+	select {
+	case <-done:
+	case <-time.After(5 * time.Second):
+		t.Fatal("read_file 大文件卡死（应被 LimitReader 截断）")
+	}
+	if err != nil {
+		t.Fatalf("读取应成功截断返回: %v", err)
+	}
+	if len(out) > 8*1024+64 {
+		t.Fatalf("输出应被截断到 ~8KB，实际 %d 字节", len(out))
+	}
+	if !strings.Contains(out, "已截断") {
+		t.Fatalf("大文件应标记截断: %q", out)
+	}
+}
+
+// TestRunCommandOutputCapNoOOM 六6：命令无限刷输出（yes）不得 OOM——
+// 读满 MaxOutput 即杀进程并返回截断结果。
+func TestRunCommandOutputCapNoOOM(t *testing.T) {
+	sb, _ := newTestSandbox(t, false)
+	sb.MaxOutput = 1024
+	rc := &RunCommandTool{Sandbox: sb}
+
+	done := make(chan struct{})
+	var out string
+	var err error
+	go func() {
+		defer close(done)
+		out, err = rc.Execute(context.Background(), map[string]interface{}{"command": "yes x"})
+	}()
+	select {
+	case <-done:
+	case <-time.After(5 * time.Second):
+		t.Fatal("run_command `yes` 卡死（输出应被限量并杀进程）")
+	}
+	if err == nil {
+		t.Fatalf("被强制终止的命令应报错，实际 out=%q", out)
+	}
+	if len(out) > 1024+64 {
+		t.Fatalf("输出应被截断到 ~1KB，实际 %d 字节", len(out))
 	}
 }

@@ -5,8 +5,9 @@
 // 本文件实现 3 个文件类工具，配合 exec_shell.go 的命令执行，构成最小 Agentic 能力。
 //
 // 安全设计（务必理解）：
-//  1. 路径沙箱：所有读写被限制在 ExecSandbox.WorkDir 白名单目录内，
-//     用 filepath.Clean + 前缀校验 防目录穿越（../ 逃逸）。
+//  1. 路径沙箱：所有文件读写被限制在 ExecSandbox.WorkDir 白名单目录内，
+//     用 filepath.Clean + 前缀校验 + EvalSymlinks（防 symlink 逃逸）实现。
+//     注意：这只约束"文件工具"，无法约束命令（见 exec_shell.go 的说明）。
 //  2. 只读模式：ExecSandbox.ReadOnly=true 时禁用写文件（默认开启只读更安全）。
 //  3. 高危标记：写文件/执行命令声明 RiskLevel=2，配合 registry 的
 //     二次确认 + 角色白名单（仅 admin）双保险（D20）。
@@ -20,6 +21,7 @@ package tool
 import (
 	"context"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -35,8 +37,14 @@ type ExecSandbox struct {
 }
 
 // NewExecSandbox 构造沙箱；workDir 自动绝对路径化并创建。
+// WorkDir 也做 EvalSymlinks 规范化（macOS 的 /var→/private/var 等），
+// 否则后续真实路径前缀校验会因基准自身是链接而误判。
 func NewExecSandbox(workDir string, readOnly bool) *ExecSandbox {
 	abs, _ := filepath.Abs(workDir)
+	if real, err := filepath.EvalSymlinks(abs); err == nil {
+		abs = real
+	}
+	os.MkdirAll(abs, 0o755)
 	return &ExecSandbox{
 		WorkDir:   abs,
 		ReadOnly:  readOnly,
@@ -46,18 +54,60 @@ func NewExecSandbox(workDir string, readOnly bool) *ExecSandbox {
 }
 
 // safePath 校验并解析"用户给的相对/绝对路径"是否落在 WorkDir 内。
-// 返回安全的绝对路径；越界（目录穿越）返回错误。这是本地执行的第一道防线。
+// 返回安全的绝对路径；越界（目录穿越 / symlink 逃逸）返回错误。
+// 这是本地执行的第一道防线。修复：仅靠 Clean+前缀校验挡不住 symlink
+// （工作目录内的软链可指向 /etc/passwd 等外部文件），故解析真实路径后
+// 再校验一次；不存在/无法解析的路径按"越界"拒绝（宁可误杀不可放行）。
 func (s *ExecSandbox) safePath(p string) (string, error) {
 	abs := p
 	if !filepath.IsAbs(abs) {
 		abs = filepath.Join(s.WorkDir, abs) // 相对路径一律锚定到工作目录
 	}
 	clean := filepath.Clean(abs)
-	// 前缀校验：clean 必须等于或位于 WorkDir 之内
-	if clean != s.WorkDir && !strings.HasPrefix(clean, s.WorkDir+string(filepath.Separator)) {
+	if !s.withinWorkDir(clean) {
 		return "", fmt.Errorf("路径越界（禁止访问工作目录之外）: %s", p)
 	}
-	return clean, nil
+	// symlink 防御：路径可能尚未创建（写文件场景），逐级向上找最近存在的
+	// 祖先做 EvalSymlinks，验证该祖先的真实位置在工作目录内；不存在尾段
+	// 拼回后整体仍须满足前缀约束（穿越/链接逃逸会被祖先解析拦下）。
+	base, tail := s.resolveExisting(clean)
+	if base == "" {
+		return "", fmt.Errorf("路径不可用或越界（symlink 解析失败）: %s", p)
+	}
+	if !s.withinWorkDir(base) {
+		return "", fmt.Errorf("路径越界（symlink 指向工作目录之外）: %s", p)
+	}
+	return filepath.Join(base, tail), nil
+}
+
+// resolveExisting 沿路径向上找最近存在的祖先并解析 symlink，
+// 返回（解析后的真实路径, 未解析的剩余尾段）。全部不存在返回空。
+func (s *ExecSandbox) resolveExisting(p string) (string, string) {
+	cur := filepath.Clean(p)
+	for {
+		real, err := filepath.EvalSymlinks(cur)
+		if err == nil {
+			// cur 已解析；把 cur 之后的部分作为尾段拼回
+			if cur == filepath.Clean(p) {
+				return real, ""
+			}
+			rel, err := filepath.Rel(cur, p)
+			if err != nil {
+				return real, ""
+			}
+			return real, rel
+		}
+		parent := filepath.Dir(cur)
+		if parent == cur { // 已到根，无可解析祖先
+			return "", ""
+		}
+		cur = parent
+	}
+}
+
+// withinWorkDir 判断路径是否等于或位于 WorkDir 之内。
+func (s *ExecSandbox) withinWorkDir(p string) bool {
+	return p == s.WorkDir || strings.HasPrefix(p, s.WorkDir+string(filepath.Separator))
 }
 
 // ---------------- 工具：列出目录 ----------------
@@ -121,11 +171,18 @@ func (t *ReadFileTool) Execute(_ context.Context, args map[string]interface{}) (
 	if err != nil {
 		return "", err
 	}
-	data, err := os.ReadFile(p)
+	f, err := os.Open(p)
 	if err != nil {
 		return "", err
 	}
+	defer f.Close()
+	// 六6：LimitReader 只读前 cap+1 字节，绝不整读超大文件（/dev/zero 或
+	// GB 级文件曾直接 OOM/卡死整个进程）。
 	const cap = 8 * 1024
+	data, err := io.ReadAll(io.LimitReader(f, cap+1))
+	if err != nil {
+		return "", err
+	}
 	if len(data) > cap {
 		return string(data[:cap]) + "\n…（文件过长已截断）", nil
 	}
