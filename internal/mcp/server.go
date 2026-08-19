@@ -4,6 +4,7 @@ package mcp
 import (
 	"bufio"
 	"context"
+	"crypto/subtle"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -18,10 +19,11 @@ type ToolHandler func(ctx context.Context, args map[string]interface{}) (*CallTo
 
 // Server MCP 服务器。
 type Server struct {
-	mu      sync.RWMutex
-	tools   map[string]ToolDef
-	handler map[string]ToolHandler
-	logger  *slog.Logger
+	mu        sync.RWMutex
+	tools     map[string]ToolDef
+	handler   map[string]ToolHandler
+	logger    *slog.Logger
+	httpToken string // HTTP 模式访问令牌（空 = 不鉴权，仅建议本地/dev）
 }
 
 // NewServer 构造。
@@ -30,6 +32,40 @@ func NewServer(logger *slog.Logger) *Server {
 		logger = slog.Default()
 	}
 	return &Server{tools: make(map[string]ToolDef), handler: make(map[string]ToolHandler), logger: logger}
+}
+
+// SetHTTPToken 设置 HTTP 模式 Bearer 访问令牌；空串 = 关闭鉴权。
+// 设置后所有 HTTP 请求必须携带 Authorization: Bearer <token>。
+func (s *Server) SetHTTPToken(token string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.httpToken = token
+}
+
+// ValidateHTTPStart 校验 HTTP 模式启动前提（P2-E）：HTTP 模式必须显式配置
+// Bearer 令牌，否则拒绝启动（默认拒绝、显式放行）。stdio 模式走本地管道，
+// 由启动方授权，无需令牌。
+func ValidateHTTPStart(httpAddr, token string) error {
+	if httpAddr != "" && token == "" {
+		return fmt.Errorf("MCP HTTP 模式必须配置鉴权令牌：请用 -http-token 或 MCP_HTTP_TOKEN 设置 Bearer 令牌后重启")
+	}
+	return nil
+}
+
+// checkToken 校验 Bearer 令牌（常量时间比较，防时序侧信道）。
+func (s *Server) checkToken(r *http.Request) bool {
+	s.mu.RLock()
+	token := s.httpToken
+	s.mu.RUnlock()
+	if token == "" {
+		return true // 未启用鉴权
+	}
+	h := r.Header.Get("Authorization")
+	const prefix = "Bearer "
+	if len(h) <= len(prefix) || h[:len(prefix)] != prefix {
+		return false
+	}
+	return subtle.ConstantTimeCompare([]byte(h[len(prefix):]), []byte(token)) == 1
 }
 
 // RegisterTool 注册工具。
@@ -114,6 +150,12 @@ func (s *Server) ServeHTTP(ctx context.Context, addr string) error {
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
 			http.Error(w, "only POST allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		// D19 HTTP 鉴权：设置了 token 则校验 Bearer，失败返回 401 且不处理请求。
+		if !s.checkToken(r) {
+			w.Header().Set("WWW-Authenticate", "Bearer")
+			http.Error(w, "unauthorized", http.StatusUnauthorized)
 			return
 		}
 		var req Request

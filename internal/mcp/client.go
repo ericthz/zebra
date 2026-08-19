@@ -24,11 +24,12 @@ type Transport interface {
 // ---- stdio 传输 ----
 
 type stdioTransport struct {
-	cmd    *exec.Cmd
-	stdin  io.WriteCloser
-	reader *bufio.Reader
-	mu     sync.Mutex
-	nextID int
+	cmd     *exec.Cmd
+	stdin   io.WriteCloser
+	lines   chan []byte // 常驻读行 goroutine 推入的行；Close 后关闭
+	readErr chan error
+	mu      sync.Mutex
+	nextID  int
 }
 
 // NewStdioClient 启动子进程并建立 stdio 通道。
@@ -45,9 +46,37 @@ func NewStdioClient(command string, args ...string) (Transport, error) {
 	if err := cmd.Start(); err != nil {
 		return nil, err
 	}
-	return &stdioTransport{
-		cmd: cmd, stdin: stdin, reader: bufio.NewReader(stdout), nextID: 1,
-	}, nil
+	t := &stdioTransport{
+		cmd: cmd, stdin: stdin, lines: make(chan []byte, 64), readErr: make(chan error, 1), nextID: 1,
+	}
+	// 常驻读行 goroutine：持续消费 stdout，EOF/读错误后关闭 lines。
+	// 修复 P34 竞态：旧实现每次 Send 临时起 goroutine 读一行，ctx 取消时
+	// goroutine 泄漏且可能吞掉下一轮响应；改为"一传一读 goroutine"生命周期
+	// 与传输一致，取消只影响 select，不泄漏也不抢读。
+	go t.readLoop(bufio.NewReader(stdout))
+	return t, nil
+}
+
+// readLoop 常驻读取 stdout 的每一行，推入 lines 通道。
+func (t *stdioTransport) readLoop(r *bufio.Reader) {
+	defer close(t.lines)
+	for {
+		line, err := r.ReadBytes('\n')
+		if err != nil {
+			t.readErr <- err
+			return
+		}
+		select {
+		case t.lines <- line:
+		default:
+			// 客户端消费慢：丢弃最旧行防内存增长（服务器应答应有界）
+			select {
+			case <-t.lines:
+			default:
+			}
+			t.lines <- line
+		}
+	}
 }
 
 func (t *stdioTransport) Send(ctx context.Context, req *Request) (*Response, error) {
@@ -68,15 +97,46 @@ func (t *stdioTransport) Send(ctx context.Context, req *Request) (*Response, err
 	if strings.HasPrefix(req.Method, "notifications/") {
 		return &Response{JSONRPC: "2.0"}, nil
 	}
-	line, err := readLineCtx(ctx, t.reader)
-	if err != nil {
+	select {
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	case err := <-t.readErr:
 		return nil, err
+	case line, ok := <-t.lines:
+		if !ok {
+			return nil, io.EOF
+		}
+		var resp Response
+		if err := json.Unmarshal(line, &resp); err != nil {
+			return nil, err
+		}
+		// C-2：严格校验响应 ID 与本请求一致。前一个请求若在超时/取消后
+		// 其响应行仍滞留 lines，这里不校验就会把"上一条请求的响应"当成本
+		// 请求结果回喂模型（并发 MCP 工具调用时结果错位）。丢弃错位行并
+		// 重读，最多 bound 次（服务器可能出现合法重排序，须留余量）。
+		if !idMatches(resp.ID, req.ID) {
+			for attempt := 0; attempt < 8; attempt++ {
+				select {
+				case line, ok = <-t.lines:
+					if !ok {
+						return nil, io.EOF
+					}
+					if err := json.Unmarshal(line, &resp); err != nil {
+						return nil, err
+					}
+					if idMatches(resp.ID, req.ID) {
+						return &resp, nil
+					}
+				case <-ctx.Done():
+					return nil, ctx.Err()
+				case err := <-t.readErr:
+					return nil, err
+				}
+			}
+			return nil, fmt.Errorf("MCP 响应 ID 不匹配: 期望 %d，实际 %v", req.ID, resp.ID)
+		}
+		return &resp, nil
 	}
-	var resp Response
-	if err := json.Unmarshal(line, &resp); err != nil {
-		return nil, err
-	}
-	return &resp, nil
 }
 
 func (t *stdioTransport) Close() error {
@@ -84,22 +144,33 @@ func (t *stdioTransport) Close() error {
 	return t.cmd.Wait()
 }
 
-func readLineCtx(ctx context.Context, r *bufio.Reader) ([]byte, error) {
-	type res struct {
-		line []byte
-		err  error
+// idMatches 比较 JSON-RPC ID：JSON 数字解码后为 float64，与发送侧的 int
+// 不直接可比，统一转 float64 再比（C-2）。
+func idMatches(a, b interface{}) bool {
+	if a == nil || b == nil {
+		return a == b
 	}
-	ch := make(chan res, 1)
-	go func() {
-		line, err := r.ReadBytes('\n')
-		ch <- res{line, err}
-	}()
-	select {
-	case <-ctx.Done():
-		return nil, ctx.Err()
-	case r := <-ch:
-		return r.line, r.err
+	af, aok := toFloat(a)
+	bf, bok := toFloat(b)
+	if aok && bok {
+		return af == bf
 	}
+	return fmt.Sprint(a) == fmt.Sprint(b)
+}
+
+func toFloat(v interface{}) (float64, bool) {
+	switch n := v.(type) {
+	case float64:
+		return n, true
+	case int:
+		return float64(n), true
+	case int64:
+		return float64(n), true
+	case json.Number:
+		f, err := n.Float64()
+		return f, err == nil
+	}
+	return 0, false
 }
 
 // ---- HTTP 传输 ----
