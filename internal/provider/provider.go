@@ -83,8 +83,3 @@ type Provider interface {
 	Chat(ctx context.Context, messages []Message, tools []Tool) (Message, error)
 	ChatStream(ctx context.Context, messages []Message, tools []Tool) (<-chan StreamEvent, error)
 }
-
-// TextParts 便捷构造：把纯文本转为单块多模态内容（供 OpenAI 兼容层复用）。
-func TextParts(text string) []Part {
-	return []Part{{Type: "text", Text: text}}
-}

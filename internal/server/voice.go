@@ -10,7 +10,7 @@ package server
 
 import (
 	"encoding/base64"
-	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"strings"
@@ -18,31 +18,66 @@ import (
 	"github.com/ericthz/zebra/internal/agent"
 )
 
+// readAudioPart 从 multipart 流式读取 file 字段与其他表单字段。
+// 不用 ParseMultipartForm：它会把整个请求体先缓冲到内存（32MB 档），
+// 再 ReadAll(f) 又复制一份，峰值内存翻倍（修复 P25 双重缓冲）。
+// limitBytes 为音频大小上限；返回音频字节 + 其他文本字段。
+// 注意：不能遇到 file 就提前 return，否则 file 之后的表单字段
+// （如 session_id）会被丢弃——顺序无关地读完整个 multipart 流。
+func readAudioPart(r *http.Request, limitBytes int64) ([]byte, map[string]string, error) {
+	mr, err := r.MultipartReader()
+	if err != nil {
+		return nil, nil, fmt.Errorf("multipart 解析失败: %w", err)
+	}
+	fields := make(map[string]string)
+	var audio []byte
+	for {
+		part, err := mr.NextPart()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			return nil, nil, err
+		}
+		if part.FormName() == "file" {
+			audio, err = io.ReadAll(io.LimitReader(part, limitBytes+1))
+			part.Close()
+			if err != nil {
+				return nil, nil, fmt.Errorf("读取音频失败: %w", err)
+			}
+			if int64(len(audio)) > limitBytes {
+				return nil, nil, fmt.Errorf("音频超过大小上限 %d 字节", limitBytes)
+			}
+			continue
+		}
+		// 其他文本字段（如 session_id）：流式读取并记录
+		b, err := io.ReadAll(io.LimitReader(part, 4096))
+		part.Close()
+		if err != nil {
+			return nil, nil, err
+		}
+		fields[part.FormName()] = string(b)
+	}
+	if audio == nil {
+		return nil, nil, fmt.Errorf("缺少 file 字段")
+	}
+	return audio, fields, nil
+}
+
 // handleVoiceTranscribe 语音转写：multipart 字段 file 上传音频。
 func (s *APIServer) handleVoiceTranscribe(w http.ResponseWriter, r *http.Request) {
 	if s.deps.Voice == nil {
 		http.Error(w, "语音未启用（需配置 VOICE_BASE_URL）", http.StatusNotImplemented)
 		return
 	}
-	if err := r.ParseMultipartForm(32 << 20); err != nil {
-		http.Error(w, "multipart 解析失败: "+err.Error(), http.StatusBadRequest)
-		return
-	}
-	f, _, err := r.FormFile("file")
+	audio, _, err := readAudioPart(r, 32<<20)
 	if err != nil {
-		http.Error(w, "缺少 file 字段", http.StatusBadRequest)
-		return
-	}
-	defer f.Close()
-	audio, err := io.ReadAll(io.LimitReader(f, 32<<20))
-	if err != nil {
-		http.Error(w, "读取音频失败", http.StatusBadRequest)
+		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 	text, err := s.deps.Voice.Transcribe(r.Context(), audio, "", "")
 	if err != nil {
-		s.deps.Logger.Warn("语音转写失败", "err", err)
-		http.Error(w, "transcribe error: "+err.Error(), http.StatusInternalServerError)
+		s.writeAgentError(w, "语音转写失败", err)
 		return
 	}
 	jsonOK(w, map[string]string{"text": text})
@@ -61,7 +96,10 @@ func (s *APIServer) handleVoiceSynthesize(w http.ResponseWriter, r *http.Request
 		return
 	}
 	var req SynthesizeRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || strings.TrimSpace(req.Text) == "" {
+	if err := decodeJSON(w, r, &req); err != nil {
+		return
+	}
+	if strings.TrimSpace(req.Text) == "" {
 		http.Error(w, "bad request: text 必填", http.StatusBadRequest)
 		return
 	}
@@ -79,8 +117,7 @@ func (s *APIServer) handleVoiceSynthesize(w http.ResponseWriter, r *http.Request
 		audio, ct, err = s.deps.Voice.Synthesize(r.Context(), req.Text)
 	}
 	if err != nil {
-		s.deps.Logger.Warn("语音合成失败", "err", err)
-		http.Error(w, "synthesize error: "+err.Error(), http.StatusInternalServerError)
+		s.writeAgentError(w, "语音合成失败", err)
 		return
 	}
 	w.Header().Set("Content-Type", ct)
@@ -106,46 +143,43 @@ func (s *APIServer) handleVoiceChat(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "语音未启用（需配置 VOICE_BASE_URL）", http.StatusNotImplemented)
 		return
 	}
-	if err := r.ParseMultipartForm(32 << 20); err != nil {
-		http.Error(w, "multipart 解析失败: "+err.Error(), http.StatusBadRequest)
-		return
-	}
-	f, _, err := r.FormFile("file")
+	audio, fields, err := readAudioPart(r, 32<<20)
 	if err != nil {
-		http.Error(w, "缺少 file 字段", http.StatusBadRequest)
-		return
-	}
-	defer f.Close()
-	audio, err := io.ReadAll(io.LimitReader(f, 32<<20))
-	if err != nil {
-		http.Error(w, "读取音频失败", http.StatusBadRequest)
+		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 
 	// 1. ASR：语音 → 文本
 	text, err := s.deps.Voice.Transcribe(r.Context(), audio, "", "")
 	if err != nil {
-		http.Error(w, "transcribe error: "+err.Error(), http.StatusInternalServerError)
+		s.writeAgentError(w, "语音转写失败", err)
 		return
 	}
 
 	// 2. Agent：文本 → 回复（复用会话体系，支持多轮）
-	sess, err := s.sessionFor(r.Context(), r.FormValue("session_id"))
+	// 锁内重取最新历史（六1）：Redis 会话存储下并发/连续请求不丢轮次。
+	sess, err := s.lockSession(r.Context(), fields["session_id"])
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusUnauthorized)
 		return
 	}
+	defer sess.runMu.Unlock()
 	ag := s.agentFor(sess)
 	reply, err := ag.Run(r.Context(), text, agent.RunOptions{})
 	if err != nil {
-		http.Error(w, "agent error: "+err.Error(), http.StatusInternalServerError)
+		// 失败轮次 Agent 已改写内存历史，仍须落库（六10，与 /v1/chat 对齐）
+		s.persistHistory(sess)
+		s.writeAgentError(w, "voice chat failed", err)
 		return
 	}
+	// 语音链路同样要写回会话历史：否则 Redis 会话存储下多轮语音的
+	// 上下文永不落库，下一轮对话丢失上文（与 /v1/chat 对齐）。
+	s.persistHistory(sess)
 
 	// 3. TTS：回复 → 音频
 	audioBytes, _, err := s.deps.Voice.Synthesize(r.Context(), reply)
 	if err != nil {
-		http.Error(w, "synthesize error: "+err.Error(), http.StatusInternalServerError)
+		s.writeAgentError(w, "语音合成失败", err)
 		return
 	}
 	jsonOK(w, VoiceChatResponse{

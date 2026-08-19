@@ -8,6 +8,7 @@ package main
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"flag"
 	"fmt"
@@ -28,6 +29,7 @@ import (
 	"github.com/ericthz/zebra/internal/prompt"
 	"github.com/ericthz/zebra/internal/provider"
 	"github.com/ericthz/zebra/internal/rag"
+	"github.com/ericthz/zebra/internal/redis"
 	"github.com/ericthz/zebra/internal/safety"
 	"github.com/ericthz/zebra/internal/skill"
 	"github.com/ericthz/zebra/internal/supervisor"
@@ -36,7 +38,11 @@ import (
 
 func main() {
 	// ---- 启动模式：与 Web UI 的模式选择一致 ----
-	mode := flag.String("mode", "chat", "启动模式: chat|plan|react|reflect|debate|supervisor")
+	mode := flag.String("mode", "chat", "启动模式: chat|plan|react|reflect|debate|supervisor|consistent")
+	// C14 多模态：启动时可带图片（http(s) URL / data: 数据 URI / 本地文件路径），
+	// 每轮对话都附带上该图；可重复传多张，换图需重启（CLI 简化；生产用多轮上传）。
+	var images multiFlag
+	flag.Var(&images, "image", "多模态图片: http(s) URL | data: 数据 URI | 本地文件路径（可重复）")
 	flag.Parse()
 	// ReAct 最大推理-行动步数（默认 6；REACT_MAX_STEPS 可调）
 	reactMaxSteps := atoiDefault(os.Getenv("REACT_MAX_STEPS"), 6)
@@ -87,7 +93,7 @@ func main() {
 	reg.Register(&tool.TranslateTool{})
 	reg.Register(&tool.IPInfoTool{})
 
-	reg.Register(&tool.FetchURLTool{}) // P6 SSRF 防护的抓取工具
+	reg.Register(&tool.FetchURLTool{Moderator: safety.NewKeywordModerator()}) // P6 SSRF 防护 + D18 内容审核
 	// ---- P2 本地执行：文件读写 + 命令执行（Zebra CLI 默认可写，便于演示 Agentic 能力）----
 	execSandbox := tool.NewExecSandbox("workspace", false)
 	reg.Register(&tool.ListDirTool{Sandbox: execSandbox})
@@ -99,7 +105,7 @@ func main() {
 	// ---- P53 插件动态加载：plugins/ 目录 JSON 定义的外部 HTTP 工具 ----
 	if _, err := os.Stat("plugins"); err == nil {
 		if defs, lerr := plugin.Load("plugins"); lerr == nil && len(defs) > 0 {
-			plugin.Register(reg, defs, &http.Client{Timeout: 10 * time.Second})
+			plugin.Register(reg, defs)
 		}
 	}
 
@@ -112,6 +118,21 @@ func main() {
 
 	// ---- P32 记忆：与 cmd/server 同一装配（QDRANT_URL 设置且可用则启用长期记忆）----
 	mem, longMem := memory.SetupManager(logger)
+	// P51 Redis 长期记忆：无 Qdrant 但配了 REDIS_URL 时启用（关键词检索）——
+	// 与 cmd/server 行为对齐，避免 CLI 配了 Redis 但长期记忆不生效。
+	if !longMem {
+		if rurl := os.Getenv("REDIS_URL"); rurl != "" {
+			rc := &redis.Client{
+				Addr:     rurl,
+				Password: os.Getenv("REDIS_PASSWORD"),
+				DB:       atoiDefault(os.Getenv("REDIS_DB"), 0),
+			}
+			if rm, ok := memory.SetupManagerRedis(rc, logger); ok {
+				mem = rm
+				longMem = true
+			}
+		}
+	}
 
 	// ---- P36 知识库（RAG）：与 cmd/server 同一装配，加载 docs/ 目录 ----
 	var ragIndex *rag.Index
@@ -215,6 +236,19 @@ func main() {
 		VoiceEnabled: voice != nil,
 		Mode:         modeLabel(*mode) + "（输入 /mode 切换，/help 查看全部）",
 	})
+
+	// ---- C14 多模态：把 -image 参数归一化为 provider 可消费的 image_url ----
+	// 本地文件转 base64 data URI；URL/data: URI 原样透传。读取失败直接退出，
+	// 避免"图没进去"的静默半实现（字段有、模型没收到图）。
+	images, err := resolveImages(images)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
+	if len(images) > 0 {
+		fmt.Printf("  %s 已加载 %d 张图片，每轮对话附带（换图需重启）\n",
+			console.Symbol("◉", console.ColorModel), len(images))
+	}
 	fmt.Println(strings.Repeat("─", 60))
 	for {
 		// P38：raw 模式 + UTF-8 感知行编辑（中文退格不再残留字节残片）；
@@ -249,7 +283,7 @@ func main() {
 			continue
 		}
 		ctx := context.Background()
-		answer, err := runAgent(ctx, ag, sup, &history, *mode, reactMaxSteps, in)
+		answer, err := runAgent(ctx, ag, sup, &history, *mode, reactMaxSteps, images, in)
 		if err != nil {
 			fmt.Printf("✗ %v\n", err)
 			continue
@@ -263,6 +297,46 @@ func envOr(k, d string) string {
 		return v
 	}
 	return d
+}
+
+// multiFlag 可重复的字符串 flag（如 -image a.png -image b.jpg）。
+type multiFlag []string
+
+func (m *multiFlag) String() string { return strings.Join(*m, ",") }
+func (m *multiFlag) Set(v string) error {
+	*m = append(*m, v)
+	return nil
+}
+
+// resolveImages 把 CLI 的图片参数归一化为 provider 可消费的 image_url：
+//   - http(s):// 原样透传（模型侧抓取）
+//   - data: 数据 URI 原样透传
+//   - 其余按本地文件路径读取，转 base64 data URI（OpenAI 兼容 image_url 格式）
+//     读取失败返回错误，避免静默丢图（半实现陷阱：字段有但图没进去）。
+func resolveImages(in []string) ([]string, error) {
+	var out []string
+	for _, s := range in {
+		switch {
+		case strings.HasPrefix(s, "http://"), strings.HasPrefix(s, "https://"),
+			strings.HasPrefix(s, "data:"):
+			out = append(out, s)
+		default:
+			b, err := os.ReadFile(s)
+			if err != nil {
+				return nil, fmt.Errorf("读取图片失败 %s: %w", s, err)
+			}
+			mime := "image/jpeg"
+			if strings.HasSuffix(s, ".png") {
+				mime = "image/png"
+			} else if strings.HasSuffix(s, ".gif") {
+				mime = "image/gif"
+			} else if strings.HasSuffix(s, ".webp") {
+				mime = "image/webp"
+			}
+			out = append(out, "data:"+mime+";base64,"+base64.StdEncoding.EncodeToString(b))
+		}
+	}
+	return out, nil
 }
 
 // atoiDefault 字符串转 int，失败返回默认值。
@@ -332,6 +406,8 @@ func modeLabel(m string) string {
 		return "debate 双 Agent 辩论"
 	case "supervisor":
 		return "supervisor 多 Agent 路由"
+	case "consistent":
+		return "consistent 自一致性采样择优"
 	}
 	return m
 }
@@ -339,7 +415,7 @@ func modeLabel(m string) string {
 // validMode 判断模式名是否受支持。
 func validMode(m string) bool {
 	switch m {
-	case "chat", "plan", "react", "reflect", "debate", "supervisor":
+	case "chat", "plan", "react", "reflect", "debate", "supervisor", "consistent":
 		return true
 	}
 	return false
@@ -356,9 +432,10 @@ func emitTerminal(ev agent.Event) {
 }
 
 // runAgent 按模式分发执行：chat 走普通对话；plan/react 走流式（活动轨迹）；
-// reflect/debate/supervisor 先打印阶段提示再执行。
-func runAgent(ctx context.Context, ag *agent.Agent, sup *supervisor.Supervisor, history *[]provider.Message, mode string, reactMaxSteps int, input string) (string, error) {
-	opts := agent.RunOptions{}
+// reflect/debate/supervisor 先打印阶段提示再执行。images 为该轮附带的多模态
+// 图片（C14，可空）。
+func runAgent(ctx context.Context, ag *agent.Agent, sup *supervisor.Supervisor, history *[]provider.Message, mode string, reactMaxSteps int, images []string, input string) (string, error) {
+	opts := agent.RunOptions{Images: images}
 	switch mode {
 	case "chat":
 		return ag.Run(ctx, input, opts)
@@ -371,14 +448,11 @@ func runAgent(ctx context.Context, ag *agent.Agent, sup *supervisor.Supervisor, 
 		return ag.ReActStream(ctx, input, opts, reactMaxSteps, emitTerminal)
 	case "reflect":
 		emitTerminal(agent.Event{Type: agent.EventPhase, Phase: "回答后反思改进…"})
-		answer, err := ag.Run(ctx, input, opts)
-		if err != nil {
-			return "", err
-		}
-		return ag.Reflect(ctx, input, answer)
+		// P2-B：RunReflect 统一处理修订版的 D18 审核与历史写回
+		return ag.RunReflect(ctx, input, opts)
 	case "debate":
 		emitTerminal(agent.Event{Type: agent.EventPhase, Phase: "双 Agent 辩论中…"})
-		reply, _, err := ag.Debate(ctx, input, "", "")
+		reply, _, err := ag.Debate(ctx, input, "", "", images...)
 		return reply, err
 	case "supervisor":
 		if sup == nil {
@@ -395,6 +469,12 @@ func runAgent(ctx context.Context, ag *agent.Agent, sup *supervisor.Supervisor, 
 		workerAg := w.Build()
 		workerAg.Bind("zebra", "admin", "local", history)
 		return workerAg.Run(ctx, input, opts)
+	case "consistent":
+		// P40 自一致性：独立采样多份回答再择优，降低单次采样随机性。
+		// 采样数可配（SELF_CONSISTENT_SAMPLES，默认 3）。
+		samples := atoiDefault(os.Getenv("SELF_CONSISTENT_SAMPLES"), 3)
+		emitTerminal(agent.Event{Type: agent.EventPhase, Phase: fmt.Sprintf("自一致性采样 %d 份回答中…", samples)})
+		return ag.SelfConsistent(ctx, input, samples, images...)
 	}
 	return "", fmt.Errorf("未知模式: %s", mode)
 }
@@ -408,7 +488,9 @@ func printHelp() {
 	fmt.Println("    /mode <名称>  切换对话模式")
 	fmt.Println("    /help         显示本帮助")
 	fmt.Println("  模式:")
-	for _, m := range []string{"chat", "plan", "react", "reflect", "debate", "supervisor"} {
+	for _, m := range []string{"chat", "plan", "react", "reflect", "debate", "supervisor", "consistent"} {
 		fmt.Printf("    %s\n", modeLabel(m))
 	}
+	fmt.Println("  多模态:")
+	fmt.Println("    -image <URL|data:URI|文件>  附带图片（可重复，换图需重启）")
 }
