@@ -26,11 +26,18 @@ var fallbackReader *bufio.Reader
 // ReadLine 输出 prompt 后读取一行（不含换行）。
 // stdin 为 TTY 且 raw 模式可用 → UTF-8 感知编辑；否则回退标准行读取。
 func ReadLine(prompt string) (string, error) {
+	return ReadLineWithCompletions(prompt, nil)
+}
+
+// ReadLineWithCompletions 同 ReadLine，但支持命令补全提示：
+// 输入内容以 "/" 开头时，按下 Tab 会在下方列出匹配的候选命令（P38 扩展）。
+// candidates 为空时行为与 ReadLine 完全一致。非 TTY 回退标准行读取。
+func ReadLineWithCompletions(prompt string, candidates []string) (string, error) {
 	fmt.Print(prompt)
 	fd := int(os.Stdin.Fd())
 	if restore, err := makeRaw(fd); err == nil {
 		defer restore()
-		return readLineRaw(bufio.NewReader(os.Stdin), os.Stdout)
+		return readLineRaw(bufio.NewReader(os.Stdin), os.Stdout, prompt, candidates)
 	}
 	if fallbackReader == nil {
 		fallbackReader = bufio.NewReader(os.Stdin)
@@ -44,7 +51,8 @@ func ReadLine(prompt string) (string, error) {
 
 // readLineRaw raw 模式行编辑核心（注入 reader/writer 便于测试）。
 // 支持：Enter 提交、退格按字符删除、Ctrl-C 中断、Ctrl-D 结束。
-func readLineRaw(r *bufio.Reader, w io.Writer) (string, error) {
+// candidates 非空时：Tab 触发命令补全提示（输入以 "/" 开头）。
+func readLineRaw(r *bufio.Reader, w io.Writer, prompt string, candidates []string) (string, error) {
 	var buf []rune
 	for {
 		b, err := r.ReadByte()
@@ -61,6 +69,10 @@ func readLineRaw(r *bufio.Reader, w io.Writer) (string, error) {
 				buf = buf[:n-1]
 				erase(w, displayWidth(string(last)))
 			}
+		case b == 0x09: // Tab：命令补全提示（仅 / 前缀）
+			if len(candidates) > 0 {
+				completeTab(w, prompt, buf, candidates)
+			}
 		case b == 0x03: // Ctrl-C
 			return string(buf), ErrInterrupted
 		case b == 0x04: // Ctrl-D（空行时表示结束）
@@ -76,6 +88,31 @@ func readLineRaw(r *bufio.Reader, w io.Writer) (string, error) {
 			fmt.Fprint(w, string(r_))
 		}
 	}
+}
+
+// completeTab 根据当前输入前缀匹配候选命令并提示：
+//   - 前缀以 "/" 开头且有候选 → 换行列出，再重绘 prompt + 已输入内容。
+//   - 无匹配/前缀为空 → 无动作。
+func completeTab(w io.Writer, prompt string, buf []rune, candidates []string) {
+	prefix := string(buf)
+	if !strings.HasPrefix(prefix, "/") {
+		return
+	}
+	var matches []string
+	for _, c := range candidates {
+		if strings.HasPrefix(c, prefix) {
+			matches = append(matches, c)
+		}
+	}
+	if len(matches) == 0 {
+		return
+	}
+	fmt.Fprint(w, "\r\n")
+	for _, m := range matches {
+		fmt.Fprintf(w, "  %s\n", m)
+	}
+	fmt.Fprint(w, prompt)
+	fmt.Fprint(w, string(buf))
 }
 
 // readRune 从首字节 + 续字节解码一个完整 UTF-8 rune。

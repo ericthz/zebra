@@ -184,13 +184,13 @@ func main() {
 	toolHook, skillHook := traceHooks()
 
 	ag := agent.New(agent.Config{
-		Router:       router,
-		Tools:        reg,
-		Prompts:      prompts,
-		Mem:          mem,
+		Router:  router,
+		Tools:   reg,
+		Prompts: prompts,
+		Mem:     mem,
 		// CONTEXT_MAX_TOKENS 上下文预算（默认 4000）；SUMMARY_MAX_CHARS 摘要长度（默认 600）
-		Window:       &agent.ContextWindow{MaxTokens: atoiDefault(os.Getenv("CONTEXT_MAX_TOKENS"), 4000), Summarizer: agent.PrefixSummarizer{MaxChars: atoiDefault(os.Getenv("SUMMARY_MAX_CHARS"), 600)}},
-		Moderator:    safety.NewKeywordModerator(),
+		Window:    &agent.ContextWindow{MaxTokens: atoiDefault(os.Getenv("CONTEXT_MAX_TOKENS"), 4000), Summarizer: agent.PrefixSummarizer{MaxChars: atoiDefault(os.Getenv("SUMMARY_MAX_CHARS"), 600)}},
+		Moderator: safety.NewKeywordModerator(),
 		// MAX_TOOL_TURNS 最大工具轮数（默认 5）
 		MaxTurns:     atoiDefault(os.Getenv("MAX_TOOL_TURNS"), 5),
 		PromptName:   "assistant",
@@ -235,7 +235,7 @@ func main() {
 	}
 	observe.PrintInventory(os.Stdout, observe.Info{
 		Title:        "Zebra CLI Agent",
-		Models:       []string{router.Primary().Name()},
+		Models:       []string{envOr("OLLAMA_MODEL", "qwen3.5:0.8b-mlx")},
 		Tools:        reg,
 		Skills:       skills,
 		MCPMode:      mcpMode,
@@ -245,7 +245,9 @@ func main() {
 		RAGDocs:      docsCount,
 		RAGChunks:    ragChunks,
 		VoiceEnabled: voice != nil,
-		Mode:         modeLabel(*mode) + "（输入 /mode 切换，/help 查看全部）",
+		Mode:         modeLabel(*mode) + "（输入 /mode 切换，/modes 查看全部）",
+		Compact:      true, // 工具/MCP/技能只显示个数，子项用 /tools /mcp /skills 查看
+		REPL:         true,
 	})
 
 	// ---- C14 多模态：把 -image 参数归一化为 provider 可消费的 image_url ----
@@ -263,8 +265,8 @@ func main() {
 	fmt.Println(strings.Repeat("─", 60))
 	for {
 		// P38：raw 模式 + UTF-8 感知行编辑（中文退格不再残留字节残片）；
-		// 非 TTY 自动回退标准行读取。
-		in, err := console.ReadLine(console.Symbol(">", console.ColorTitle) + " ")
+		// 输入 / 前缀按 Tab 提示命令补全。非 TTY 自动回退标准行读取。
+		in, err := console.ReadLineWithCompletions(console.Symbol(">", console.ColorTitle)+" ", replCommands())
 		if err != nil {
 			break // EOF / Ctrl-C / 中断
 		}
@@ -275,10 +277,13 @@ func main() {
 		if in == "exit" {
 			break
 		}
-		// ---- REPL 命令：模式选择 / 帮助 ----
+		// ---- REPL 命令：模式 / 清单 / 环境变量 ----
 		switch {
 		case in == "/help" || in == "help" || in == "?":
 			printHelp()
+			continue
+		case in == "/modes":
+			printModes()
 			continue
 		case in == "/mode":
 			fmt.Printf("  当前模式: %s\n", modeLabel(*mode))
@@ -286,11 +291,87 @@ func main() {
 		case strings.HasPrefix(in, "/mode "):
 			name := strings.TrimSpace(strings.TrimPrefix(in, "/mode "))
 			if !validMode(name) {
-				fmt.Printf("  未知模式: %s（可用: chat|plan|react|reflect|debate|supervisor）\n", name)
+				fmt.Printf("  未知模式: %s（/modes 查看全部）\n", name)
 				continue
 			}
 			*mode = name
 			fmt.Printf("  已切换模式: %s\n", modeLabel(*mode))
+			continue
+		case in == "/env":
+			observe.PrintEnv(os.Stdout, observe.EnvSpecs())
+			continue
+		case in == "/tools":
+			observe.PrintToolDetails(os.Stdout, reg, false)
+			continue
+		case in == "/mcp":
+			if mcpMode == "" {
+				fmt.Println("  ● MCP: 未启用（MCP_MODE 未设置）")
+			} else {
+				fmt.Printf("  ● MCP: 模式=%s · 已连接 %d 个工具\n", mcpMode, len(mcpDefs))
+				observe.PrintMCPDetails(os.Stdout, observe.FromMCP(mcpDefs), false)
+			}
+			continue
+		case in == "/skills":
+			observe.PrintSkillDetails(os.Stdout, skills, false)
+			continue
+		case in == "/model":
+			fmt.Printf("  ◆ 模型: %s\n", envOr("OLLAMA_MODEL", "qwen3.5:0.8b-mlx"))
+			if f := os.Getenv("FALLBACK_MODEL"); f != "" {
+				fmt.Printf("  ◆ 备选: %s（故障自动降级）\n", f)
+			}
+			continue
+		case in == "/provider":
+			chain := router.Chain()
+			labels := make([]string, 0, len(chain))
+			for _, p := range chain {
+				if p != nil {
+					labels = append(labels, p.Name())
+				}
+			}
+			fmt.Printf("  ◆ 供应商: %s\n", strings.Join(labels, " → "))
+			continue
+		case in == "/mem":
+			fmt.Printf("  ▣ 记忆: %s\n", memMode)
+			continue
+		case in == "/rag":
+			fmt.Printf("  ▤ 知识库: %d 篇文档 / %d 块\n", docsCount, ragChunks)
+			continue
+		case in == "/voice":
+			if voice != nil {
+				fmt.Println("  ♪ 语音: 已启用（ASR/TTS）")
+			} else {
+				fmt.Println("  ♪ 语音: 未启用（VOICE_BASE_URL 未设置）")
+			}
+			continue
+		case in == "/image":
+			if len(images) == 0 {
+				fmt.Println("  ◉ 图片: 未加载（启动时 -image 附带）")
+			} else {
+				fmt.Printf("  ◉ 图片: %d 张（每轮对话附带）\n", len(images))
+				for i, img := range images {
+					short := img
+					if len(short) > 60 {
+						short = short[:60] + "…"
+					}
+					fmt.Printf("    %d. %s\n", i+1, short)
+				}
+			}
+			continue
+		case in == "/caps":
+			observe.PrintInventory(os.Stdout, observe.Info{
+				Title:        "能力清单（完整）",
+				Models:       []string{envOr("OLLAMA_MODEL", "qwen3.5:0.8b-mlx")},
+				Tools:        reg,
+				Skills:       skills,
+				MCPMode:      mcpMode,
+				MCPCount:     len(mcpDefs),
+				MCPTools:     observe.FromMCP(mcpDefs),
+				MemMode:      memMode,
+				RAGDocs:      docsCount,
+				RAGChunks:    ragChunks,
+				VoiceEnabled: voice != nil,
+				Mode:         modeLabel(*mode),
+			})
 			continue
 		}
 		ctx := context.Background()
@@ -368,13 +449,13 @@ func workerBuilder(router *provider.Router, prompts *prompt.Registry, mem *memor
 	toolHook, skillHook := traceHooks()
 	return func() *agent.Agent {
 		return agent.New(agent.Config{
-			Router:       router,
-			Tools:        reg,
-			Prompts:      prompts,
-			Mem:          mem,
+			Router:  router,
+			Tools:   reg,
+			Prompts: prompts,
+			Mem:     mem,
 			// CONTEXT_MAX_TOKENS 上下文预算（默认 4000）；SUMMARY_MAX_CHARS 摘要长度（默认 600）
-			Window:       &agent.ContextWindow{MaxTokens: atoiDefault(os.Getenv("CONTEXT_MAX_TOKENS"), 4000), Summarizer: agent.PrefixSummarizer{MaxChars: atoiDefault(os.Getenv("SUMMARY_MAX_CHARS"), 600)}},
-			Moderator:    safety.NewKeywordModerator(),
+			Window:    &agent.ContextWindow{MaxTokens: atoiDefault(os.Getenv("CONTEXT_MAX_TOKENS"), 4000), Summarizer: agent.PrefixSummarizer{MaxChars: atoiDefault(os.Getenv("SUMMARY_MAX_CHARS"), 600)}},
+			Moderator: safety.NewKeywordModerator(),
 			// MAX_TOOL_TURNS 最大工具轮数（默认 5）
 			MaxTurns:     atoiDefault(os.Getenv("MAX_TOOL_TURNS"), 5),
 			PromptName:   promptName,
@@ -492,18 +573,59 @@ func runAgent(ctx context.Context, ag *agent.Agent, sup *supervisor.Supervisor, 
 	return "", fmt.Errorf("未知模式: %s", mode)
 }
 
-// printHelp 打印 REPL 命令与模式说明。
+// replCommands 返回 REPL 支持的命令列表（用于 Tab 补全提示）。
+func replCommands() []string {
+	return []string{
+		"exit",
+		"/help",
+		"/mode",
+		"/modes",
+		"/env",
+		"/model",
+		"/provider",
+		"/tools",
+		"/mcp",
+		"/skills",
+		"/mem",
+		"/rag",
+		"/voice",
+		"/image",
+		"/caps",
+	}
+}
+
+// printHelp 打印 REPL 支持的命令清单（模式与各能力明细通过 /modes 等命令查看）。
 func printHelp() {
-	fmt.Println("  Zebra CLI 帮助")
-	fmt.Println("  命令:")
-	fmt.Println("    exit          退出")
-	fmt.Println("    /mode         查看当前模式")
-	fmt.Println("    /mode <名称>  切换对话模式")
-	fmt.Println("    /help         显示本帮助")
-	fmt.Println("  模式:")
+	fmt.Println()
+	for _, l := range []string{
+		"exit         退出",
+		"/help        显示本命令清单",
+		"/mode        查看当前模式",
+		"/mode <名称> 切换对话模式",
+		"/modes       查看全部模式及说明",
+		"/env         查看生效的环境变量配置",
+		"/model       查看当前使用的模型",
+		"/provider    查看供应商路由链",
+		"/tools       查看已注册工具明细",
+		"/mcp         查看 MCP 连接与工具明细",
+		"/skills      查看已加载技能明细",
+		"/mem         查看记忆模式",
+		"/rag         查看知识库状态",
+		"/voice       查看语音能力",
+		"/image       查看已加载的多模态图片",
+		"/caps        查看完整能力清单",
+		"",
+		"输入 /modes 查看更多，或直接输入对话内容开始提问。",
+	} {
+		fmt.Println("  " + l)
+	}
+}
+
+// printModes 打印全部对话模式及说明（原 printHelp 中的模式部分）。
+func printModes() {
+	fmt.Println("  对话模式")
 	for _, m := range []string{"chat", "plan", "react", "reflect", "debate", "supervisor", "consistent"} {
 		fmt.Printf("    %s\n", modeLabel(m))
 	}
-	fmt.Println("  多模态:")
-	fmt.Println("    -image <URL|data:URI|文件>  附带图片（可重复，换图需重启）")
+	fmt.Println("  用法: /mode <名称> 切换；/mode 查看当前。")
 }
