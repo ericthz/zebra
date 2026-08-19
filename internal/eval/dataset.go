@@ -171,7 +171,15 @@ func AppendCase(dir string, c Case) error {
 		Cases []Case `json:"cases"`
 	}
 	if data, err := os.ReadFile(path); err == nil {
-		_ = json.Unmarshal(data, &file)
+		if uerr := json.Unmarshal(data, &file); uerr != nil {
+			// 文件损坏（如半截写入）：不得静默当空数据重写——那样会"清空"
+			// 既有数据集。先把损坏文件备份为 .bak 保留现场，再继续（P0-5）。
+			if berr := os.Rename(path, path+".bak"); berr != nil {
+				return fmt.Errorf("feedback.json 损坏且备份失败: %w", berr)
+			}
+		}
+	} else if !os.IsNotExist(err) {
+		return err
 	}
 	file.Cases = append(file.Cases, c)
 	data, err := json.MarshalIndent(struct {
@@ -180,7 +188,39 @@ func AppendCase(dir string, c Case) error {
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(path, data, 0o644)
+	return writeFileAtomic(path, data, 0o644)
+}
+
+// writeFileAtomic 临时文件 + os.Rename 原子落盘：避免写入中途崩溃留下
+// 半截文件（半截文件下次 ReadFile 解析失败、被上面逻辑误判为损坏清空）。
+func writeFileAtomic(path string, data []byte, perm os.FileMode) error {
+	dir := filepath.Dir(path)
+	tmp, err := os.CreateTemp(dir, ".tmp-"+filepath.Base(path)+"-*")
+	if err != nil {
+		return err
+	}
+	tmpName := tmp.Name()
+	defer func() {
+		if tmpName != "" { // Rename 成功后不再清理
+			_ = os.Remove(tmpName)
+		}
+	}()
+	if _, err := tmp.Write(data); err != nil {
+		tmp.Close()
+		return err
+	}
+	if err := tmp.Sync(); err != nil {
+		tmp.Close()
+		return err
+	}
+	if err := tmp.Close(); err != nil {
+		return err
+	}
+	if err := os.Rename(tmpName, path); err != nil {
+		return err
+	}
+	tmpName = "" // 已落盘
+	return nil
 }
 
 // CaseFromFeedback 把负面反馈转成评测用例（回流到数据集，供回归纳入）。

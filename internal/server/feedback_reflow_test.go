@@ -2,6 +2,7 @@ package server
 
 import (
 	"bytes"
+	"encoding/json"
 	"fmt"
 	"io"
 	"log/slog"
@@ -63,5 +64,44 @@ func TestFeedbackReflow(t *testing.T) {
 	data, _ = os.ReadFile(filepath.Join(casesDir, "feedback.json"))
 	if n := strings.Count(string(data), `"id": "fb-`); n != 1 {
 		t.Fatalf("正面反馈不应回流，应只有 1 条回流用例，实际 %d", n)
+	}
+}
+
+// TestFeedbackReflowOwnershipGuard 六4：反馈回流必须校验会话归属，
+// 用户对"他人的会话"打负面分不得把他人对话落进评测数据集。
+func TestFeedbackReflowOwnershipGuard(t *testing.T) {
+	casesDir := t.TempDir()
+	keys := NewKeyStore()
+	keys.Register(Principal{Key: "k", User: "alice", Role: "user", Tenant: "default"})
+	sessions := NewInMemoryStore(time.Minute)
+	api := NewAPIServer(Deps{
+		Keys:         keys,
+		Rate:         NewRateLimiter(100, 100),
+		Logger:       slog.New(slog.NewTextHandler(io.Discard, nil)),
+		Metrics:      NewMetrics(),
+		Sessions:     sessions,
+		Feedback:     feedback.NewInMemoryStore(),
+		EvalCasesDir: casesDir,
+	})
+	h := api.Handler()
+
+	// 他人（bob）的会话，含敏感对话
+	other, _ := sessions.Create("bob", "default", "user", time.Minute)
+	*other.History() = append(*other.History(),
+		provider.Message{Role: "user", Content: "bob 的私有问题"},
+		provider.Message{Role: "assistant", Content: "bob 的私有回答"},
+	)
+
+	body, _ := json.Marshal(map[string]interface{}{"session_id": other.ID, "rating": -1})
+	req := httptest.NewRequest("POST", "/v1/feedback", bytes.NewBuffer(body))
+	req.Header.Set("Authorization", "Bearer k")
+	rr := httptest.NewRecorder()
+	h.ServeHTTP(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("提交应 200，实际 %d %s", rr.Code, rr.Body.String())
+	}
+	if _, err := os.Stat(filepath.Join(casesDir, "feedback.json")); err == nil {
+		data, _ := os.ReadFile(filepath.Join(casesDir, "feedback.json"))
+		t.Fatalf("他人会话不应回流评测集，实际写了: %s", data)
 	}
 }

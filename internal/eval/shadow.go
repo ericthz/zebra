@@ -18,6 +18,7 @@ package eval
 
 import (
 	"context"
+	"errors"
 	"log/slog"
 	"math/rand"
 	"sync"
@@ -98,7 +99,8 @@ func (s *ShadowStore) Recent(user string, n int) []*ShadowResult {
 
 // ShadowEvaluator 影子评测执行器。
 type ShadowEvaluator struct {
-	Candidate  provider.Provider // 候选模型（与主模型解耦，独立回答）
+	mu         sync.RWMutex
+	Candidate  provider.Provider // 候选模型（与主模型解耦，独立回答；promote/回滚时重指向）
 	Judge      *Judge            // 评审器（给两份回答打分）
 	Store      *ShadowStore      // 记录落点（nil 则只打指标不落库）
 	SampleRate float64           // 自动采样率 0~1；0 表示仅显式触发
@@ -110,6 +112,39 @@ type ShadowEvaluator struct {
 // NewShadowEvaluator 构造（sampleRate 0~1；Judge 为 nil 时退化为只对比文本相似度）。
 func NewShadowEvaluator(candidate provider.Provider, judge *Judge, store *ShadowStore, sampleRate float64) *ShadowEvaluator {
 	return &ShadowEvaluator{Candidate: candidate, Judge: judge, Store: store, SampleRate: sampleRate}
+}
+
+// SetCandidate 原子重指向候选模型。promote 后必须调用，否则候选仍是
+// 已提升为新主的模型 → 影子变成"新主 vs 自己"的自我对比，胜率数据被污染。
+func (e *ShadowEvaluator) SetCandidate(c provider.Provider) {
+	e.mu.Lock()
+	e.Candidate = c
+	e.mu.Unlock()
+}
+
+// CandidateName 线程安全地读取候选模型名（看板/日志用）。
+func (e *ShadowEvaluator) CandidateName() string {
+	return e.candidateName()
+}
+
+// candidateName 锁内读候选名。
+func (e *ShadowEvaluator) candidateName() string {
+	e.mu.RLock()
+	defer e.mu.RUnlock()
+	if e.Candidate == nil {
+		return ""
+	}
+	return e.Candidate.Name()
+}
+
+// candidateChat 锁内读候选并调用（保持重指向与读取原子一致）。
+func (e *ShadowEvaluator) candidateChat(ctx context.Context, msgs []provider.Message, tools []provider.Tool) (provider.Message, error) {
+	e.mu.RLock()
+	defer e.mu.RUnlock()
+	if e.Candidate == nil {
+		return provider.Message{}, errors.New("candidate 未配置")
+	}
+	return e.Candidate.Chat(ctx, msgs, tools)
 }
 
 // WantSample 决定这次请求是否进影子：显式触发必进；否则按采样率抽签。
@@ -132,12 +167,12 @@ func (e *ShadowEvaluator) Run(ctx context.Context, user, session, question, prim
 	res := &ShadowResult{
 		Time: time.Now(), User: user, Session: session,
 		Question: question, PrimaryReply: primaryReply,
-		PrimaryModel: primaryModel, CandidateModel: e.Candidate.Name(),
+		PrimaryModel: primaryModel, CandidateModel: e.candidateName(),
 	}
 	e.inc("shadow_runs_total")
 
 	// 1. 候选模型独立回答（不喂主模型答案，防止"抄袭"造成虚假一致）
-	cand, err := e.Candidate.Chat(ctx, []provider.Message{{Role: "user", Content: question}}, nil)
+	cand, err := e.candidateChat(ctx, []provider.Message{{Role: "user", Content: question}}, nil)
 	if err != nil {
 		res.Verdict = VerdictError
 		res.Error = "candidate: " + err.Error()

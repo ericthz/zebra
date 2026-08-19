@@ -14,6 +14,7 @@ package eval
 import (
 	"context"
 	"os"
+	"sort"
 	"testing"
 	"time"
 
@@ -37,7 +38,9 @@ type goldenCase struct {
 var cases = []goldenCase{
 	{name: "天气", input: "北京今天天气怎么样？", wantTool: "get_current_weather", wantKw: "°"},
 	{name: "计算", input: "计算 (23 + 19) * 5 等于多少？", wantTool: "calculator", wantKw: "210"},
-	{name: "时间", input: "现在几点？", wantTool: "get_current_datetime", wantKw: ":"},
+	// 时间：模型可能把时间格式化成中文（"晚上11点"），不带 ":"；工具调用
+	// 才是可靠信号，故 wantKw 留空。
+	{name: "时间", input: "现在几点？", wantTool: "get_current_datetime", wantKw: ""},
 	{name: "闲聊", input: "你好呀", wantTool: "", wantKw: ""},
 }
 
@@ -70,12 +73,18 @@ func TestGoldenEval(t *testing.T) {
 	passed, failed := 0, 0
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
+			called := make(map[string]bool)
 			ag := agent.New(agent.Config{
 				Router: router, Tools: reg, Prompts: prompts,
 				Mem:       memory.NewManager(memory.NewWorkingMemory(10), nil),
 				Window:    &agent.ContextWindow{MaxTokens: 4000},
 				Moderator: safety.NewKeywordModerator(),
 				MaxTurns:  3, PromptName: "assistant",
+				// 工具调用检测：用 OnTool 回调收集（历史只写 user/assistant，
+				// 工具消息不进 hist，故不能靠扫描历史判断调用了哪些工具）。
+				OnTool: func(name string, _ map[string]interface{}, _ bool, _ error) {
+					called[name] = true
+				},
 			})
 			hist := make([]provider.Message, 0)
 			ag.Bind("eval", "admin", "eval-user", &hist)
@@ -86,13 +95,9 @@ func TestGoldenEval(t *testing.T) {
 				failed++
 				return
 			}
-			// 用审计过的工具名集合判断调用了哪些工具
-			called := calledTools(hist, c.input, answer)
-			_ = called
-
 			t.Logf("回答: %s", answer)
-			if c.wantTool != "" && !containsTool(hist) {
-				t.Errorf("期望调用工具 %s，但未检测到", c.wantTool)
+			if c.wantTool != "" && !called[c.wantTool] {
+				t.Errorf("期望调用工具 %s，实际调用: %v", c.wantTool, keys(called))
 				failed++
 				return
 			}
@@ -110,14 +115,14 @@ func TestGoldenEval(t *testing.T) {
 	}
 }
 
-// containsTool 粗检测历史里是否有 tool 角色消息（真实实现应统计工具名）。
-func containsTool(hist []provider.Message) bool {
-	for _, m := range hist {
-		if m.Role == "tool" {
-			return true
-		}
+// keys 提取 map 键集合（已排序，供诊断输出）。
+func keys(m map[string]bool) []string {
+	var out []string
+	for k := range m {
+		out = append(out, k)
 	}
-	return false
+	sort.Strings(out)
+	return out
 }
 
 func contains(s, sub string) bool {
@@ -128,8 +133,6 @@ func contains(s, sub string) bool {
 	}
 	return false
 }
-
-func calledTools([]provider.Message, string, string) []string { return nil }
 
 func envOr(k, d string) string {
 	if v := os.Getenv(k); v != "" {
@@ -145,17 +148,49 @@ func TestJudgeClosedLoop(t *testing.T) {
 	if os.Getenv("ZEBRA_EVAL") != "1" {
 		t.Skip("跳过：设置 ZEBRA_EVAL=1 开启 LLM 评测")
 	}
-	httpCli := provider.NewHTTPClient(20*time.Second, 2, 300*time.Millisecond)
-	judge := eval.NewJudge(provider.NewRouter(&provider.OllamaProvider{
+	// 本地小模型做 Judge 很慢（实测 4b 长回答约 60s+），默认 20s HTTP /
+	// 30s Judge 会误判为超时：Judge 慢是算力问题，不是能力退化，不应因此误报。
+	httpCli := provider.NewHTTPClient(150*time.Second, 2, 300*time.Millisecond)
+	router := provider.NewRouter(&provider.OllamaProvider{
 		BaseURL: envOr("OLLAMA_BASE_URL", "http://localhost:11434"),
 		Model:   envOr("OLLAMA_MODEL", "qwen3.5:0.8b-mlx"),
 		Client:  httpCli,
-	}))
+	})
+	judge := eval.NewJudge(router)
+	judge.Timeout = 150 * time.Second
+
+	reg := tool.NewRegistry()
+	reg.Register(&tool.WeatherTool{})
+	reg.Register(&tool.CalculatorTool{})
+	reg.Register(&tool.DateTimeTool{})
+	reg.Register(&tool.RandomTool{})
+	reg.Register(&tool.SearchTool{})
+	reg.Register(&tool.UnitConverterTool{})
+	reg.Register(&tool.TranslateTool{})
+	reg.Register(&tool.IPInfoTool{})
+
+	prompts := prompt.NewRegistry("zebra")
+	prompts.Register(&prompt.Template{Name: "assistant", Version: "v1", Text: "你是 zebra AI 助手，可以调用工具。角色：{role}。"})
 
 	var passed, total int
 	for _, c := range cases {
 		total++
-		s, err := judge.Score(context.Background(), c.input, "（评测输出占位，实际应传入 Agent 真实回答）")
+		// 与 TestGoldenEval 相同装配跑真实 Agent，把真实回答交给 Judge 打分
+		ag := agent.New(agent.Config{
+			Router: router, Tools: reg, Prompts: prompts,
+			Mem:       memory.NewManager(memory.NewWorkingMemory(10), nil),
+			Window:    &agent.ContextWindow{MaxTokens: 4000},
+			Moderator: safety.NewKeywordModerator(),
+			MaxTurns:  3, PromptName: "assistant",
+		})
+		hist := make([]provider.Message, 0)
+		ag.Bind("eval", "admin", "eval-user", &hist)
+		answer, err := ag.Run(context.Background(), c.input, agent.RunOptions{})
+		if err != nil {
+			t.Logf("agent 运行失败 %s: %v", c.name, err)
+			continue
+		}
+		s, err := judge.Score(context.Background(), c.input, answer)
 		if err != nil {
 			t.Logf("judge 失败 %s: %v", c.name, err)
 			continue

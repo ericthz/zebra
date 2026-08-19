@@ -4,11 +4,13 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -90,7 +92,7 @@ func newShadowServer(t *testing.T) (http.Handler, *eval.ShadowStore, *APIServer)
 }
 
 func TestShadowAPI(t *testing.T) {
-	h, store, _ := newShadowServer(t)
+	h, store, api := newShadowServer(t)
 
 	do := func(method, path, key string, body string) *httptest.ResponseRecorder {
 		req := httptest.NewRequest(method, path, bytes.NewBufferString(body))
@@ -135,6 +137,81 @@ func TestShadowAPI(t *testing.T) {
 	rr = do("GET", "/v1/eval/shadow", "admin-key", "")
 	if rr.Code != http.StatusOK || !strings.Contains(rr.Body.String(), "candidate_better") {
 		t.Fatalf("影子记录列表异常: %d %s", rr.Code, rr.Body.String())
+	}
+
+	// 4. 影子评测同属一次正常对话，历史应写回（/v1/chat 对齐）
+	sessID := resp.Shadow.Session
+	if sessID != "" {
+		sess, ok := api.deps.Sessions.Get(sessID)
+		if !ok {
+			t.Fatal("影子评测应落到已存在会话")
+		}
+		if len(*sess.History()) < 2 {
+			t.Fatalf("影子评测后历史应写回，实际 %d 条", len(*sess.History()))
+		}
+	}
+}
+
+// TestChatConsistentMode P40 自一致性：/v1/chat 的 mode=consistent 走独立采样择优。
+func TestChatConsistentMode(t *testing.T) {
+	h, _, _ := newShadowServer(t)
+	do := func(key, body string) *httptest.ResponseRecorder {
+		req := httptest.NewRequest("POST", "/v1/chat", bytes.NewBufferString(body))
+		req.Header.Set("Authorization", "Bearer "+key)
+		rr := httptest.NewRecorder()
+		h.ServeHTTP(rr, req)
+		return rr
+	}
+	rr := do("user-key", `{"message":"北京天气怎么样？","mode":"consistent"}`)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("mode=consistent 应 200，实际 %d body=%s", rr.Code, rr.Body.String())
+	}
+	if !strings.Contains(rr.Body.String(), "主回答") {
+		t.Fatalf("自一致性应返回主模型回答（采样后择优），实际: %s", rr.Body.String())
+	}
+}
+
+// TestSessionConcurrentChat 同一会话并发请求：历史不撕裂（Session.runMu 串行化）。
+func TestSessionConcurrentChat(t *testing.T) {
+	h, _, api := newShadowServer(t)
+	// 先建会话，再并发打同一会话
+	req := httptest.NewRequest("POST", "/v1/chat", bytes.NewBufferString(`{"message":"你好"}`))
+	req.Header.Set("Authorization", "Bearer user-key")
+	rr := httptest.NewRecorder()
+	h.ServeHTTP(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("建会话请求应 200，实际 %d body=%s", rr.Code, rr.Body.String())
+	}
+	var first ChatResponse
+	if err := json.Unmarshal(rr.Body.Bytes(), &first); err != nil {
+		t.Fatal(err)
+	}
+
+	const n = 8
+	var wg sync.WaitGroup
+	for i := 0; i < n; i++ {
+		wg.Add(1)
+		go func(i int) {
+			defer wg.Done()
+			body := fmt.Sprintf(`{"session_id":%q,"message":"并发第%d轮"}`, first.SessionID, i)
+			r := httptest.NewRequest("POST", "/v1/chat", bytes.NewBufferString(body))
+			r.Header.Set("Authorization", "Bearer user-key")
+			w := httptest.NewRecorder()
+			h.ServeHTTP(w, r)
+			if w.Code != http.StatusOK {
+				t.Errorf("并发第%d轮应 200，实际 %d body=%s", i, w.Code, w.Body.String())
+			}
+		}(i)
+	}
+	wg.Wait()
+
+	// 串行化后历史条数应精确：1 建会话轮 + n 并发轮 = (n+1) 轮 × 2 条
+	sess, ok := api.deps.Sessions.Get(first.SessionID)
+	if !ok {
+		t.Fatal("会话应存在")
+	}
+	if want := (n + 1) * 2; len(*sess.History()) != want {
+		t.Fatalf("并发后历史应为 %d 条（无丢失/重叠），实际 %d: %+v", want, len(*sess.History()), *sess.History())
 	}
 }
 
@@ -195,27 +272,36 @@ func TestShadowAutoRollback(t *testing.T) {
 		return rr
 	}
 
-	// promote：主模型切为候选（candidate-model），记录原主 primary-model
+	// promote：主模型切为候选（candidate-model），记录原主 primary-model；
+	// 影子候选同步重指向原主（primary-model），对比"新主 vs 原主"。
 	if rr := do("POST", "/v1/eval/shadow/promote", "admin-key"); rr.Code != http.StatusOK {
 		t.Fatalf("promote 失败: %d %s", rr.Code, rr.Body.String())
 	}
 	if got := api.deps.Router.Primary().Name(); got != "candidate-model" {
 		t.Fatalf("promote 后主模型应为 candidate-model，实际 %s", got)
 	}
+	if got := api.deps.Shadow.CandidateName(); got != "primary-model" {
+		t.Fatalf("promote 后影子候选应重指向原主 primary-model，实际 %s（避免自我对比）", got)
+	}
 
-	// 造出低胜率样本：10 条有效记录中 candidate 只赢 2 条
+	// 造出"原主反超"样本：10 条有效记录中候选（原主 primary-model）赢 8 条
+	// → 说明新主 candidate-model 质量回退，应触发自动回滚。
 	now := time.Now()
 	for i := 0; i < 8; i++ {
-		store.Add(&eval.ShadowResult{Time: now, Verdict: eval.VerdictPrimaryBetter})
+		store.Add(&eval.ShadowResult{Time: now, Verdict: eval.VerdictCandidateBetter})
 	}
 	for i := 0; i < 2; i++ {
-		store.Add(&eval.ShadowResult{Time: now, Verdict: eval.VerdictCandidateBetter})
+		store.Add(&eval.ShadowResult{Time: now, Verdict: eval.VerdictPrimaryBetter})
 	}
 
 	// 触发回滚检查 → 自动切回原主
 	api.maybeShadowRollback()
 	if got := api.deps.Router.Primary().Name(); got != "primary-model" {
-		t.Fatalf("胜率不达标应自动回滚到 primary-model，实际 %s", got)
+		t.Fatalf("原主反超应自动回滚到 primary-model，实际 %s", got)
+	}
+	// 回滚后候选重指向回滚的模型（candidate-model），恢复"候选 vs 主"对比
+	if got := api.deps.Shadow.CandidateName(); got != "candidate-model" {
+		t.Fatalf("回滚后影子候选应重指向 candidate-model，实际 %s", got)
 	}
 	// 回滚后观察期清空，再次检查不动作
 	api.maybeShadowRollback()

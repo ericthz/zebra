@@ -9,9 +9,9 @@
 package server
 
 import (
-	"encoding/json"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/ericthz/zebra/internal/agent"
@@ -42,24 +42,35 @@ func (s *APIServer) handleRunShadow(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var req ShadowRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.Message == "" {
+	if err := decodeJSON(w, r, &req); err != nil {
+		return
+	}
+	if strings.TrimSpace(req.Message) == "" {
+		http.Error(w, "bad request: message 必填", http.StatusBadRequest)
+		return
+	}
+	if req.Message == "" {
 		http.Error(w, "bad request: message 必填", http.StatusBadRequest)
 		return
 	}
 
-	sess, err := s.sessionFor(r.Context(), req.SessionID)
+	sess, err := s.lockSession(r.Context(), req.SessionID)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusUnauthorized)
 		return
 	}
+	defer sess.runMu.Unlock()
 	// 1. 主模型走正常 Agent 流程（与 /v1/chat 等价）
 	ag := s.agentFor(sess)
 	reply, err := ag.Run(r.Context(), req.Message, agent.RunOptions{})
 	if err != nil {
-		s.deps.Logger.Warn("shadow primary failed", "session", sess.ID, "err", err)
-		http.Error(w, "agent error: "+err.Error(), http.StatusInternalServerError)
+		// 失败轮次 Agent 已改写内存历史，仍须落库（六10，与 /v1/chat 对齐）
+		s.persistHistory(sess)
+		s.writeAgentError(w, "shadow primary failed", err)
 		return
 	}
+	// 影子评测同样写回会话历史（Redis 会话下多轮不丢，与 /v1/chat 对齐）
+	s.persistHistory(sess)
 	// 2. 影子对比（同步：评测请求可等待完整结论）
 	res := s.deps.Shadow.Run(r.Context(), sess.User, sess.ID, req.Message, reply, s.deps.Model)
 	s.maybeShadowRollback() // P42：金丝雀质量回退自动切回
@@ -114,7 +125,7 @@ func (s *APIServer) handleShadowStats(w http.ResponseWriter, r *http.Request) {
 	jsonOK(w, map[string]interface{}{
 		"stats":          stats,
 		"recommendation": rec,
-		"candidate":      s.deps.Shadow.Candidate.Name(),
+		"candidate":      s.deps.Shadow.CandidateName(),
 		"primary":        s.deps.Router.Primary().Name(),
 	})
 }
@@ -134,15 +145,22 @@ func (s *APIServer) handleShadowPromote(w http.ResponseWriter, r *http.Request) 
 		http.Error(w, "影子评测未启用", http.StatusNotImplemented)
 		return
 	}
-	name := s.deps.Shadow.Candidate.Name()
+	name := s.deps.Shadow.CandidateName()
 	prev, ok := s.deps.Router.Promote(name)
 	if !ok {
 		http.Error(w, "候选模型未在路由链中: "+name, http.StatusNotFound)
 		return
 	}
-	// 记录原主模型，供金丝雀自动回滚（P42）
+	// P42 候选提升为新主后，把影子候选重指向原主模型：
+	// 否则候选 == 新主 → 影子变成"新主 vs 自己"的自我对比，胜率数据被污染。
+	// 重指向后，影子持续对比"新主 vs 原主"，为金丝雀回滚提供真实信号。
+	if next := s.deps.Router.Get(prev); next != nil {
+		s.deps.Shadow.SetCandidate(next)
+	}
+	// 记录原主模型与本次提升的模型，供金丝雀自动回滚（P42）
 	s.shadowMu.Lock()
 	s.shadowPrev = prev
+	s.shadowPromoted = name
 	s.shadowMu.Unlock()
 	// 切换是重要运维动作，必须审计留痕
 	if s.deps.Audit != nil {
@@ -155,8 +173,9 @@ func (s *APIServer) handleShadowPromote(w http.ResponseWriter, r *http.Request) 
 	jsonOK(w, map[string]interface{}{"status": "promoted", "primary": name})
 }
 
-// maybeShadowRollback 金丝雀自动回滚（P42）：promote 后持续监控影子统计，
-// 新主（统计中的 candidate）胜率低于阈值时自动切回原主模型。
+// maybeShadowRollback 金丝雀自动回滚（P42）：promote 后影子候选已重指向
+// 原主模型，影子持续对比"新主 vs 原主"。当原主（候选）胜率达标——即新主
+// 质量回退——自动切回原主。
 func (s *APIServer) maybeShadowRollback() {
 	if s.deps.Shadow == nil {
 		return
@@ -168,8 +187,14 @@ func (s *APIServer) maybeShadowRollback() {
 		return // 未处于金丝雀观察期
 	}
 	stats := s.deps.Shadow.Store.Stats("")
-	if !eval.RecommendRollback(stats, 10, 60) {
-		return // 胜率达标，继续观察
+	judged := stats.Total - stats.Errors
+	if judged < 10 {
+		return // 样本不足，继续观察
+	}
+	// 候选此时为原主模型：候选胜率 ≥ 60% → 原主明显优于新主 → 回滚。
+	oldWinRate := float64(stats.CandidateBetter) / float64(judged)
+	if oldWinRate < 0.6 {
+		return // 新主仍不劣于原主，继续观察
 	}
 
 	s.shadowMu.Lock()
@@ -180,7 +205,13 @@ func (s *APIServer) maybeShadowRollback() {
 	if _, ok := s.deps.Router.Promote(prev); !ok {
 		return
 	}
+	// 回滚后原主重新成为主模型，把影子候选重指向刚回滚的模型，
+	// 恢复"候选 vs 主"的正常对比（避免回滚后又自我对比）。
+	if next := s.deps.Router.Get(s.shadowPromoted); next != nil {
+		s.deps.Shadow.SetCandidate(next)
+	}
 	s.shadowPrev = ""
+	s.shadowPromoted = ""
 	s.deps.Logger.Warn("金丝雀自动回滚：新主胜率不达标，已切回原主", "prev", prev)
 	s.deps.Metrics.Inc("shadow:rollback")
 	if s.deps.Audit != nil {

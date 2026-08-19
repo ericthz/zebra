@@ -2,8 +2,10 @@ package eval
 
 import (
 	"context"
+	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/ericthz/zebra/internal/provider"
@@ -100,6 +102,62 @@ func TestAppendCaseAndCaseFromFeedback(t *testing.T) {
 	// 空注释的默认占位
 	if c2 := CaseFromFeedback("q", "a", ""); c2.Expect != "（人工踩，待核查）" {
 		t.Fatalf("空注释默认异常: %q", c2.Expect)
+	}
+}
+
+// TestAppendCaseCorruptBackup P0-5：feedback.json 损坏（半截写入）时，
+// 不得静默当空数据重写——那样会"清空"既有数据集。必须先把损坏文件备份
+// 为 .bak 保留现场，再追加。
+func TestAppendCaseCorruptBackup(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "feedback.json")
+
+	// 先写一条合法用例（既有数据集）
+	if err := AppendCase(dir, Case{ID: "keep", Question: "q1"}); err != nil {
+		t.Fatal(err)
+	}
+	// 模拟崩溃留下的半截文件：损坏但不删除
+	if err := os.WriteFile(path, []byte(`{"cases":[{"id":"part`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := AppendCase(dir, Case{ID: "new", Question: "q2"}); err != nil {
+		t.Fatalf("损坏后追加应成功（备份后重建）: %v", err)
+	}
+	// 损坏现场应被保留为 .bak，不得被静默覆盖丢弃
+	if _, err := os.Stat(path + ".bak"); err != nil {
+		t.Fatalf("损坏文件应备份为 .bak: %v", err)
+	}
+	cases, err := LoadCases(dir)
+	if err != nil || len(cases) != 1 || cases[0].ID != "new" {
+		t.Fatalf("追加后的数据集应为 1 条新用例（半截数据不混入）: %v %v", cases, err)
+	}
+}
+
+// TestAppendCaseAtomic P0-5：写入走临时文件+rename 原子落盘，
+// 不会留下半截文件（这是 P0-5 的另一半：损坏文件的来源）。
+func TestAppendCaseAtomic(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "feedback.json")
+	if err := AppendCase(dir, Case{ID: "a", Question: "q"}); err != nil {
+		t.Fatal(err)
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var file struct {
+		Cases []Case `json:"cases"`
+	}
+	if err := json.Unmarshal(data, &file); err != nil || len(file.Cases) != 1 {
+		t.Fatalf("落盘内容应可解析且含 1 条用例: %v %v", file, err)
+	}
+	// 目录中不应残留临时文件
+	entries, _ := os.ReadDir(dir)
+	for _, e := range entries {
+		if strings.HasPrefix(e.Name(), ".tmp-") {
+			t.Fatalf("不应残留临时文件: %s", e.Name())
+		}
 	}
 }
 

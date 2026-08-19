@@ -29,8 +29,7 @@ type FeedbackRequest struct {
 // handleSubmitFeedback 提交反馈。
 func (s *APIServer) handleSubmitFeedback(w http.ResponseWriter, r *http.Request) {
 	var req FeedbackRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, "bad request", http.StatusBadRequest)
+	if err := decodeJSON(w, r, &req); err != nil {
 		return
 	}
 	p, ok := principal(r.Context())
@@ -60,21 +59,34 @@ func (s *APIServer) handleSubmitFeedback(w http.ResponseWriter, r *http.Request)
 	}
 	// P55 反馈回流：负面反馈把该问答对追加进评测数据集（供回归纳入）
 	if fb.Rating == feedback.RatingDown && s.deps.EvalCasesDir != "" && req.SessionID != "" {
-		if sess, ok := s.deps.Sessions.Get(req.SessionID); ok {
-			if q, a := latestQAPair(sess); q != "" && a != "" {
-				if err := eval.AppendCase(s.deps.EvalCasesDir, eval.CaseFromFeedback(q, a, fb.Comment)); err != nil {
-					s.deps.Logger.Warn("负面反馈回流失败", "err", err)
-				} else {
-					s.deps.Metrics.Inc("feedback:reflow")
-				}
+		if q, a := s.latestQAPairForUser(p, req.SessionID); q != "" && a != "" {
+			if err := eval.AppendCase(s.deps.EvalCasesDir, eval.CaseFromFeedback(q, a, fb.Comment)); err != nil {
+				s.deps.Logger.Warn("负面反馈回流失败", "err", err)
+			} else {
+				s.deps.Metrics.Inc("feedback:reflow")
 			}
 		}
 	}
 	json.NewEncoder(w).Encode(map[string]string{"id": fb.ID, "status": "ok"})
 }
 
-// latestQAPair 取会话历史中最近的一组 用户问题 → 助手回答。
-func latestQAPair(sess *Session) (string, string) {
+// latestQAPairForUser 取"当前用户"会话中最近一组 用户问题 → 助手回答。
+// 归属校验（六4 越权）：会话属于他人时返回空，防止把他人对话落进
+// 评测数据集；并在会话执行锁内重取最新历史，避免与并发 Agent 写竞争
+// （无锁读 *sess.History() 是数据竞争）。
+func (s *APIServer) latestQAPairForUser(p Principal, sessionID string) (string, string) {
+	sess, ok := s.deps.Sessions.Get(sessionID)
+	if !ok {
+		return "", ""
+	}
+	if sess.Tenant != p.Tenant || sess.User != p.User { // A4 归属校验
+		return "", ""
+	}
+	sess.runMu.Lock() // 与 /v1/chat 同款执行锁：锁内重取最新历史
+	defer sess.runMu.Unlock()
+	if fresh, ok := s.deps.Sessions.Get(sessionID); ok {
+		sess = fresh
+	}
 	h := *sess.History()
 	for i := len(h) - 1; i >= 1; i-- {
 		if h[i].Role == "assistant" && h[i-1].Role == "user" {
