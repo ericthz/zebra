@@ -75,7 +75,15 @@ func main() {
 	}
 
 	// ---- LLM（默认 Ollama 原生，流式）----
-	httpCli := provider.NewHTTPClient(20*time.Second, 2, 300*time.Millisecond)
+	// HTTP_TIMEOUT / HTTP_RETRIES / HTTP_BACKOFF_MS / CIRCUIT_THRESHOLD /
+	// CIRCUIT_COOLDOWN_SEC 可调（本地大模型首 token 慢，默认 60s）
+	httpCli := provider.NewHTTPClientWithBreaker(
+		time.Duration(atoiDefault(os.Getenv("HTTP_TIMEOUT"), 60))*time.Second,
+		atoiDefault(os.Getenv("HTTP_RETRIES"), 2),
+		time.Duration(atoiDefault(os.Getenv("HTTP_BACKOFF_MS"), 300))*time.Millisecond,
+		atoiDefault(os.Getenv("CIRCUIT_THRESHOLD"), 5),
+		time.Duration(atoiDefault(os.Getenv("CIRCUIT_COOLDOWN_SEC"), 30))*time.Second,
+	)
 	router := provider.NewRouter(&provider.OllamaProvider{
 		BaseURL: envOr("OLLAMA_BASE_URL", "http://localhost:11434"),
 		Model:   envOr("OLLAMA_MODEL", "qwen3.5:0.8b-mlx"),
@@ -142,7 +150,8 @@ func main() {
 		if docs, err := rag.LoadDocs("docs"); err == nil && len(docs) > 0 {
 			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 			for name, content := range docs {
-				if derr := ragIndex.AddDocument(ctx, content, name, 600, 100); derr != nil {
+				// RAG_CHUNK_SIZE / RAG_CHUNK_OVERLAP 文档分块参数（默认 600/100）
+				if derr := ragIndex.AddDocument(ctx, content, name, atoiDefault(os.Getenv("RAG_CHUNK_SIZE"), 600), atoiDefault(os.Getenv("RAG_CHUNK_OVERLAP"), 100)); derr != nil {
 					logger.Warn("RAG 文档摄入失败", "doc", name, "err", derr)
 					continue
 				}
@@ -179,9 +188,11 @@ func main() {
 		Tools:        reg,
 		Prompts:      prompts,
 		Mem:          mem,
-		Window:       &agent.ContextWindow{MaxTokens: 4000, Summarizer: agent.PrefixSummarizer{MaxChars: 600}},
+		// CONTEXT_MAX_TOKENS 上下文预算（默认 4000）；SUMMARY_MAX_CHARS 摘要长度（默认 600）
+		Window:       &agent.ContextWindow{MaxTokens: atoiDefault(os.Getenv("CONTEXT_MAX_TOKENS"), 4000), Summarizer: agent.PrefixSummarizer{MaxChars: atoiDefault(os.Getenv("SUMMARY_MAX_CHARS"), 600)}},
 		Moderator:    safety.NewKeywordModerator(),
-		MaxTurns:     5,
+		// MAX_TOOL_TURNS 最大工具轮数（默认 5）
+		MaxTurns:     atoiDefault(os.Getenv("MAX_TOOL_TURNS"), 5),
 		PromptName:   "assistant",
 		Skills:       skillReg,
 		RAG:          ragIndex,
@@ -361,9 +372,11 @@ func workerBuilder(router *provider.Router, prompts *prompt.Registry, mem *memor
 			Tools:        reg,
 			Prompts:      prompts,
 			Mem:          mem,
-			Window:       &agent.ContextWindow{MaxTokens: 4000, Summarizer: agent.PrefixSummarizer{MaxChars: 600}},
+			// CONTEXT_MAX_TOKENS 上下文预算（默认 4000）；SUMMARY_MAX_CHARS 摘要长度（默认 600）
+			Window:       &agent.ContextWindow{MaxTokens: atoiDefault(os.Getenv("CONTEXT_MAX_TOKENS"), 4000), Summarizer: agent.PrefixSummarizer{MaxChars: atoiDefault(os.Getenv("SUMMARY_MAX_CHARS"), 600)}},
 			Moderator:    safety.NewKeywordModerator(),
-			MaxTurns:     5,
+			// MAX_TOOL_TURNS 最大工具轮数（默认 5）
+			MaxTurns:     atoiDefault(os.Getenv("MAX_TOOL_TURNS"), 5),
 			PromptName:   promptName,
 			Skills:       skillReg,
 			RAG:          ragIndex,

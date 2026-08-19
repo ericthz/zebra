@@ -116,8 +116,15 @@ func main() {
 	keys.Register(server.Principal{Key: userKey, User: "alice", Role: "user", Tenant: "default"})
 
 	// ---- Provider 路由（C15）：主 Ollama（流式）+ 备选 OpenAI 兼容 ----
-	// HTTP_TIMEOUT 可调（本地大模型首 token 慢，默认 60s；生产按 SLO 收紧）
-	httpCli := provider.NewHTTPClient(time.Duration(atoiDefault(os.Getenv("HTTP_TIMEOUT"), 60))*time.Second, 1, 300*time.Millisecond) // B7
+	// HTTP_TIMEOUT / HTTP_RETRIES / HTTP_BACKOFF_MS / CIRCUIT_THRESHOLD /
+	// CIRCUIT_COOLDOWN_SEC 可调（本地大模型首 token 慢，默认 60s；生产按 SLO 收紧）
+	httpCli := provider.NewHTTPClientWithBreaker(
+		time.Duration(atoiDefault(os.Getenv("HTTP_TIMEOUT"), 60))*time.Second,
+		atoiDefault(os.Getenv("HTTP_RETRIES"), 1),
+		time.Duration(atoiDefault(os.Getenv("HTTP_BACKOFF_MS"), 300))*time.Millisecond,
+		atoiDefault(os.Getenv("CIRCUIT_THRESHOLD"), 5),
+		time.Duration(atoiDefault(os.Getenv("CIRCUIT_COOLDOWN_SEC"), 30))*time.Second,
+	) // B7
 	var chain []provider.Provider
 
 	chain = append(chain, &provider.OllamaProvider{
@@ -230,7 +237,8 @@ func main() {
 	var ragIndex *rag.Index
 	docsCount := 0
 	if emb := memory.NewEmbedderFromEnv(); emb != nil {
-		semanticCache = cache.New(emb, 0.92, atoiDefault(os.Getenv("CACHE_MAX_ENTRIES"), 200))
+		// CACHE_THRESHOLD 语义相似度阈值（默认 0.92，越大越严格）
+		semanticCache = cache.New(emb, cacheThreshold(), atoiDefault(os.Getenv("CACHE_MAX_ENTRIES"), 200))
 		// 语义缓存命中率暴露到 /metrics（zebra_cache_hits / zebra_cache_misses）
 		metrics.CacheStats = semanticCache.Stats
 
@@ -239,7 +247,8 @@ func main() {
 		if docs, err := rag.LoadDocs("docs"); err == nil && len(docs) > 0 {
 			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 			for name, content := range docs {
-				if derr := ragIndex.AddDocument(ctx, content, name, 600, 100); derr != nil {
+				// RAG_CHUNK_SIZE / RAG_CHUNK_OVERLAP 文档分块参数（默认 600/100）
+				if derr := ragIndex.AddDocument(ctx, content, name, atoiDefault(os.Getenv("RAG_CHUNK_SIZE"), 600), atoiDefault(os.Getenv("RAG_CHUNK_OVERLAP"), 100)); derr != nil {
 					logger.Warn("RAG 文档摄入失败", "doc", name, "err", derr)
 					continue
 				}
@@ -354,17 +363,19 @@ func main() {
 
 	// ---- P13 多 Agent Supervisor：数据/知识/常规 三个专业 worker ----
 	// P47 摘要压缩器：ZEBRA_SUMMARIZER=llm 时用 LLM 语义摘要，否则截断式。
-	windowSummarizer := agent.Summarizer(agent.PrefixSummarizer{MaxChars: 600})
+	// SUMMARY_MAX_CHARS 摘要长度（默认 600）
+	windowSummarizer := agent.Summarizer(agent.PrefixSummarizer{MaxChars: atoiDefault(os.Getenv("SUMMARY_MAX_CHARS"), 600)})
 	if os.Getenv("ZEBRA_SUMMARIZER") == "llm" && router != nil {
-		windowSummarizer = &agent.LLMSummarizer{Router: router, MaxChars: 600}
+		windowSummarizer = &agent.LLMSummarizer{Router: router, MaxChars: atoiDefault(os.Getenv("SUMMARY_MAX_CHARS"), 600)}
 		logger.Info("已启用 LLM 对话摘要压缩")
 	}
 	var supervisorInst *supervisor.Supervisor
 	if router != nil && prompts != nil {
 		supervisorInst = buildSupervisor(workerDeps{
-			router: router, prompts: prompts, mem: mem, window: &agent.ContextWindow{MaxTokens: 4000, Summarizer: windowSummarizer},
+			// CONTEXT_MAX_TOKENS 上下文预算（默认 4000）；MAX_TOOL_TURNS 最大工具轮数（默认 5）
+			router: router, prompts: prompts, mem: mem, window: &agent.ContextWindow{MaxTokens: atoiDefault(os.Getenv("CONTEXT_MAX_TOKENS"), 4000), Summarizer: windowSummarizer},
 			moderator: moderator, skills: skillReg, cache: semanticCache, rag: ragIndex, reranker: reranker, kg: kgGraph,
-			model: envOr("OLLAMA_MODEL", "qwen3.5:0.8b-mlx"), maxTurns: 5, cost: costTracker, logger: logger,
+			model: envOr("OLLAMA_MODEL", "qwen3.5:0.8b-mlx"), maxTurns: atoiDefault(os.Getenv("MAX_TOOL_TURNS"), 5), cost: costTracker, logger: logger,
 		}, reg)
 	}
 
@@ -393,7 +404,8 @@ func main() {
 					ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 					defer cancel()
 					for name, content := range docs {
-						if derr := ragIndex.AddDocument(ctx, content, name, 600, 100); derr != nil {
+						// RAG_CHUNK_SIZE / RAG_CHUNK_OVERLAP 文档分块参数（默认 600/100）
+						if derr := ragIndex.AddDocument(ctx, content, name, atoiDefault(os.Getenv("RAG_CHUNK_SIZE"), 600), atoiDefault(os.Getenv("RAG_CHUNK_OVERLAP"), 100)); derr != nil {
 							return derr
 						}
 					}
@@ -454,7 +466,7 @@ func main() {
 			logger.Info("已启用独立评审模型", "base", jb, "model", envOr("JUDGE_MODEL", ""))
 		}
 		sample := float64(atoiDefault(os.Getenv("ZEBRA_SHADOW_SAMPLE"), 10)) / 100
-		shadowEval = eval.NewShadowEvaluator(candidate, eval.NewJudge(judgeRouter), eval.NewShadowStore(200), sample)
+		shadowEval = eval.NewShadowEvaluator(candidate, eval.NewJudge(judgeRouter), eval.NewShadowStore(atoiDefault(os.Getenv("SHADOW_STORE_MAX"), 200)), sample)
 		shadowEval.Metrics = metrics.Inc
 		shadowEval.Log = logger
 		logger.Info("已启用影子评测", "candidate", shadowModel, "sample_rate", sample)
@@ -465,7 +477,7 @@ func main() {
 		Tools:         reg,
 		Prompts:       prompts,
 		Mem:           mem,
-		Window:        &agent.ContextWindow{MaxTokens: 4000, Summarizer: windowSummarizer}, // C11/P47
+		Window:        &agent.ContextWindow{MaxTokens: atoiDefault(os.Getenv("CONTEXT_MAX_TOKENS"), 4000), Summarizer: windowSummarizer}, // C11/P47
 		Moderator:     moderator,
 		Audit:         audit,
 		Sessions:      sessions,
@@ -473,7 +485,7 @@ func main() {
 		Rate:          rate,
 		Logger:        logger,
 		Metrics:       metrics,
-		MaxTurns:      5,
+		MaxTurns:      atoiDefault(os.Getenv("MAX_TOOL_TURNS"), 5),
 		ReActMaxSteps: atoiDefault(os.Getenv("REACT_MAX_STEPS"), 6),
 		PromptName:    "assistant",
 		Skills:        skillReg,
@@ -582,6 +594,20 @@ func atoiDefault(s string, def int) int {
 		return def
 	}
 	return n
+}
+
+// cacheThreshold 语义缓存相似度阈值（CACHE_THRESHOLD，默认 0.92）。
+// 空串/非法/越界均回落默认；0~1 范围内取用户值。
+func cacheThreshold() float64 {
+	s := os.Getenv("CACHE_THRESHOLD")
+	if s == "" {
+		return 0.92
+	}
+	v, err := strconv.ParseFloat(s, 64)
+	if err != nil || v <= 0 || v > 1 {
+		return 0.92
+	}
+	return v
 }
 
 // redactURL 启动日志脱敏（S-3）：剥掉 URL 里的 userinfo（REDIS_URL /

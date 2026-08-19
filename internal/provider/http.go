@@ -24,12 +24,30 @@ type HTTPClient struct {
 }
 
 // NewHTTPClient 构造。timeout 为单次请求超时；maxRetries 为失败重试次数。
+// breakerThreshold / breakerCooldown 为熔断参数（<=0 时用默认 5 次 / 30s）。
 func NewHTTPClient(timeout time.Duration, maxRetries int, backoff time.Duration) *HTTPClient {
 	return &HTTPClient{
 		client:     &http.Client{Timeout: timeout},
 		maxRetries: maxRetries,
 		backoff:    backoff,
 		breaker:    NewCircuitBreaker(5, 30*time.Second), // 连续 5 次失败熔断 30s
+	}
+}
+
+// NewHTTPClientWithBreaker 构造，支持自定义熔断参数（B7 配置化）。
+// breakerThreshold <=0 时回落默认 5；breakerCooldown <=0 时回落默认 30s。
+func NewHTTPClientWithBreaker(timeout time.Duration, maxRetries int, backoff time.Duration, breakerThreshold int, breakerCooldown time.Duration) *HTTPClient {
+	if breakerThreshold <= 0 {
+		breakerThreshold = 5
+	}
+	if breakerCooldown <= 0 {
+		breakerCooldown = 30 * time.Second
+	}
+	return &HTTPClient{
+		client:     &http.Client{Timeout: timeout},
+		maxRetries: maxRetries,
+		backoff:    backoff,
+		breaker:    NewCircuitBreaker(breakerThreshold, breakerCooldown),
 	}
 }
 
