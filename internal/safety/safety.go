@@ -6,8 +6,10 @@
 package safety
 
 import (
+	"fmt"
 	"os"
 	"regexp"
+	"sort"
 	"strings"
 	"sync"
 )
@@ -57,9 +59,40 @@ type KeywordModerator struct {
 	banned []string
 }
 
-// NewKeywordModerator 构造。
+// defaultBannedWords 内置基础敏感词库（D18 本地兜底）。
+// 覆盖常见违法/赌博/色情/歧视等类别；生产演化方向：接外部审核 API、
+// 定期同步合规词库，本表仅保证"零配置也有基本防线"。
+var defaultBannedWords = []string{
+	"赌博", "赌球", "开赌场", "六合彩", "博彩", "下注",
+	"毒品", "冰毒", "海洛因", "大麻", "摇头丸", "制毒", "贩毒",
+	"枪支", "弹药", "爆炸物", "管制刀具", "买枪", "制枪",
+	"色情", "成人视频", "淫秽", "裸聊", "约炮", "一夜情",
+	"诈骗", "洗钱", "赌博网站", "裸贷", "钓鱼网站", "木马",
+	"杀人", "自杀", "自残", "恐怖袭击", "绑架",
+	"黑客攻击", "攻击政府网站", "入侵系统", "破解密码",
+	"传销", "非法集资", "假币", "发票", "代开发票",
+	"器官买卖", "人肉搜索", "买卖个人信息", "身份证代办",
+	"报仇", "雇凶", "复仇",
+}
+
+// NewKeywordModerator 构造。不传参数时启用内置基础敏感词库（默认防线）；
+// 传参时使用传入列表（可叠加默认词库见 NewKeywordModeratorWithDefaults）。
 func NewKeywordModerator(banned ...string) *KeywordModerator {
+	if len(banned) == 0 {
+		return &KeywordModerator{banned: append([]string(nil), defaultBannedWords...)}
+	}
 	return &KeywordModerator{banned: banned}
+}
+
+// NewKeywordModeratorWithDefaults 构造：在默认词库基础上追加自定义词。
+func NewKeywordModeratorWithDefaults(extra ...string) *KeywordModerator {
+	words := append([]string(nil), defaultBannedWords...)
+	return &KeywordModerator{banned: append(words, extra...)}
+}
+
+// DefaultBannedWords 返回内置基础敏感词库副本（供日志/运维观测）。
+func DefaultBannedWords() []string {
+	return append([]string(nil), defaultBannedWords...)
 }
 
 // Check 命中任意敏感词则拦截。
@@ -73,21 +106,19 @@ func (k *KeywordModerator) Check(text string) (bool, string) {
 	return true, ""
 }
 
-// NoopModerator 空实现（生产接入外部审核时的占位）。
-type NoopModerator struct{}
-
-// Check 恒放行。
-func (NoopModerator) Check(string) (bool, string) { return true, "" }
-
 // ---------------- D19 敏感数据治理 ----------------
 
 var (
-	reAPIKey = regexp.MustCompile(`(?i)(sk-[A-Za-z0-9_-]{12,})`)
-	rePhone  = regexp.MustCompile(`(?:\+?86[- ]?)?1[3-9]\d{9}`)
-	reEmail  = regexp.MustCompile(`[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}`)
+	reAPIKey   = regexp.MustCompile(`(?i)(sk-[A-Za-z0-9_-]{12,})`)
+	rePhone    = regexp.MustCompile(`(?:\+?86[- ]?)?1[3-9]\d{9}`)
+	reEmail    = regexp.MustCompile(`[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}`)
+	rePEMKey   = regexp.MustCompile(`(?s)-----BEGIN [A-Z ]*PRIVATE KEY-----.*?-----END [A-Z ]*PRIVATE KEY-----`)
+	reBearer   = regexp.MustCompile(`(?i)bearer\s+[A-Za-z0-9._~+/=-]{8,}`)
+	rePassword = regexp.MustCompile(`(?i)(password|passwd|pwd|token|secret|api[_-]?key|apikey)(\s*[:=]\s*)([^\s,;"']+)`)
 )
 
-// Redact 脱敏：API Key / 手机号 / 邮箱 → 掩码。用于日志与审计（D19）。
+// Redact 脱敏：API Key / 手机号 / 邮箱 / PEM 私钥 / Bearer Token / 显式
+// password|token|secret|apikey=值 → 掩码。用于日志与审计（D19）。
 // API Key 只保留前缀 sk-，其余打码，避免长密钥完整泄露。
 func Redact(s string) string {
 	s = reAPIKey.ReplaceAllStringFunc(s, func(m string) string {
@@ -96,9 +127,36 @@ func Redact(s string) string {
 		}
 		return "***"
 	})
+	s = rePEMKey.ReplaceAllString(s, "[private-key]")
+	s = reBearer.ReplaceAllString(s, "bearer ***")
+	s = rePassword.ReplaceAllString(s, "${1}${2}***")
 	s = rePhone.ReplaceAllString(s, "***")
 	s = reEmail.ReplaceAllString(s, "***@***")
 	return s
+}
+
+// safeArgKeys 工具参数日志白名单（P1-7）：仅这些"低敏感"键记录值（值仍经
+// Redact 二次脱敏），其余一律掩码。`command`/`content` 等可携带任意内嵌
+// 机密（密码、Token、私钥）的键刻意不在白名单内。
+var safeArgKeys = map[string]bool{
+	"query": true, "location": true, "expression": true, "from": true, "to": true,
+	"language": true, "format": true, "mode": true, "path": true, "url": true,
+	"count": true, "n": true, "min": true, "max": true, "digits": true,
+}
+
+// RedactArgs 工具调用参数日志脱敏：按键名白名单决定是否保留值，值再经
+// Redact 处理；非白名单键一律输出 [redacted]，绝不把原始值写进日志。
+func RedactArgs(args map[string]interface{}) string {
+	out := make([]string, 0, len(args))
+	for k, v := range args {
+		if safeArgKeys[k] {
+			out = append(out, k+"="+Redact(fmt.Sprint(v)))
+		} else {
+			out = append(out, k+"=[redacted]")
+		}
+	}
+	sort.Strings(out)
+	return strings.Join(out, " ")
 }
 
 // SecretStore 密钥/配置注入接口：支持环境变量、KMS、Vault 多种实现。

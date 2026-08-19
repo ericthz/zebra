@@ -8,6 +8,7 @@ package observe
 import (
 	"fmt"
 	"io"
+	"net/url"
 	"strings"
 
 	"github.com/ericthz/zebra/internal/console"
@@ -15,6 +16,17 @@ import (
 	"github.com/ericthz/zebra/internal/skill"
 	"github.com/ericthz/zebra/internal/tool"
 )
+
+// redactURL 能力清单脱敏（S-3）：剥掉 URL 里的 userinfo（REDIS_URL 常带
+// 密码），避免清单/日志泄露凭据。解析失败原样返回。
+func redactURL(u string) string {
+	parsed, err := url.Parse(u)
+	if err != nil || parsed.Host == "" {
+		return u
+	}
+	parsed.User = nil
+	return parsed.String()
+}
 
 // labelWidth 标签列定宽（显示宽度）：标题与内容的间距，保持紧凑。
 const labelWidth = 12
@@ -172,7 +184,7 @@ func PrintInventory(w io.Writer, info Info) {
 		fmt.Fprintf(w, "%s%s: 未启用（ZEBRA_SHADOW_MODEL 未设置）\n", parent(), lbl("◐", console.ColorShadow, "影子评测"))
 	}
 	if info.RedisURL != "" {
-		fmt.Fprintf(w, "%s%s: %s（会话共享）\n", parent(), lbl("◎", console.ColorRedis, "Redis"), info.RedisURL)
+		fmt.Fprintf(w, "%s%s: %s（会话共享）\n", parent(), lbl("◎", console.ColorRedis, "Redis"), redactURL(info.RedisURL))
 	} else {
 		fmt.Fprintf(w, "%s%s: 未启用（内存会话，单机）\n", parent(), lbl("◎", console.ColorRedis, "Redis"))
 	}

@@ -13,6 +13,47 @@ func TestRedact(t *testing.T) {
 	}
 }
 
+// TestRedactExtendedSecrets P1-7：日志脱敏必须覆盖 PEM 私钥、Bearer Token、
+// 以及显式的 password|token|secret|api_key=值——而不仅是 sk-/手机/邮箱。
+func TestRedactExtendedSecrets(t *testing.T) {
+	in := "auth=Bearer abcdefghijklmnop123456, " +
+		"-----BEGIN PRIVATE KEY-----\nMIIEvQIBADANBgkqhkiG9w0BA\n-----END PRIVATE KEY-----, " +
+		"password=hunter2, api_key=AbC12345, token=xyz98765"
+	out := Redact(in)
+	for _, leak := range []string{
+		"abcdefghijklmnop123456", "MIIEvQIBADANBgkqhkiG9w0BA",
+		"hunter2", "AbC12345", "xyz98765",
+	} {
+		if contains(out, leak) {
+			t.Fatalf("机密未脱敏 %q → %s", leak, out)
+		}
+	}
+	if !contains(out, "bearer ***") || !contains(out, "[private-key]") {
+		t.Fatalf("掩码占位缺失: %s", out)
+	}
+}
+
+// TestRedactArgsWhitelist P1-7：工具参数日志按键名白名单脱敏。
+// command/content 等可携带内嵌机密的键必须输出 [redacted]，值不得入日志。
+func TestRedactArgsWhitelist(t *testing.T) {
+	out := RedactArgs(map[string]interface{}{
+		"command":    "echo hunter2 && curl -H 'Authorization: Bearer abcdefghijklmnop123456' http://x",
+		"content":    "-----BEGIN RSA PRIVATE KEY-----\nMIIEvQ==\n-----END RSA PRIVATE KEY-----",
+		"path":       "/tmp/ok.txt",
+		"location":   "北京",
+		"expression": "1+1",
+	})
+	if containsAny(out, "hunter2", "abcdefghijklmnop123456", "MIIEvQ") {
+		t.Fatalf("机密键值泄露到日志: %s", out)
+	}
+	if !contains(out, "command=[redacted]") || !contains(out, "content=[redacted]") {
+		t.Fatalf("机密键应整体掩码: %s", out)
+	}
+	if !contains(out, "path=/tmp/ok.txt") || !contains(out, "location=北京") || !contains(out, "expression=1+1") {
+		t.Fatalf("白名单键值应保留: %s", out)
+	}
+}
+
 func containsAny(s string, subs ...string) bool {
 	for _, sub := range subs {
 		if contains(s, sub) {
@@ -54,6 +95,22 @@ func TestModeration(t *testing.T) {
 	}
 	if ok, _ := m.Check("今天天气不错"); !ok {
 		t.Fatal("正常文本应放行")
+	}
+}
+
+// TestDefaultModerator 验证：零配置的 NewKeywordModerator() 启用内置基础敏感词库。
+func TestDefaultModerator(t *testing.T) {
+	m := NewKeywordModerator()
+	if ok, reason := m.Check("我想买点枪支弹药"); ok {
+		t.Fatalf("默认词库应拦截敏感内容，放行了（%s）", reason)
+	}
+	if ok, _ := m.Check("今天天气不错，适合出门"); !ok {
+		t.Fatal("默认词库不应误伤正常文本")
+	}
+	// 叠加默认词库
+	md := NewKeywordModeratorWithDefaults("内部机密")
+	if ok, _ := md.Check("文档里写了内部机密"); ok {
+		t.Fatal("扩展词应生效")
 	}
 }
 

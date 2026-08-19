@@ -3,7 +3,6 @@ package server
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"log/slog"
 	"net/http"
@@ -54,6 +53,7 @@ type Deps struct {
 	Cost          *cost.Tracker           // P5 成本归因（nil 关闭）
 	Cache         *cache.SemanticCache    // P5 语义缓存（nil 关闭）
 	RAG           *rag.Index              // P8 知识库检索（nil 关闭）
+	Reranker      rag.Reranker            // P41 RAG 二次精排（nil 则混合检索原序）
 	Model         string                  // 主模型名（成本归因用）
 	TaskStore     task.Store              // P12 异步任务存储（nil 关闭异步 API）
 	Supervisor    *supervisor.Supervisor  // P13 多 Agent（nil 关闭 supervisor 模式）
@@ -74,8 +74,9 @@ type APIServer struct {
 	tasks *task.Manager // P12 异步任务管理器（NewAPIServer 时构建）
 
 	// P42 金丝雀自动回滚：记录 promote 时的原主模型名，质量回退时切回。
-	shadowMu   sync.Mutex
-	shadowPrev string
+	shadowMu       sync.Mutex
+	shadowPrev     string
+	shadowPromoted string
 }
 
 // NewAPIServer 构造。
@@ -111,6 +112,8 @@ func (s *APIServer) buildAgent(user, role, sessionID string, hist *[]provider.Me
 		Skills:       s.deps.Skills,
 		Cache:        s.deps.Cache,
 		RAG:          s.deps.RAG,
+		Reranker:     s.deps.Reranker,
+		KG:           s.deps.KG,
 		Profile:      s.deps.Profile,
 		ProfileTTL:   s.deps.ProfileTTL,
 		Extractor:    s.deps.Extractor,
@@ -121,13 +124,11 @@ func (s *APIServer) buildAgent(user, role, sessionID string, hist *[]provider.Me
 				"skills", strings.Join(names, ","))
 		},
 		OnTool: func(name string, args map[string]interface{}, ok bool, err error) { // P31：工具调用可观测
-			detail, _ := json.Marshal(args)
-			msg := "ok"
-			if err != nil {
-				msg = err.Error()
-			}
+			// 参数按白名单脱敏：command/content 等可携带机密的键只留 [redacted]
+			//（S-1）；失败错误里可能携带命令输出/机密（S-2），同样脱敏+截断，
+			// 绝不把工具输出原样持久化到日志。
 			s.deps.Logger.Info("tool.call", "session", sessionID, "user", user,
-				"tool", name, "args", safety.Redact(string(detail)), "ok", ok, "err", msg)
+				"tool", name, "args", safety.RedactArgs(args), "ok", ok, "err", redactErr(err))
 		},
 		OnUsage: func(model string, in, out int) { // B5 用量指标 + P5 成本归因
 			s.deps.Metrics.Inc("tokens_in:" + itoa(in/100))
@@ -135,6 +136,10 @@ func (s *APIServer) buildAgent(user, role, sessionID string, hist *[]provider.Me
 			if s.deps.Cost != nil {
 				s.deps.Cost.Record(user, sessionID, model, in, out)
 			}
+		},
+		OnInjection: func(kind, hit string) { // D17 注入检测审计
+			s.deps.Logger.Warn("prompt.injection.detected", "session", sessionID, "user", user, "kind", kind, "hit", hit)
+			s.deps.Metrics.Inc("injection_detected")
 		},
 	})
 	return ag.Bind(sessionID, role, user, hist)
@@ -185,12 +190,14 @@ func (s *APIServer) Handler() http.Handler {
 	mux.HandleFunc("/", uiHandler()) // P14 前端 Web UI（公开）
 	mux.HandleFunc("/healthz", HealthzHandler())
 	mux.HandleFunc("/readyz", ReadyzHandler(s.deps.Logger, map[string]func() error{
-		"llm":   func() error { return s.toolsReadyCheck() },
+		"llm":   func() error { return s.llmReadyCheck() },
 		"tools": func() error { return s.toolsReadyCheck() },
 	}))
 	mux.Handle("/metrics", s.deps.Metrics.Handler())
 	if s.deps.Cost != nil {
-		mux.Handle("/metrics/cost", s.deps.Cost.Handler())
+		// P1-9：成本数据含 per-user/per-session 明细，禁止公开——
+		// 从 Auth 豁免列表移除，并额外要求 admin 角色（A4 隔离）。
+		mux.Handle("/metrics/cost", requireAdmin(s.deps.Cost.Handler()))
 	}
 
 	// 鉴权 + 限流 + 日志 + 恢复，按序包裹业务路由
@@ -198,7 +205,7 @@ func (s *APIServer) Handler() http.Handler {
 	h = Recover(s.deps.Logger)(h)
 	h = AccessLog(s.deps.Logger, s.deps.Metrics)(h)
 	h = RateLimit(s.deps.Rate)(h)
-	h = Auth(s.deps.Keys, "/", "/healthz", "/readyz", "/metrics", "/metrics/cost")(h)
+	h = Auth(s.deps.Keys, "/", "/healthz", "/readyz", "/metrics")(h)
 	h = RequestID(h)
 	return h
 }
@@ -240,6 +247,14 @@ func (s *APIServer) Serve(ctx context.Context, addr string) error {
 		s.deps.Logger.Info("shutdown complete")
 		return nil
 	}
+}
+
+// llmReadyCheck 供 readyz 复用：主模型路由可用才认为就绪。
+func (s *APIServer) llmReadyCheck() error {
+	if s.deps.Router == nil || s.deps.Router.Primary() == nil {
+		return errors.New("llm router not initialized")
+	}
+	return nil
 }
 
 // toolsReadyCheck 供 readyz 复用（避免未使用告警）。
