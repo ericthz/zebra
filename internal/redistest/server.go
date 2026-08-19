@@ -68,14 +68,23 @@ func readCommand(rd *bufio.Reader) ([]string, error) {
 	if len(line) == 0 || line[0] != '*' {
 		return nil, fmt.Errorf("非法命令 %q", line)
 	}
-	n, _ := strconv.Atoi(line[1:])
+	n, err := strconv.Atoi(line[1:])
+	if err != nil || n < 0 || n > 1024 {
+		return nil, fmt.Errorf("非法命令长度 %q", line)
+	}
 	args := make([]string, 0, n)
 	for i := 0; i < n; i++ {
 		l, err := readLine(rd)
 		if err != nil {
 			return nil, err
 		}
-		ln, _ := strconv.Atoi(l[1:])
+		if len(l) == 0 || l[0] != '$' {
+			return nil, fmt.Errorf("非法参数行 %q", l)
+		}
+		ln, err := strconv.Atoi(l[1:])
+		if err != nil || ln < 0 || ln > 512*1024 {
+			return nil, fmt.Errorf("非法参数长度 %q", l)
+		}
 		buf := make([]byte, ln+2)
 		if _, err := io.ReadFull(rd, buf); err != nil {
 			return nil, err
@@ -90,10 +99,19 @@ func readLine(rd *bufio.Reader) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	return line[:len(line)-2], nil
+	if len(line) >= 2 && line[len(line)-2] == '\r' {
+		return line[:len(line)-2], nil
+	}
+	if len(line) >= 1 && line[len(line)-1] == '\n' {
+		return line[:len(line)-1], nil
+	}
+	return line, nil
 }
 
 func (s *Server) exec(cmd []string) string {
+	if len(cmd) == 0 {
+		return "-ERR empty\r\n"
+	}
 	switch strings.ToUpper(cmd[0]) {
 	case "AUTH", "SELECT":
 		return "+OK\r\n"

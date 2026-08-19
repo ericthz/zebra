@@ -33,6 +33,12 @@ type Client struct {
 	Timeout  time.Duration // 读写超时（默认 5s）
 }
 
+// RESP 解码防御上限（五5）：防止恶意/损坏响应声明超大长度引发 make 溢出或 OOM。
+const (
+	maxBulkBytes = 8 << 20 // 单条 bulk string 上限 8MB（会话/记忆均远小于此）
+	maxArrayLen  = 1 << 20 // 数组元素个数上限 1M（防 LRANGE 0 -1 等超量预分配）
+)
+
 // Do 发送一条命令并解析响应。
 // 返回值为 RESP 解码结果：string / int64 / []interface{} / nil（$-1）。
 func (c *Client) Do(ctx context.Context, args ...string) (interface{}, error) {
@@ -136,7 +142,11 @@ func (c *Client) Del(ctx context.Context, keys ...string) (int64, error) {
 	if err != nil {
 		return 0, err
 	}
-	return v.(int64), nil
+	n, ok := v.(int64)
+	if !ok {
+		return 0, fmt.Errorf("DEL 返回类型异常: %T", v)
+	}
+	return n, nil
 }
 
 // Expire 续期；返回 key 是否存在（供 Touch 判断会话是否仍有效）。
@@ -145,7 +155,11 @@ func (c *Client) Expire(ctx context.Context, key string, ttl time.Duration) (boo
 	if err != nil {
 		return false, err
 	}
-	return v.(int64) == 1, nil
+	n, ok := v.(int64)
+	if !ok {
+		return false, fmt.Errorf("EXPIRE 返回类型异常: %T", v)
+	}
+	return n == 1, nil
 }
 
 // Keys 按 pattern 列出 key（演示用；生产演化方向：SCAN 避免阻塞）。
@@ -193,6 +207,14 @@ func readReply(r *bufio.Reader) (interface{}, error) {
 		if n == -1 {
 			return nil, nil // nil 值
 		}
+		if n < 0 {
+			return nil, fmt.Errorf("非法 bulk 长度 %d", n)
+		}
+		// 防御：恶意/损坏的响应可能声明巨大长度导致 make 溢出或 OOM。
+		// bulk 为会话/记忆字符串，正常远小于 8MB；超限视为协议异常。
+		if n > maxBulkBytes {
+			return nil, fmt.Errorf("bulk 长度 %d 超过上限 %d", n, maxBulkBytes)
+		}
 		buf := make([]byte, n+2) // 含结尾 \r\n
 		if _, err := io.ReadFull(r, buf); err != nil {
 			return nil, err
@@ -202,6 +224,17 @@ func readReply(r *bufio.Reader) (interface{}, error) {
 		n, err := strconv.Atoi(string(line[1:]))
 		if err != nil {
 			return nil, err
+		}
+		if n == -1 {
+			return nil, nil // nil 数组（RESP2 等价 nil）
+		}
+		if n < 0 {
+			return nil, fmt.Errorf("非法数组长度 %d", n)
+		}
+		// 防御：数组元素个数声明过大（如 LRANGE 0 -1 的 40 亿）会预先分配
+		// 巨型切片导致 OOM；限制后返回错误而非崩进程。
+		if n > maxArrayLen {
+			return nil, fmt.Errorf("数组长度 %d 超过上限 %d", n, maxArrayLen)
 		}
 		arr := make([]interface{}, 0, n)
 		for i := 0; i < n; i++ {
@@ -218,12 +251,46 @@ func readReply(r *bufio.Reader) (interface{}, error) {
 }
 
 // readLine 读一行（去掉 \r\n）。
+// 容错：非法行（缺少 \r 或过短）不 panic，返回内容或错误。
+// 六11：无上限的 ReadString 会无限缓冲恶意响应（如超长简单串/错误行），
+// 用 LimitReader 封顶（maxLineBytes）。
 func readLine(r *bufio.Reader) (string, error) {
-	line, err := r.ReadString('\n')
+	line, err := readLineBytes(r)
 	if err != nil {
 		return "", err
 	}
-	return line[:len(line)-2], nil // 去 \r\n
+	// 去掉行尾分隔符：readLineBytes 已去掉 \n，这里再兜底去掉结尾 \r
+	if len(line) >= 1 && line[len(line)-1] == '\r' {
+		line = line[:len(line)-1]
+	}
+	return string(line), nil
+}
+
+// maxLineBytes 单行上限（六11）：超过即视为协议异常，拒绝继续缓冲。
+// 正常 RESP 行（+OK / :100 / $123 / -ERR msg）都远小于此。
+const maxLineBytes = 1 << 20 // 1MB
+
+func readLineBytes(r *bufio.Reader) ([]byte, error) {
+	var b []byte
+	for {
+		var chunk [1]byte
+		n, err := r.Read(chunk[:])
+		if n == 1 {
+			if chunk[0] == '\n' {
+				return b, nil
+			}
+			b = append(b, chunk[0])
+			if len(b) > maxLineBytes {
+				return nil, fmt.Errorf("RESP 行超过上限 %d 字节", maxLineBytes)
+			}
+		}
+		if err != nil {
+			if err == io.EOF && len(b) > 0 {
+				return b, nil // 无换行的末尾行
+			}
+			return nil, err
+		}
+	}
 }
 
 func (c *Client) timeout() time.Duration {

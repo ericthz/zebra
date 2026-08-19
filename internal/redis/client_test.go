@@ -13,6 +13,90 @@ import (
 	"time"
 )
 
+// TestReadLineEdgeCases 验证：畸形行（缺 \r）不越界 panic。
+func TestReadLineEdgeCases(t *testing.T) {
+	for _, in := range []string{"\n", "abc\n", "a\r\n", "\r\n"} {
+		s, err := readLine(bufio.NewReader(strings.NewReader(in)))
+		if err != nil {
+			t.Fatalf("输入 %q 不应报错: %v", in, err)
+		}
+		if strings.Contains(s, "\n") || strings.Contains(s, "\r") {
+			t.Fatalf("输入 %q 应去除行尾分隔符，实际 %q", in, s)
+		}
+	}
+}
+
+// TestReadLineBounded 六11：超长行必须报错，不能无限缓冲占满内存。
+func TestReadLineBounded(t *testing.T) {
+	// maxLineBytes+1 个字符且无换行 → 应报"行超过上限"
+	in := strings.Repeat("x", maxLineBytes+1)
+	if _, err := readLine(bufio.NewReader(strings.NewReader(in))); err == nil {
+		t.Fatal("超长行应报错（六11）")
+	}
+	// 恰好低于上限且有换行 → 正常返回
+	ok := strings.Repeat("y", maxLineBytes-1) + "\r\n"
+	s, err := readLine(bufio.NewReader(strings.NewReader(ok)))
+	if err != nil || len(s) != maxLineBytes-1 {
+		t.Fatalf("正常长度行应成功，实际 len=%d err=%v", len(s), err)
+	}
+}
+
+// TestReadReplyMalformed 验证：非法 RESP 长度/前缀返回错误而非 panic/越界。
+func TestReadReplyMalformed(t *testing.T) {
+	cases := []struct {
+		name string
+		in   string
+	}{
+		{"负 bulk 长度", "$-3\r\n"},
+		{"负数组长度", "*-2\r\n"},
+		{"数组元素不完整", "*2\r\n$3\r\nfoo\r\n"},
+		{"空响应行", "\r\n"},
+		{"未知前缀", "%3\r\n"},
+		{"非法数字", "$abc\r\n"},
+		{"超大 bulk 长度", "$99999999999\r\n"},
+		{"超大数组长度", "*99999999999\r\n"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if _, err := readReply(bufio.NewReader(strings.NewReader(tc.in))); err == nil {
+				t.Fatalf("畸形输入 %q 应报错", tc.in)
+			}
+		})
+	}
+}
+
+// TestDelExpireTypeGuard 验证：返回类型异常时返回错误而非 panic。
+func TestDelExpireTypeGuard(t *testing.T) {
+	// 构造服务器：对 DEL/EXPIRE 返回字符串（异常协议应答）
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer ln.Close()
+	go func() {
+		for {
+			conn, err := ln.Accept()
+			if err != nil {
+				return
+			}
+			go func(c net.Conn) {
+				defer c.Close()
+				buf := make([]byte, 256)
+				io.ReadFull(c, buf[:3]) // 吃 *N
+				c.Write([]byte("+not-an-int\r\n"))
+			}(conn)
+		}
+	}()
+
+	c := &Client{Addr: ln.Addr().String()}
+	if _, err := c.Del(context.Background(), "k"); err == nil {
+		t.Fatal("DEL 返回非整数应报错")
+	}
+	if _, err := c.Expire(context.Background(), "k", time.Minute); err == nil {
+		t.Fatal("EXPIRE 返回非整数应报错")
+	}
+}
+
 // fakeRedisServer 内存版假 Redis：解析 RESP 命令并按语义应答。
 // 它同时是客户端协议正确性的"反向验证"（两边都严格按 RESP 编解码）。
 type fakeRedisServer struct {
