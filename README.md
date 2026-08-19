@@ -41,13 +41,16 @@
 
 | 维度 | 现状 |
 |---|---|
-| 代码规模 | 171 个 `.go` 文件（含 67 个测试），约 1.8 万行 |
+| 代码规模 | 192 个 `.go` 文件（含 87 个测试），约 2.6 万行 |
 | 包数量 | 31 个（`cmd/` 3 个入口 + `internal/` 27 个 + `test/` 评测） |
 | 运行时依赖 | 零第三方，纯 Go 标准库 |
 | 质量门禁 | `go build` / `go vet` 零警告，`go test ./...` 全绿 |
 | 覆盖范围 | AI Agent 主流技能点全覆盖（见 [§2 原理地图](#2-ai-agent-能力全景原理地图)） |
 
 ### 1.3 阅读方式（推荐顺序）
+
+> 想系统入门：先读 [docs/learning-path.md](docs/learning-path.md) —— 十关"技能 → 原理 → 小练习"，
+> 每关都是读讲义、跑测试、改一处代码看行为。下面是被动浏览路径：
 
 1. 从 [§2 原理地图](#2-ai-agent-能力全景原理地图) 挑一个想学的技能点；
 2. 打开"代码入口"列对应的文件，**先读文件头注释**（每段注释都按"为什么 → 怎么做 → 生产演化方向"组织）；
@@ -121,7 +124,7 @@
 
 | 技能点 | 代码入口 | 一句话原理 |
 |---|---|---|
-| LLM-as-Judge | `internal/eval/judge.go` | 忠实/相关/安全三维打分，结构化输出 |
+| LLM-as-Judge | `internal/eval/judge.go` | 忠实/相关/安全三维打分，结构化输出（安全语义：拒绝=安全，只有实际泄露/提供危险内容才低分） |
 | 评测数据集管理 | `internal/eval/dataset.go` | 用例目录化 + 批量跑分 + BaselineDiff 回归对比 |
 | 红队评测 | `test/eval/cases/redteam.json` | 注入/越狱用例 + 安全分门槛，防能力退化 |
 | 反馈回流 | `internal/eval/dataset.go` `internal/server/feedback.go` | 用户"踩"→ 问答对自动进数据集，纳入回归 |
@@ -162,6 +165,7 @@
 | 多租户 / RBAC / 限流 | `internal/server/auth.go` | Principal + 白名单 + 令牌桶 |
 | CLI 行编辑 | `internal/console/readline.go` | raw 模式 + UTF-8 感知退格（中文不再卡） |
 | 语音交互 | `internal/provider/voice.go` | OpenAI 兼容 ASR/TTS 全链路 |
+| 多模态输入 | `internal/agent/agent.go` `internal/server/chat.go` | `images` 字段 → text+image_url 内容块，HTTP/CLI 双入口全模式可用 |
 
 ---
 
@@ -234,6 +238,8 @@
 ollama pull qwen3.5:0.8b-mlx
 go run ./cmd/zebra
 # 输入：北京今天天气怎么样？ → 观察工具调用、技能注入、RAG 检索的执行痕迹
+# 多模态：go run ./cmd/zebra -image ./photo.png -image https://example.com/b.jpg
+#         输入：这两张图是什么关系？ → 模型看到图片后回答（全模式可用）
 ```
 
 CLI 与 server 使用**同一套装配逻辑**：自动加载 `.env`，配置了 `MCP_MODE` 则挂载
@@ -244,7 +250,8 @@ stderr），终端只显示清单与对话。
 Zebra CLI 与 Web UI 一样支持**多种对话模式**（`-mode` 启动参数或运行中
 `/mode <名称>` 切换）：`chat` 普通对话、`plan` 规划-执行、`react` ReAct
 推理-行动、`reflect` 反思改进、`debate` 双 Agent 辩论、`supervisor` 多 Agent
-路由（数据/知识/常规三个专业 Worker）。执行过程以终端活动轨迹展示：
+路由（数据/知识/常规三个专业 Worker）、`consistent` 自一致性采样择优（独立采样
+多份回答再让模型选出最优，降低单次随机性，`SELF_CONSISTENT_SAMPLES` 可调采样数）。执行过程以终端活动轨迹展示：
 `◇` 阶段（规划/执行步骤/思考/观察）、`▲` 工具调用（含成败）、`■` 技能注入，
 与 Web UI 的活动轨迹块一一对应。`/help` 可查看全部命令。
 
@@ -307,8 +314,8 @@ curl :8080/readyz    # ready
 
 | 变量 | 默认值 | 说明 |
 |---|---|---|
-| `ADDR` | `:8080` | 服务监听地址 |
-| `ADMIN_KEY` / `USER_KEY` | `admin-key` / `user-key` | RBAC 两级 API Key |
+| `ADDR` | `:8080` | 服务监听地址。绑定非本机回环且未配置密钥时拒绝启动（防默认密钥暴露） |
+| `ADMIN_KEY` / `USER_KEY` | `admin-key` / `user-key` | RBAC 两级 API Key。仅当绑定 127.0.0.1/localhost 时允许默认值，否则必须显式配置 |
 | `ZEBRA_LOG` | `zebra.log` | Zebra CLI 诊断日志路径（`off`=stderr） |
 | `LOG_FILE` | `server.log` | server 日志双写文件路径（`off`=仅 stdout） |
 | `EVAL_CASES_DIR` | `test/eval/cases` | 反馈回流评测数据集目录 |
@@ -357,7 +364,7 @@ curl :8080/readyz    # ready
 
 | 方法 | 路径 | 说明 | 鉴权 |
 |---|---|---|---|
-| POST | `/v1/chat` | 非流式对话（`mode`: `plan` / `supervisor` / `reflect` / `react` / `debate`） | 用户 |
+| POST | `/v1/chat` | 非流式对话（`mode`: `plan` / `supervisor` / `reflect` / `react` / `debate` / `consistent`） | 用户 |
 | POST | `/v1/chat/stream` | SSE 流式对话 | 用户 |
 | DELETE | `/v1/user/data` | 被遗忘权：删除当前用户全链路数据 | 用户 |
 | GET | `/v1/user/profile` | 查看画像事实 + 冲突记录 | 用户 |
@@ -406,11 +413,13 @@ curl -X POST :8080/v1/chat \
 ### 6.3 高级能力示例
 
 ```bash
-# 五种推理模式（plan / supervisor / reflect / react / debate）
+# 六种推理模式（plan / supervisor / reflect / react / debate / consistent）
 curl -X POST :8080/v1/chat -H "Authorization: Bearer admin-key" -H "Content-Type: application/json" \
   -d '{"message":"计算 (23+19)*5 并告诉我今天日期","mode":"plan"}'
 curl -X POST :8080/v1/chat -H "Authorization: Bearer admin-key" -H "Content-Type: application/json" \
   -d '{"message":"北京天气怎么样？","mode":"react"}'
+curl -X POST :8080/v1/chat -H "Authorization: Bearer admin-key" -H "Content-Type: application/json" \
+  -d '{"message":"北京天气怎么样？","mode":"consistent"}'
 
 # 影子评测看板 / 切换 / 自动回滚（仅 admin）
 curl :8080/v1/eval/shadow/stats -H "Authorization: Bearer admin-key"
@@ -421,6 +430,10 @@ curl ":8080/v1/knowledge?entity=工具调用" -H "Authorization: Bearer user-key
 
 # 语音对话（multipart file = 音频）
 curl -X POST :8080/v1/voice/chat -H "Authorization: Bearer user-key" -F "file=@voice.wav"
+
+# 多模态：附图片提问（images 支持 http(s) URL / data: 数据 URI）
+curl -X POST :8080/v1/chat -H "Authorization: Bearer user-key" -H "Content-Type: application/json" \
+  -d '{"message":"这张图里有什么？","images":["https://example.com/photo.png"]}'
 
 # 画像：查看 / 精细遗忘 / 冲突裁决
 curl :8080/v1/user/profile -H "Authorization: Bearer user-key"
@@ -481,7 +494,7 @@ curl -X POST :8080/v1/user/profile/resolve -H "Authorization: Bearer user-key" \
 
 | # | 能力 | 代码 | 说明 |
 |---|---|---|---|
-| E | 单元测试 | `internal/*/*_test.go` | 67 个测试文件，覆盖全部技能点 |
+| E | 单元测试 | `internal/*/*_test.go` | 68 个测试文件，覆盖全部技能点 |
 | E | LLM 评测 | `test/eval/` | golden 回归 + 红队评测（`ZEBRA_EVAL=1` 开启） |
 | E | 容器化 | `Dockerfile` `docker-compose.yml` | 多阶段构建 + distroless + 一键依赖编排 |
 | E | CI/CD | `.github/workflows/ci.yml` `Makefile` | 提交自动 build+vet+test；`make eval` 真实模型评测 |
@@ -594,11 +607,29 @@ curl -X POST :8080/v1/user/profile/resolve -H "Authorization: Bearer user-key" \
 
 ## 10. 工程化与质量保障
 
-- **单元测试**：67 个测试文件，`go test ./...` 全绿；每个新增功能强制配套测试。
+- **单元测试**：68 个测试文件，`go test ./...` 全绿；每个新增功能强制配套测试。
 - **静态检查**：`go vet ./...` 零警告；提交前 `gofmt` 全量格式化。
 - **LLM 评测**：`test/eval/` 含 golden 回归与红队评测（`ZEBRA_EVAL=1` 开启真实模型）。
 - **容器化与 CI**：Docker 多阶段构建 + distroless；GitHub Actions 提交自动 build+vet+test。
 - **端到端验证**：每个里程碑以"真实运行 + 断言"收尾（如影子 verdict、语音音频回传、Redis 续期、冲突裁决回退）。
+
+### 10.1 关键问题修复（质量加固轮）
+
+> 对既有技能点做的一轮质量加固：修复真实缺陷、堵住安全/租户边界、恢复多轮上下文连续性。
+> 每个修复都只强化"原理"本身，不引入第三方依赖，保持零依赖教学定位。
+
+| 技术点 | 问题 | 修复 | 代码入口 |
+|---|---|---|---|
+| 结构化输出强约束（P17） | schema `required` 混用 `[]string`/`[]interface{}`，`[]string` 声明的必填字段被静默跳过 | 归一化两种类型，必填校验对全部 schema 生效 | `internal/schema/validator.go` `internal/tool/tool.go` |
+| 流式工具调用（C10） | OpenAI 兼容网关按 index 分片下发工具调用，分片被当作完整调用 → 参数残缺/重复条目 | 按 index 累加 id/name/arguments，流结束一次性发出完整调用 | `internal/provider/openai.go` |
+| 多模型路由（C15） | `Promote`（影子灰度）与 `Chain`/`ChatWithFallback` 并发读写切片 → 数据竞争 | 锁内取候选链快照再遍历 | `internal/provider/router.go` |
+| 健康探针（B8） | `readyz` 的 `llm` 与 `tools` 两个探针都映射到工具检查 | 新增 `llmReadyCheck`（校验主模型路由就绪） | `internal/server/server.go` |
+| 语义缓存（P5）+ 租户隔离（A4） | 缓存键无租户维度 → 跨用户答案互命；命中早退绕过审核/记忆 | `Get`/`Put` 增加 user scope 命名空间；命中仍做输出审核 + 写历史/记忆 | `internal/cache/cache.go` `internal/agent/agent.go` |
+| 主动出站（P4） | 幂等键在重试循环内用时间戳生成，重试时变化 → 接收方去重失效 | 幂等键在循环外由事件 body 哈希派生，所有重试携带同一键 | `internal/notify/notify.go` |
+| SSRF 防护（P6） | `fetch_url` 302 重定向可绕过初始校验；插件 URL 无 SSRF | `CheckRedirect` 逐跳再校验；插件 `Execute` 加 SSRF + `AllowHosts` 白名单 | `internal/tool/fetch.go` `internal/plugin/plugin.go` |
+| ReAct 轨迹（P45） | 模型看不到工具清单，只能猜工具名 | 系统提示注入当前角色可见工具 schema（名称/描述/参数） | `internal/agent/react.go` |
+| 规划-执行 / ReAct / 辩论（P10/P45/P46） | 三种模式不写历史与记忆 → 多轮上下文断裂 | 新增 `rememberTurn`：只写"问题→最终答案"一轮，子步骤不污染 | `internal/agent/agent.go` `plan.go` `react.go` `debate.go` |
+| RAG 混合检索（P20）/ Redis 长期记忆（P51） | BM25 空语料 `avgLen=0` 除零出 NaN；Redis 读改写并发写互相覆盖 | BM25 分母兜底 + NaN 防护；Redis `Store` 加进程内互斥 | `internal/rag/bm25.go` `internal/memory/redis_mem.go` |
 
 **启动清单符号说明**（Zebra CLI 与 server 启动时打印的能力清单，TTY 下按类别着色）：
 
