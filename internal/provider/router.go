@@ -25,8 +25,12 @@ func NewRouter(providers ...Provider) *Router {
 	return &Router{chain: providers}
 }
 
-// Chain 返回完整候选链。
-func (r *Router) Chain() []Provider { return r.chain }
+// Chain 返回完整候选链的副本（调用方可安全遍历，不受 Promote 并发改写影响）。
+func (r *Router) Chain() []Provider {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return append([]Provider(nil), r.chain...)
+}
 
 // Primary 返回主模型（可能为 nil）。
 func (r *Router) Primary() Provider {
@@ -36,6 +40,19 @@ func (r *Router) Primary() Provider {
 		return nil
 	}
 	return r.chain[0]
+}
+
+// Get 按名称返回链中的 Provider（未找到返回 nil）。供影子评测 promote/
+// 回滚后把候选重指向，避免"新主 vs 同模型"自我对比。
+func (r *Router) Get(name string) Provider {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	for _, p := range r.chain {
+		if p != nil && p.Name() == name {
+			return p
+		}
+	}
+	return nil
 }
 
 // Promote 灰度切换（P26）：把指定名称的候选 Provider 提升为主模型。
@@ -66,9 +83,14 @@ func (r *Router) Promote(name string) (string, bool) {
 
 // ChatWithFallback 依次尝试每个候选，直到成功；返回命中的 Provider 供上层观测。
 // 这同时实现了 B7 的"降级"：主模型故障 → 自动切备选，而不是把错误抛给用户。
+// 先在锁内取候选链快照再遍历，避免与异步 Promote/回滚（P42）并发改写切片造成数据竞争。
 func (r *Router) ChatWithFallback(ctx context.Context, messages []Message, tools []Tool) (Message, Provider, error) {
+	r.mu.Lock()
+	chain := append([]Provider(nil), r.chain...)
+	r.mu.Unlock()
+
 	var lastErr error
-	for _, p := range r.chain {
+	for _, p := range chain {
 		if p == nil {
 			continue
 		}
@@ -77,6 +99,8 @@ func (r *Router) ChatWithFallback(ctx context.Context, messages []Message, tools
 			lastErr = err
 			continue // 主模型失败 → 降级到下一个
 		}
+		// B5/P5 用量上报（F-3）：每次成功调用上报一次，模型名取实际服务者。
+		ReportUsage(ctx, UsageCall{Model: p.Name(), In: messages, Out: msg})
 		return msg, p, nil
 	}
 	return Message{}, nil, lastErr

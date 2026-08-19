@@ -25,10 +25,19 @@ func StructuredChat(ctx context.Context, router *Router, messages []Message, jso
 		msg, err := sp.ChatJSON(ctx, messages, jsonSchema)
 		if err == nil && msg.Content != "" {
 			if err := schema.Validate([]byte(msg.Content), jsonSchema); err == nil {
+				model := ""
+				if p := router.Primary(); p != nil {
+					model = p.Name()
+				}
+				ReportUsage(ctx, UsageCall{Model: model, In: messages, Out: msg})
 				return []byte(msg.Content), nil
 			}
 			// 强约束仍不符 → 落到普通路径
 		}
+		// F-6：主模型强约束失败（小模型常见）时不得再次调用主模型——
+		// ChatWithFallback 会从链首重新尝试，导致同一主模型被调两次（成本
+		// 翻倍）。改为从"主模型之后的备选"开始普通调用，避免重复请求。
+		return structuredFallback(ctx, router, messages, jsonSchema, router.Primary())
 	}
 	// 2. 普通调用 + 事后校验
 	msg, _, err := router.ChatWithFallback(ctx, messages, nil)
@@ -55,6 +64,55 @@ func StructuredChat(ctx context.Context, router *Router, messages []Message, jso
 		return nil, fmt.Errorf("结构化输出校验失败: %w（原始输出: %s）", err, truncate(content, 240))
 	}
 	return []byte(content), nil
+}
+
+// structuredFallback 强约束失败后的回退路径：跳过主模型，从链上其余候选
+// 依次普通调用 + 事后校验（F-6：不再让 ChatWithFallback 从头重试主模型）。
+// skip 指定要跳过的 provider（刚失败的主模型，可能为 nil）。
+func structuredFallback(ctx context.Context, router *Router, messages []Message, jsonSchema map[string]interface{}, skip Provider) ([]byte, error) {
+	for _, p := range router.Chain() {
+		if p == nil || p == skip {
+			continue
+		}
+		msg, err := p.Chat(ctx, messages, nil)
+		if err != nil {
+			continue // 该候选失败 → 下一个
+		}
+		if out, ok := validateStructured(msg.Content, jsonSchema); ok {
+			ReportUsage(ctx, UsageCall{Model: p.Name(), In: messages, Out: msg})
+			return out, nil
+		}
+	}
+	// 全部候选均失败：最后再给主模型一次普通调用机会（比静默失败好），
+	// 但只有它自己是唯一候选时才发生，不会造成翻倍调用。
+	if skip != nil {
+		if msg, err := skip.Chat(ctx, messages, nil); err == nil {
+			if out, ok := validateStructured(msg.Content, jsonSchema); ok {
+				ReportUsage(ctx, UsageCall{Model: skip.Name(), In: messages, Out: msg})
+				return out, nil
+			}
+		}
+	}
+	return nil, fmt.Errorf("结构化输出校验失败: 无可用候选产出合法 JSON（原始 schema: %v）", jsonSchema["type"])
+}
+
+// validateStructured 校验并尽力提取合法 JSON；失败返回 ("", false)。
+func validateStructured(content string, jsonSchema map[string]interface{}) ([]byte, bool) {
+	if err := schema.Validate([]byte(content), jsonSchema); err == nil {
+		return []byte(content), true
+	}
+	if extracted := extractJSON(content); extracted != "" {
+		if schema.Validate([]byte(extracted), jsonSchema) == nil {
+			return []byte(extracted), true
+		}
+		if inner := unwrapWrapper(extracted); inner != "" && schema.Validate([]byte(inner), jsonSchema) == nil {
+			return []byte(inner), true
+		}
+		if fixed := fixArrayOutput(extracted, jsonSchema); fixed != "" {
+			return []byte(fixed), true
+		}
+	}
+	return nil, false
 }
 
 // truncate 截断用于错误信息的长文本，避免刷屏。

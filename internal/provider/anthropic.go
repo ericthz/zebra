@@ -13,10 +13,11 @@ import (
 
 // AnthropicProvider Anthropic 接口。
 type AnthropicProvider struct {
-	BaseURL string
-	Model   string
-	APIKey  string
-	Client  *HTTPClient
+	BaseURL   string
+	Model     string
+	APIKey    string
+	MaxTokens int // 单次回复 token 上限（0 = 默认 2048）
+	Client    *HTTPClient
 }
 
 // Name 实现 Provider。
@@ -24,9 +25,13 @@ func (p *AnthropicProvider) Name() string { return "anthropic" }
 
 // Chat 非流式对话，完成 Anthropic ↔ 统一 Message 的双向转换。
 func (p *AnthropicProvider) Chat(ctx context.Context, messages []Message, tools []Tool) (Message, error) {
+	maxTokens := p.MaxTokens
+	if maxTokens <= 0 {
+		maxTokens = 2048
+	}
 	body, err := json.Marshal(map[string]interface{}{
 		"model":      p.Model,
-		"max_tokens": 2048,
+		"max_tokens": maxTokens,
 		"messages":   toAnthropicMessages(messages),
 		"tools":      toAnthropicTools(tools),
 	})

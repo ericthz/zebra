@@ -93,6 +93,49 @@ func TestStructuredChatFencedJSON(t *testing.T) {
 	}
 }
 
+// countingStructuredProvider 记录 Chat 与 ChatJSON 各自的调用次数，
+// ChatJSON 永远返回不合 schema 的 JSON（模拟小模型强约束失败）。
+type countingStructuredProvider struct {
+	chat     int
+	chatJSON int
+}
+
+func (p *countingStructuredProvider) Name() string { return "count" }
+func (p *countingStructuredProvider) Chat(_ context.Context, _ []Message, _ []Tool) (Message, error) {
+	p.chat++
+	return Message{Role: "assistant", Content: `{"ok":true}`}, nil
+}
+func (p *countingStructuredProvider) ChatStream(context.Context, []Message, []Tool) (<-chan StreamEvent, error) {
+	return nil, context.Canceled
+}
+func (p *countingStructuredProvider) ChatJSON(_ context.Context, _ []Message, _ map[string]interface{}) (Message, error) {
+	p.chatJSON++
+	return Message{Role: "assistant", Content: `{"wrong":1}`}, nil // 不合 schema
+}
+
+// TestStructuredChatNoDoubleCallPrimary F-6：主模型强约束失败后不得再次被
+// ChatWithFallback 从链首重试（避免同一主模型被调两次、成本翻倍）。
+func TestStructuredChatNoDoubleCallPrimary(t *testing.T) {
+	primary := &countingStructuredProvider{}
+	backup := fakeStructuredProvider{} // 合法 JSON
+	router := NewRouter(primary, backup)
+	sch := map[string]interface{}{"type": "object", "required": []interface{}{"ok"}}
+
+	out, err := StructuredChat(context.Background(), router, []Message{{Role: "user", Content: "x"}}, sch)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(out), `"ok":true`) {
+		t.Fatalf("应由备选产出合法 JSON: %s", out)
+	}
+	if primary.chatJSON != 1 {
+		t.Fatalf("主模型强约束应只调 1 次，实际 %d", primary.chatJSON)
+	}
+	if primary.chat != 0 {
+		t.Fatalf("主模型普通调用应为 0（不得重复调主模型），实际 %d", primary.chat)
+	}
+}
+
 // multiObjectProvider 输出"示例 + 回答"两个对象（小模型常见现象）。
 type multiObjectProvider struct{}
 
