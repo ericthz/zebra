@@ -17,7 +17,7 @@ import (
 // netClient 网络工具共用的 HTTP 客户端（带超时，避免永久阻塞）。
 var netClient = &http.Client{Timeout: 8 * time.Second}
 
-// safeGet 纵深防御（P6）：任何网络工具发请求前都过一遍 SSRF 校验。
+// safeGet 纵深防御：任何网络工具发请求前都过一遍 SSRF 校验。
 // 这些内置工具的 URL 主机名虽是写死的公网域名，统一校验仍是好习惯——
 // 防止未来有人改成用户可控 URL 时漏掉防线。
 func safeGet(url string) (*http.Response, error) {

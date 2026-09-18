@@ -82,7 +82,7 @@ func TestBaselineDiff(t *testing.T) {
 	}
 }
 
-// TestAppendCaseAndCaseFromFeedback P55 反馈回流：负面反馈转用例并追加数据集。
+// TestAppendCaseAndCaseFromFeedback 反馈回流：负面反馈转用例并追加数据集。
 func TestAppendCaseAndCaseFromFeedback(t *testing.T) {
 	dir := t.TempDir()
 	c1 := CaseFromFeedback("北京天气", "晴", "答非所问")
@@ -105,7 +105,7 @@ func TestAppendCaseAndCaseFromFeedback(t *testing.T) {
 	}
 }
 
-// TestAppendCaseCorruptBackup P0-5：feedback.json 损坏（半截写入）时，
+// TestAppendCaseCorruptBackup：feedback.json 损坏（半截写入）时
 // 不得静默当空数据重写——那样会"清空"既有数据集。必须先把损坏文件备份
 // 为 .bak 保留现场，再追加。
 func TestAppendCaseCorruptBackup(t *testing.T) {
@@ -134,8 +134,8 @@ func TestAppendCaseCorruptBackup(t *testing.T) {
 	}
 }
 
-// TestAppendCaseAtomic P0-5：写入走临时文件+rename 原子落盘，
-// 不会留下半截文件（这是 P0-5 的另一半：损坏文件的来源）。
+// TestAppendCaseAtomic：写入走临时文件+rename 原子落盘
+// 不会留下半截文件（这是的另一半：损坏文件的来源）。
 func TestAppendCaseAtomic(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "feedback.json")

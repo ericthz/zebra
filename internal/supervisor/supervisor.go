@@ -1,4 +1,4 @@
-// Package supervisor 多 Agent 协作（P13）。
+// Package supervisor 多 Agent 协作。
 //
 // 背景：单 Agent 用一套提示词/工具应对所有请求，能力不聚焦。成熟 Agent
 // 采用【多 Agent 架构】：多个"专业 Agent"（数据/知识/写作…）各司其职，

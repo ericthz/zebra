@@ -2,8 +2,8 @@
 //
 // 设计要点：
 //   - 接口驱动：Chat / ChatStream 两种调用方式，上层不感知具体厂商协议
-//   - 全部带 ctx：支持超时、取消、链路传播（B9 错误恢复）
-//   - Message 支持多模态内容块（C14 多模态）
+//   - 全部带 ctx：支持超时、取消、链路传播（错误恢复）
+//   - Message 支持多模态内容块（多模态）
 package provider
 
 import (
@@ -11,7 +11,7 @@ import (
 	"encoding/json"
 )
 
-// Part 多模态内容块（C14）
+// Part 多模态内容块
 // Type 取值："text" | "image_url"，有 ContentParts 时优先于 Message.Content。
 type Part struct {
 	Type     string `json:"type"`                // "text" | "image_url"
@@ -55,7 +55,7 @@ type FunctionDef struct {
 	Parameters  map[string]interface{} `json:"parameters"`
 }
 
-// StreamEventType 流式事件类型（C10）。
+// StreamEventType 流式事件类型。
 type StreamEventType string
 
 const (

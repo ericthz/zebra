@@ -32,7 +32,7 @@ func TestRedisMemoryStoreRetrieve(t *testing.T) {
 	}
 }
 
-// TestRedisMemoryUserIsolation P1-A：检索必须按 user 过滤，不能跨用户泄露。
+// TestRedisMemoryUserIsolation：检索必须按 user 过滤，不能跨用户泄露。
 func TestRedisMemoryUserIsolation(t *testing.T) {
 	srv := redistest.New(t)
 	m := NewRedisMemory(&redis.Client{Addr: srv.Addr(), Timeout: 2 * time.Second}, "tenant-u")

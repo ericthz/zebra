@@ -10,7 +10,7 @@ import (
 )
 
 // TestReadLineRawMultibyteBackspace 中文（3 字节/字符）按字符退格删除，
-// 不应残留字节残片（P38 修复的核心回归用例）。
+// 不应残留字节残片（修复的核心回归用例）。
 func TestReadLineRawMultibyteBackspace(t *testing.T) {
 	input := "你好世界" + "\x7f\x7f\x7f\x7f" + "exit\r"
 	var out bytes.Buffer

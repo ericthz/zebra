@@ -1,9 +1,9 @@
-// cmd/zebra —— 本地命令行 Agent 客户端（交互式终端；企业能力走 cmd/server）。
+// cmd/zebra —— 本地命令行 Agent 客户端（交互式终端；服务端能力走 cmd/server）。
 //
 // 用法：
 //
 //	go run ./cmd/zebra
-//	go run ./cmd/server          # 企业版 HTTP 服务
+//	go run ./cmd/server          # 服务端 HTTP 服务
 package main
 
 import (
@@ -39,7 +39,7 @@ import (
 func main() {
 	// ---- 启动模式：与 Web UI 的模式选择一致 ----
 	mode := flag.String("mode", "chat", "启动模式: chat|plan|react|reflect|debate|supervisor|consistent")
-	// C14 多模态：启动时可带图片（http(s) URL / data: 数据 URI / 本地文件路径），
+	// 多模态：启动时可带图片（http(s) URL / data: 数据 URI / 本地文件路径），
 	// 每轮对话都附带上该图；可重复传多张，换图需重启（CLI 简化；生产用多轮上传）。
 	var images multiFlag
 	flag.Var(&images, "image", "多模态图片: http(s) URL | data: 数据 URI | 本地文件路径（可重复）")
@@ -47,13 +47,13 @@ func main() {
 	// ReAct 最大推理-行动步数（默认 6；REACT_MAX_STEPS 可调）
 	reactMaxSteps := atoiDefault(os.Getenv("REACT_MAX_STEPS"), 6)
 
-	// ---- P37 终端 banner ----
+	// ---- 终端 banner ----
 	observe.PrintBanner(os.Stdout, "Zebra CLI — 本地命令行 Agent 客户端（输入 exit 退出）")
 
-	// ---- P30 配置加载：先读 .env（决定日志去向与全部配置）----
+	// ---- 配置加载：先读 .env（决定日志去向与全部配置）----
 	envN, envErr := config.LoadDefault()
 
-	// ---- P34 诊断日志落盘：终端保持干净，依赖探测细节写日志文件 ----
+	// ---- 诊断日志落盘：终端保持干净，依赖探测细节写日志文件 ----
 	// ZEBRA_LOG 指定路径（默认 zebra.log）；ZEBRA_LOG=off 退回 stderr。
 	// MCP/Qdrant 等可选依赖的降级原因不再刷屏，进日志文件便于排查。
 	logWriter, closeLog, logErr := config.OpenLogFile(envOr("ZEBRA_LOG", "zebra.log"))
@@ -101,32 +101,32 @@ func main() {
 	reg.Register(&tool.TranslateTool{})
 	reg.Register(&tool.IPInfoTool{})
 
-	reg.Register(&tool.FetchURLTool{Moderator: safety.NewKeywordModerator()}) // P6 SSRF 防护 + D18 内容审核
-	// ---- P2 本地执行：文件读写 + 命令执行（Zebra CLI 默认可写，便于演示 Agentic 能力）----
+	reg.Register(&tool.FetchURLTool{Moderator: safety.NewKeywordModerator()}) // SSRF 防护 + 内容审核
+	// ---- 本地执行：文件读写 + 命令执行（Zebra CLI 默认可写，便于演示 Agentic 能力）----
 	execSandbox := tool.NewExecSandbox("workspace", false)
 	reg.Register(&tool.ListDirTool{Sandbox: execSandbox})
 	reg.Register(&tool.ReadFileTool{Sandbox: execSandbox})
 	reg.Register(&tool.WriteFileTool{Sandbox: execSandbox})
 	reg.Register(&tool.RunCommandTool{Sandbox: execSandbox})
-	// ---- P32 MCP 远端工具：与 cmd/server 同一装配（MCP_MODE 设置即启用）----
+	// ---- MCP 远端工具：与 cmd/server 同一装配（MCP_MODE 设置即启用）----
 	mcpMode, mcpDefs := mcp.RegisterTools(reg, logger)
-	// ---- P53 插件动态加载：plugins/ 目录 JSON 定义的外部 HTTP 工具 ----
+	// ---- 插件动态加载：plugins/ 目录 JSON 定义的外部 HTTP 工具 ----
 	if _, err := os.Stat("plugins"); err == nil {
 		if defs, lerr := plugin.Load("plugins"); lerr == nil && len(defs) > 0 {
 			plugin.Register(reg, defs)
 		}
 	}
 
-	// ---- P1 技能体系：加载 skills/ 目录 ----
+	// ---- 技能体系：加载 skills/ 目录 ----
 	skillReg := skill.NewRegistry()
 	if loaded, err := skill.LoadDir("skills"); err == nil {
 		skillReg.LoadAll(loaded)
 	}
 	skills := skillReg.List()
 
-	// ---- P32 记忆：与 cmd/server 同一装配（QDRANT_URL 设置且可用则启用长期记忆）----
+	// ---- 记忆：与 cmd/server 同一装配（QDRANT_URL 设置且可用则启用长期记忆）----
 	mem, longMem := memory.SetupManager(logger)
-	// P51 Redis 长期记忆：无 Qdrant 但配了 REDIS_URL 时启用（关键词检索）——
+	// Redis 长期记忆：无 Qdrant 但配了 REDIS_URL 时启用（关键词检索）——
 	// 与 cmd/server 行为对齐，避免 CLI 配了 Redis 但长期记忆不生效。
 	if !longMem {
 		if rurl := os.Getenv("REDIS_URL"); rurl != "" {
@@ -142,7 +142,7 @@ func main() {
 		}
 	}
 
-	// ---- P36 知识库（RAG）：与 cmd/server 同一装配，加载 docs/ 目录 ----
+	// ---- 知识库（RAG）：与 cmd/server 同一装配，加载 docs/ 目录 ----
 	var ragIndex *rag.Index
 	docsCount := 0
 	if emb := memory.NewEmbedderFromEnv(); emb != nil {
@@ -161,7 +161,7 @@ func main() {
 		}
 	}
 
-	// ---- P36 语音客户端：与 cmd/server 同一装配（VOICE_BASE_URL 设置即启用）----
+	// ---- 语音客户端：与 cmd/server 同一装配（VOICE_BASE_URL 设置即启用）----
 	var voice *provider.VoiceClient
 	if vb := os.Getenv("VOICE_BASE_URL"); vb != "" {
 		voice = &provider.VoiceClient{
@@ -180,7 +180,7 @@ func main() {
 	prompts.Register(&prompt.Template{Name: "data", Version: "v1", Text: `你是 zebra 的【数据专家 Agent】。擅长计算、单位换算、翻译、日期时间等数据处理任务。调用合适的工具得出准确结果，回答简洁。角色：{role}。`})
 	prompts.Register(&prompt.Template{Name: "knowledge", Version: "v1", Text: `你是 zebra 的【知识专家 Agent】。擅长搜索资料、抓取网页、查阅文档等知识获取任务。调用合适的工具，基于事实回答并注明来源。角色：{role}。`})
 
-	// P31 执行痕迹：工具调用与技能注入在终端可见，学习 Agent 行为（worker 复用同一钩子）
+	// 执行痕迹：工具调用与技能注入在终端可见，学习 Agent 行为（worker 复用同一钩子）
 	toolHook, skillHook := traceHooks()
 
 	ag := agent.New(agent.Config{
@@ -196,7 +196,7 @@ func main() {
 		PromptName:   "assistant",
 		Skills:       skillReg,
 		RAG:          ragIndex,
-		RewriteQuery: os.Getenv("ZEBRA_QUERY_REWRITE") == "1", // P48 查询改写
+		RewriteQuery: os.Getenv("ZEBRA_QUERY_REWRITE") == "1", // 查询改写
 		OnTool:       toolHook,
 		OnSkill:      skillHook,
 	})
@@ -204,7 +204,7 @@ func main() {
 	history := make([]provider.Message, 0)
 	ag.Bind("zebra", "admin", "local", &history)
 
-	// ---- P13 多 Agent Supervisor：数据/知识/常规 三个专业 worker（与 cmd/server 同构）----
+	// ---- 多 Agent Supervisor：数据/知识/常规 三个专业 worker（与 cmd/server 同构）----
 	// Zebra 单机版同样装配，让 /mode supervisor 与 Web UI 行为一致。
 	sup := supervisor.NewSupervisor(router,
 		&supervisor.Worker{
@@ -224,7 +224,7 @@ func main() {
 		},
 	)
 
-	// ---- P31/P36 启动清单：与 cmd/server 同一渲染（行结构/符号/配色一致）----
+	// ---- 启动清单：与 cmd/server 同一渲染（行结构/符号/配色一致）----
 	memMode := "工作记忆"
 	if longMem {
 		memMode = "工作记忆 + Qdrant"
@@ -250,7 +250,7 @@ func main() {
 		REPL:         true,
 	})
 
-	// ---- C14 多模态：把 -image 参数归一化为 provider 可消费的 image_url ----
+	// ---- 多模态：把 -image 参数归一化为 provider 可消费的 image_url ----
 	// 本地文件转 base64 data URI；URL/data: URI 原样透传。读取失败直接退出，
 	// 避免"图没进去"的静默半实现（字段有、模型没收到图）。
 	images, err := resolveImages(images)
@@ -266,7 +266,7 @@ func main() {
 	// 聊天历史：↑/↓ 在历史记录间选择（退出/EOF 时保留进程内历史）
 	var chatHistory []string
 	for {
-		// P38：raw 模式 + UTF-8 感知行编辑（中文退格不再残留字节残片）；
+		// raw 模式 + UTF-8 感知行编辑（中文退格不再残留字节残片）；
 		// 输入 / 前缀实时提示命令补全，↑/↓ 选择历史记录。非 TTY 回退标准行读取。
 		in, err := console.ReadLineFull(console.Symbol(">", console.ColorTitle)+" ", replCommands(), chatHistory)
 		if err != nil {
@@ -533,7 +533,7 @@ func emitTerminal(ev agent.Event) {
 
 // runAgent 按模式分发执行：chat 走普通对话；plan/react 走流式（活动轨迹）；
 // reflect/debate/supervisor 先打印阶段提示再执行。images 为该轮附带的多模态
-// 图片（C14，可空）。
+// 图片（可空）。
 func runAgent(ctx context.Context, ag *agent.Agent, sup *supervisor.Supervisor, history *[]provider.Message, mode string, reactMaxSteps int, images []string, input string) (string, error) {
 	opts := agent.RunOptions{Images: images}
 	switch mode {
@@ -548,7 +548,7 @@ func runAgent(ctx context.Context, ag *agent.Agent, sup *supervisor.Supervisor, 
 		return ag.ReActStream(ctx, input, opts, reactMaxSteps, emitTerminal)
 	case "reflect":
 		emitTerminal(agent.Event{Type: agent.EventPhase, Phase: "回答后反思改进…"})
-		// P2-B：RunReflect 统一处理修订版的 D18 审核与历史写回
+		// RunReflect 统一处理修订版的审核与历史写回
 		return ag.RunReflect(ctx, input, opts)
 	case "debate":
 		emitTerminal(agent.Event{Type: agent.EventPhase, Phase: "双 Agent 辩论中…"})
@@ -570,7 +570,7 @@ func runAgent(ctx context.Context, ag *agent.Agent, sup *supervisor.Supervisor, 
 		workerAg.Bind("zebra", "admin", "local", history)
 		return workerAg.Run(ctx, input, opts)
 	case "consistent":
-		// P40 自一致性：独立采样多份回答再择优，降低单次采样随机性。
+		// 自一致性：独立采样多份回答再择优，降低单次采样随机性。
 		// 采样数可配（SELF_CONSISTENT_SAMPLES，默认 3）。
 		samples := atoiDefault(os.Getenv("SELF_CONSISTENT_SAMPLES"), 3)
 		emitTerminal(agent.Event{Type: agent.EventPhase, Phase: fmt.Sprintf("自一致性采样 %d 份回答中…", samples)})

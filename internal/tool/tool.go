@@ -1,4 +1,4 @@
-// Package tool 内置工具系统：注册、参数校验（C13）、权限边界（D20）。
+// Package tool 内置工具系统：注册、参数校验、权限边界。
 package tool
 
 import (
@@ -17,7 +17,7 @@ type Tool interface {
 	Execute(ctx context.Context, args map[string]interface{}) (string, error)
 }
 
-// Risky 可选接口：工具声明自己的风险等级与可用角色（D20 工具安全边界）。
+// Risky 可选接口：工具声明自己的风险等级与可用角色（工具安全边界）。
 // 未实现该接口的工具视为 0 级（安全、所有角色可用）。
 type Risky interface {
 	RiskLevel() int         // 0 安全 / 1 中风险（记录审计）/ 2 高危（需二次确认）
@@ -53,7 +53,7 @@ func ParseArguments(raw json.RawMessage) (map[string]interface{}, error) {
 	return args, nil
 }
 
-// ValidateArgs 按工具 schema 校验参数（C13 结构化输出）：
+// ValidateArgs 按工具 schema 校验参数（结构化输出）：
 // required 字段必须存在，且类型匹配（string/number/integer/boolean）。
 func ValidateArgs(t Tool, args map[string]interface{}) error {
 	schema := t.Parameters()

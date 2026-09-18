@@ -1,4 +1,4 @@
-// Package task 异步长任务（P12）。
+// Package task 异步长任务。
 //
 // 背景：对话 API 是同步的，但真实业务常有长耗时任务（生成季度报告、
 // 批量处理文件）。同步等待会占满连接/拖垮体验，正确做法是【异步化】：
@@ -19,7 +19,7 @@
 // 生产演化方向：
 //   - 存储换 Redis/DB；执行换独立 worker 进程（Kafka 消息队列）
 //   - 失败重试 + 死信队列；任务取消（context cancel）
-//   - 任务调度（复用 P4 schedule：定时触发长任务）
+//   - 任务调度（复用 schedule：定时触发长任务）
 package task
 
 import (
@@ -63,7 +63,7 @@ type Store interface {
 
 // InMemoryStore 内存任务存储（并发安全）。
 // 防御性拷贝：写入存副本、读取返回副本，绝不让外部拿到/改动内部共享指针
-// （修复 P12 数据竞争：execute 改共享 *Task 与 Get/List 并发读同一指针）。
+// （修复数据竞争：execute 改共享 *Task 与 Get/List 并发读同一指针）。
 type InMemoryStore struct {
 	mu    sync.RWMutex
 	tasks map[string]*Task
@@ -120,7 +120,7 @@ func (s *InMemoryStore) List(user string) []*Task {
 // 返回：结果文本 + 新的检查点 + 错误。
 type RunFunc func(ctx context.Context, user, session, prompt string, checkpoint []byte) (result string, cpOut []byte, err error)
 
-// NotifyFunc 完成/失败时的通知回调（复用 P4 Webhook）。
+// NotifyFunc 完成/失败时的通知回调（复用 Webhook）。
 type NotifyFunc func(t *Task)
 
 // Manager 异步任务管理器（消费者队列）。
@@ -185,7 +185,7 @@ func (m *Manager) Stop() {
 	m.wg.Wait()
 }
 
-// ErrQueueFull 任务队列已满（容量 64）：立即返回，不阻塞提交方（P2-11）。
+// ErrQueueFull 任务队列已满（容量 64）：立即返回，不阻塞提交方。
 // 调用方应给客户端 503/429，提示稍后重试。
 var ErrQueueFull = fmt.Errorf("任务队列已满，请稍后重试")
 
@@ -198,7 +198,7 @@ func (m *Manager) Submit(user, session, prompt string) (string, error) {
 	if err := m.store.Create(t); err != nil {
 		return "", err
 	}
-	// 非阻塞入队：队列满立即返回错误，而不是无限阻塞 HTTP 请求（P2-11）。
+	// 非阻塞入队：队列满立即返回错误，而不是无限阻塞 HTTP 请求。
 	// 先落库（任务必然可查），入队失败时把状态标记为 failed，避免留下
 	// "永久 pending"的孤儿任务。
 	select {

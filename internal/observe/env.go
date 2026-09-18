@@ -53,8 +53,8 @@ var envSpecs = []EnvSpec{
 
 	// ---- 服务 / 鉴权 ----
 	{"ADDR", ":8080", "服务", "server 监听地址"},
-	{"ADMIN_KEY", "admin-key", "服务", "管理员 API Key（RBAC A3）"},
-	{"USER_KEY", "user-key", "服务", "普通用户 API Key（RBAC A3）"},
+	{"ADMIN_KEY", "admin-key", "服务", "管理员 API Key（RBAC）"},
+	{"USER_KEY", "user-key", "服务", "普通用户 API Key（RBAC）"},
 	{"EXEC_WORKDIR", "workspace", "沙箱", "本地执行沙箱工作目录白名单"},
 	{"EXEC_READONLY", "1", "沙箱", "沙箱只读模式（1=禁止写文件/执行命令）"},
 	{"MCP_MODE", "", "MCP", "MCP 模式：stdio/http（设置即启用）"},
@@ -70,7 +70,7 @@ var envSpecs = []EnvSpec{
 	{"CONTEXT_MAX_TOKENS", "4000", "执行", "上下文窗口 token 预算"},
 	{"SUMMARY_MAX_CHARS", "600", "执行", "对话摘要最大字符数"},
 	{"MAX_TOOL_TURNS", "5", "执行", "最大工具调用轮数"},
-	{"ZEBRA_QUERY_REWRITE", "0", "执行", "RAG 查询改写（1=开启，P48）"},
+	{"ZEBRA_QUERY_REWRITE", "0", "执行", "RAG 查询改写（1=开启）"},
 	{"ZEBRA_SUMMARIZER", "truncate", "执行", "摘要压缩器：truncate/llm"},
 
 	// ---- 缓存 / 容错 ----

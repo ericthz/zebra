@@ -1,4 +1,4 @@
-// 在线评测 / 影子模式（P21）：上线新模型前，先把真实流量"复制"一份给候选模型。
+// 在线评测 / 影子模式：上线新模型前，先把真实流量"复制"一份给候选模型。
 //
 // 背景：直接换模型有风险（质量回退不可见）。影子模式让候选模型和主模型
 // 同时回答同一个问题，主模型照常服务用户（用户无感知），后台用 Judge 给
@@ -79,7 +79,7 @@ func (s *ShadowStore) Add(r *ShadowResult) *ShadowResult {
 	return r
 }
 
-// Recent 返回最近的 n 条（新在前）；user 非空则只返回该用户（A4 隔离）。
+// Recent 返回最近的 n 条（新在前）；user 非空则只返回该用户（隔离）。
 func (s *ShadowStore) Recent(user string, n int) []*ShadowResult {
 	s.mu.Lock()
 	defer s.mu.Unlock()

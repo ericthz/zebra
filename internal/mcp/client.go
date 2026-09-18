@@ -50,7 +50,7 @@ func NewStdioClient(command string, args ...string) (Transport, error) {
 		cmd: cmd, stdin: stdin, lines: make(chan []byte, 64), readErr: make(chan error, 1), nextID: 1,
 	}
 	// 常驻读行 goroutine：持续消费 stdout，EOF/读错误后关闭 lines。
-	// 修复 P34 竞态：旧实现每次 Send 临时起 goroutine 读一行，ctx 取消时
+	// 修复竞态：旧实现每次 Send 临时起 goroutine 读一行，ctx 取消时
 	// goroutine 泄漏且可能吞掉下一轮响应；改为"一传一读 goroutine"生命周期
 	// 与传输一致，取消只影响 select，不泄漏也不抢读。
 	go t.readLoop(bufio.NewReader(stdout))
@@ -93,7 +93,7 @@ func (t *stdioTransport) Send(ctx context.Context, req *Request) (*Response, err
 		return nil, err
 	}
 	// 通知类请求（notifications/*）服务器不返回响应：写后即返回。
-	// 若也阻塞读，会占住互斥锁直到超时，饿死后续请求（P34 修复的 stdio 竞态）。
+	// 若也阻塞读，会占住互斥锁直到超时，饿死后续请求（修复的 stdio 竞态）。
 	if strings.HasPrefix(req.Method, "notifications/") {
 		return &Response{JSONRPC: "2.0"}, nil
 	}

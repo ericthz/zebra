@@ -1,8 +1,8 @@
 // Package safety 安全与合规（D 类）：
 //
-//	D17 Prompt 注入防护    —— 隔离并检测工具结果/外部内容中的恶意指令
-//	D18 内容安全审核        —— 输入输出敏感词过滤（可替换为外部审核 API）
-//	D19 敏感数据治理        —— 日志脱敏 + 密钥注入接口（替代 .env 明文）
+//	Prompt 注入防护 —— 隔离并检测工具结果/外部内容中的恶意指令
+//	内容安全审核 —— 输入输出敏感词过滤（可替换为外部审核 API）
+//	敏感数据治理 —— 日志脱敏 + 密钥注入接口（替代 .env 明文）
 package safety
 
 import (
@@ -14,7 +14,7 @@ import (
 	"sync"
 )
 
-// ---------------- D17 Prompt 注入防护 ----------------
+// ---------------- Prompt 注入防护 ----------------
 
 // 工具结果包裹器：把外部不可信内容放进明确分隔符，让模型识别为"数据"而非"指令"。
 const (
@@ -22,7 +22,7 @@ const (
 	ToolDataEnd   = "\n【工具数据结束】"
 )
 
-// SanitizeToolResult 隔离外部工具结果，阻断注入（D17）。
+// SanitizeToolResult 隔离外部工具结果，阻断注入。
 func SanitizeToolResult(content string) string {
 	// 剥离外部内容里可能夹带的指令性控制符
 	content = strings.TrimSpace(content)
@@ -47,7 +47,7 @@ func DetectInjection(s string) (bool, string) {
 	return false, ""
 }
 
-// ---------------- D18 内容安全审核 ----------------
+// ---------------- 内容安全审核 ----------------
 
 // Moderator 审核器接口：Check 返回是否放行与原因。可插拔外部审核 API。
 type Moderator interface {
@@ -59,7 +59,7 @@ type KeywordModerator struct {
 	banned []string
 }
 
-// defaultBannedWords 内置基础敏感词库（D18 本地兜底）。
+// defaultBannedWords 内置基础敏感词库（本地兜底）。
 // 覆盖常见违法/赌博/色情/歧视等类别；生产演化方向：接外部审核 API、
 // 定期同步合规词库，本表仅保证"零配置也有基本防线"。
 var defaultBannedWords = []string{
@@ -106,7 +106,7 @@ func (k *KeywordModerator) Check(text string) (bool, string) {
 	return true, ""
 }
 
-// ---------------- D19 敏感数据治理 ----------------
+// ---------------- 敏感数据治理 ----------------
 
 var (
 	reAPIKey   = regexp.MustCompile(`(?i)(sk-[A-Za-z0-9_-]{12,})`)
@@ -118,7 +118,7 @@ var (
 )
 
 // Redact 脱敏：API Key / 手机号 / 邮箱 / PEM 私钥 / Bearer Token / 显式
-// password|token|secret|apikey=值 → 掩码。用于日志与审计（D19）。
+// password|token|secret|apikey=值 → 掩码。用于日志与审计。
 // API Key 只保留前缀 sk-，其余打码，避免长密钥完整泄露。
 func Redact(s string) string {
 	s = reAPIKey.ReplaceAllStringFunc(s, func(m string) string {
@@ -135,7 +135,7 @@ func Redact(s string) string {
 	return s
 }
 
-// safeArgKeys 工具参数日志白名单（P1-7）：仅这些"低敏感"键记录值（值仍经
+// safeArgKeys 工具参数日志白名单：仅这些"低敏感"键记录值（值仍经
 // Redact 二次脱敏），其余一律掩码。`command`/`content` 等可携带任意内嵌
 // 机密（密码、Token、私钥）的键刻意不在白名单内。
 var safeArgKeys = map[string]bool{
@@ -193,9 +193,9 @@ func (m *MultiSecretStore) Get(key string) (string, bool) {
 	return "", false
 }
 
-// ---------------- P6 租户级凭据 ----------------
+// ---------------- 租户级凭据 ----------------
 
-// TenantSecretStore 租户级密钥存储（A4 隔离：每个租户独立的第三方凭据）。
+// TenantSecretStore 租户级密钥存储（隔离：每个租户独立的第三方凭据）。
 // 与全局 EnvSecretStore 的区别：同一 API Key 名可被不同租户持有不同值。
 // 生产演化：底层接 KMS/Vault，按租户绑定密钥轮换。
 type TenantSecretStore struct {

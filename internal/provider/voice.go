@@ -1,4 +1,4 @@
-// 语音交互（P25）：OpenAI 兼容 ASR（语音转写）+ TTS（语音合成）。
+// 语音交互：OpenAI 兼容 ASR（语音转写）+ TTS（语音合成）。
 //
 // 背景：语音是 Agent 的自然交互入口（耳机/APP/客服），但纯文本链路
 // 接不进来。本文件用 OpenAI 兼容 HTTP API（whisper 转写 + tts 合成）

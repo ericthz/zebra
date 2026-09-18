@@ -1,4 +1,4 @@
-// 评测数据集管理（P49）：把评测从"写在测试里"升级为"目录化管理 + 回归对比"。
+// 评测数据集管理：把评测从"写在测试里"升级为"目录化管理 + 回归对比"。
 //
 // 背景：golden_test.go 的用例写死在代码里，扩充/换模型后无法对比"这轮比
 // 上轮好还是差"。本文件提供：
@@ -173,7 +173,7 @@ func AppendCase(dir string, c Case) error {
 	if data, err := os.ReadFile(path); err == nil {
 		if uerr := json.Unmarshal(data, &file); uerr != nil {
 			// 文件损坏（如半截写入）：不得静默当空数据重写——那样会"清空"
-			// 既有数据集。先把损坏文件备份为 .bak 保留现场，再继续（P0-5）。
+			// 既有数据集。先把损坏文件备份为 .bak 保留现场，再继续。
 			if berr := os.Rename(path, path+".bak"); berr != nil {
 				return fmt.Errorf("feedback.json 损坏且备份失败: %w", berr)
 			}

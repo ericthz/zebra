@@ -87,7 +87,7 @@ func TestSkillNotInjectedWhenNoMatch(t *testing.T) {
 	}
 }
 
-// TestInjectionDetectedOnInput 验证：输入含注入特征时触发 OnInjection（输入侧 D17）。
+// TestInjectionDetectedOnInput 验证：输入含注入特征时触发 OnInjection（输入侧）。
 func TestInjectionDetectedOnInput(t *testing.T) {
 	fp := &fakeProvider{}
 	prompts := prompt.NewRegistry("z")
@@ -117,7 +117,7 @@ func TestInjectionDetectedOnInput(t *testing.T) {
 	}
 }
 
-// TestInjectionWarnedOnToolResult 验证：工具结果含注入特征时，隔离标记内追加警示（结果侧 D17）。
+// TestInjectionWarnedOnToolResult 验证：工具结果含注入特征时，隔离标记内追加警示（结果侧）。
 func TestInjectionWarnedOnToolResult(t *testing.T) {
 	fp := &fakeProvider{}
 	prompts := prompt.NewRegistry("z")

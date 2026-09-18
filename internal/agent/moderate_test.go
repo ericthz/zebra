@@ -21,7 +21,7 @@ func (m blockOutModerator) Check(text string) (bool, string) {
 	return true, ""
 }
 
-// TestBlockedOutputNotPersisted P1-8：输出未过审核时，不得写入会话历史
+// TestBlockedOutputNotPersisted：输出未过审核时，不得写入会话历史
 // 与分层记忆（违规内容"删除即遗忘"前必须被拦截，不能成为下一轮上下文）。
 func TestBlockedOutputNotPersisted(t *testing.T) {
 	reg := tool.NewRegistry()

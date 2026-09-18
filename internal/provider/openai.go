@@ -1,4 +1,4 @@
-// OpenAI 兼容协议适配（/v1/chat/completions），支持 SSE 流式与多模态（C14）。
+// OpenAI 兼容协议适配（/v1/chat/completions），支持 SSE 流式与多模态。
 // 因 OpenAI 生态接口高度统一，可同时对接 OpenAI、Ollama 的 OpenAI 兼容端口、
 // 及各类国内网关（DeepSeek、Kimi 等）。
 package provider
@@ -171,14 +171,14 @@ func (p *OpenAIProvider) ChatStream(ctx context.Context, messages []Message, too
 		// 正常 EOF（无 [DONE]）：部分网关（DeepSeek/Kimi 等）在工具调用后
 		// 直接断流不发 [DONE]。若这里直接 return，累加器里的工具调用会
 		// 静默丢失、且不会收到 Done 事件 → 上游 agent 误以为没有工具调用。
-		// 故 EOF 与 [DONE] 等价收尾：flush + Done（P0-4）。
+		// 故 EOF 与 [DONE] 等价收尾：flush + Done。
 		flush()
 		ch <- StreamEvent{Type: StreamEventDone}
 	}()
 	return ch, nil
 }
 
-// ChatJSON 结构化输出强约束（P17）：
+// ChatJSON 结构化输出强约束：
 // 通过 OpenAI 的 response_format=json_schema 让模型【生成前】就按 schema 输出，
 // 显著降低"生成后解析失败"的概率。这是"强约束"在 provider 层的落地。
 // 仅 OpenAI 兼容接口支持；其他 provider 走 StructuredChat 的回退路径。
@@ -232,7 +232,7 @@ func (p *OpenAIProvider) setAuth(req *http.Request) {
 }
 
 func (p *OpenAIProvider) buildPayload(messages []Message, tools []Tool, stream bool) ([]byte, error) {
-	// 多模态：有 ContentParts 的消息转成 OpenAI 的 content 数组（C14）。
+	// 多模态：有 ContentParts 的消息转成 OpenAI 的 content 数组。
 	msgs := make([]map[string]interface{}, 0, len(messages))
 	for _, m := range messages {
 		item := map[string]interface{}{"role": m.Role}

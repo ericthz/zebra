@@ -69,7 +69,7 @@ func (f *factsProvider) ChatStream(context.Context, []provider.Message, []provid
 	return nil, context.Canceled
 }
 
-// TestProfileLearnViaLLMExtractor 对话中用 LLM 抽取画像（P27）。
+// TestProfileLearnViaLLMExtractor 对话中用 LLM 抽取画像。
 func TestProfileLearnViaLLMExtractor(t *testing.T) {
 	prompts := prompt.NewRegistry("zebra")
 	prompts.Register(&prompt.Template{Name: "assistant", Version: "v1", Text: "你是 zebra 助手。"})

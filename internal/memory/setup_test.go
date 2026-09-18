@@ -22,7 +22,7 @@ func TestSetupManagerWithoutQdrant(t *testing.T) {
 }
 
 func TestSetupManagerDegrade(t *testing.T) {
-	// Qdrant 与 Ollama 均指向不可达地址 → 探针失败 → 自动降级（B7）
+	// Qdrant 与 Ollama 均指向不可达地址 → 探针失败 → 自动降级
 	t.Setenv("QDRANT_URL", "http://127.0.0.1:1")
 	t.Setenv("OLLAMA_BASE_URL", "http://127.0.0.1:1")
 	mem, long := SetupManager(discardLogger())

@@ -20,7 +20,7 @@ func TestBindLocalOnly(t *testing.T) {
 	}
 }
 
-// TestDefaultKeysRejectedOnExposedBind P0-1：非回环绑定时，配置的密钥等于
+// TestDefaultKeysRejectedOnExposedBind：非回环绑定时，配置的密钥等于
 // 仓库自带默认值（admin-key/user-key）必须等同未配置、拒绝启动，否则
 // 攻击者可用公开已知凭据接管服务。
 func TestDefaultKeysRejectedOnExposedBind(t *testing.T) {

@@ -1,4 +1,4 @@
-// D20 审计日志：所有敏感/高危操作留痕，支撑合规追溯。
+// 审计日志：所有敏感/高危操作留痕，支撑合规追溯。
 package safety
 
 import (
@@ -38,7 +38,7 @@ func (a *StdAuditLog) Log(evt AuditEvent) {
 	a.logger.Info("audit",
 		"action", evt.Action, "user", evt.User, "role", evt.Role,
 		"target", evt.Target, "risk", evt.Risk, "success", evt.Success,
-		"detail", Redact(evt.Detail), // D19：落库前强制脱敏
+		"detail", Redact(evt.Detail), // 落库前强制脱敏
 		"time", evt.Time.Format(time.RFC3339),
 	)
 }

@@ -1,6 +1,6 @@
-// 影子评测看板与灰度切换建议（P26）。
+// 影子评测看板与灰度切换建议。
 //
-// 背景：影子模式（P21）在积累"候选 vs 主模型"的对比数据，但数据躺着
+// 背景：影子模式在积累"候选 vs 主模型"的对比数据，但数据躺着
 // 不看等于白测。本文件把记录聚合为统计看板，并用简单策略给出灰度建议：
 //
 //	样本数达标（>= minSamples）且候选胜率达标（>= minWinRate%）→ 建议切换
@@ -77,7 +77,7 @@ func RecommendSwitch(st ShadowStats, minSamples, minWinRate int) SwitchRecommend
 		Reason: fmt.Sprintf("候选胜率 %.1f%% < %d%%（样本 %d 条）", winRate, minWinRate, judged)}
 }
 
-// RecommendRollback 金丝雀自动回滚（P42）：promote 后样本达标、但新主
+// RecommendRollback 金丝雀自动回滚：promote 后样本达标、但新主
 // （统计中的 candidate）胜率低于阈值 → 建议回滚到原主模型。
 func RecommendRollback(st ShadowStats, minSamples, minWinRate int) bool {
 	return RecommendSwitch(st, minSamples, minWinRate).Action == ActionKeepPrimary

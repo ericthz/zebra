@@ -74,7 +74,7 @@ func TestQdrantForgetTenantDeletesTenantCollection(t *testing.T) {
 	}
 }
 
-// TestQdrantRetrieveFiltersByUser P1-A：检索必须携带 user=alice 的 filter，
+// TestQdrantRetrieveFiltersByUser：检索必须携带 user=alice 的 filter
 // 否则会命中同租户其他用户的记忆。
 func TestQdrantRetrieveFiltersByUser(t *testing.T) {
 	var lastBody map[string]interface{}

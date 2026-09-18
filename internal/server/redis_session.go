@@ -1,4 +1,4 @@
-// Redis 会话存储（P28 水平扩展）：SessionStore 的分布式实现。
+// Redis 会话存储（水平扩展）：SessionStore 的分布式实现。
 //
 // 价值：内存会话（InMemoryStore）把状态绑在单机进程上——多副本部署时
 // 用户请求打到别的副本就"会话不存在"。换 Redis 后任意副本都能读写同一份
@@ -140,7 +140,7 @@ func (s *RedisSessionStore) Save(sess *Session) error {
 	return s.client.Set(context.Background(), redisSessPrefix+sess.ID, string(raw), ttl)
 }
 
-// Delete 删除会话。删除前先获取该会话的共享执行锁（P0-2）：在飞对话
+// Delete 删除会话。删除前先获取该会话的共享执行锁：在飞对话
 // 持锁执行且结束后 persistHistory 会 Save 整会话——若删除不取锁，删除
 // 与 Save 竞态会让被删会话"复活"，且 dropLock 后新请求会新建锁、旧请求
 // 解锁时出现互斥体错配（panic / 同会话并发执行）。持锁删除保证删除
@@ -161,7 +161,7 @@ func (s *RedisSessionStore) Touch(id string) bool {
 
 // ForgetUser 被遗忘权：KEYS 扫描全部会话，删除属于该用户的（返回被删 ID）。
 // 生产演化方向：SCAN 分页 + 按用户维护会话索引，避免全量扫描。
-// 逐个会话先取共享执行锁再删除（P0-2，理由同 Delete）。
+// 逐个会话先取共享执行锁再删除（，理由同 Delete）。
 func (s *RedisSessionStore) ForgetUser(user string) []string {
 	ctx := context.Background()
 	keys, err := s.client.Keys(ctx, redisSessPrefix+"*")

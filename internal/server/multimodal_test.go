@@ -46,7 +46,7 @@ func (p *capProvider) contentParts() []provider.Part {
 	return nil
 }
 
-// TestChatImagesReachProvider C14 端到端：/v1/chat 的 images 字段经 Agent
+// TestChatImagesReachProvider 端到端：/v1/chat 的 images 字段经 Agent
 // 组装成 ContentParts，最终到达 provider（消除"字段有、模型没收到图"的半实现）。
 func TestChatImagesReachProvider(t *testing.T) {
 	keys := NewKeyStore()

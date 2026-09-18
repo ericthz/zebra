@@ -1,4 +1,4 @@
-// 多 Agent 专业 Worker 构建（P13）。
+// 多 Agent 专业 Worker 构建。
 //
 // 三个专业 Agent 共享底层依赖（router/记忆/技能/RAG…），但各有：
 //   - 专属系统提示词（persona）：数据 / 知识 / 常规
@@ -51,12 +51,12 @@ func (d workerDeps) builder(promptName string, reg *tool.Registry) func() *agent
 			Window: d.window, Moderator: d.moderator, MaxTurns: d.maxTurns,
 			PromptName: promptName, Skills: d.skills, Cache: d.cache, RAG: d.rag, Reranker: d.reranker, KG: d.kg,
 			Model: d.model,
-			OnUsage: func(m string, in, out int) { // P5 成本归因（按 worker 归组）
+			OnUsage: func(m string, in, out int) { // 成本归因（按 worker 归组）
 				if d.cost != nil {
 					d.cost.Record("worker", "worker:"+promptName, m, in, out)
 				}
 			},
-			OnInjection: func(kind, hit string) { // D17 注入检测（worker 侧同规格）
+			OnInjection: func(kind, hit string) { // 注入检测（worker 侧同规格）
 				d.logger.Warn("prompt.injection.detected", "worker", promptName, "kind", kind, "hit", hit)
 			},
 		})

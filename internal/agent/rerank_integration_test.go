@@ -35,7 +35,7 @@ func (c *countingReranker) Rerank(_ context.Context, _ string, hits []rag.Result
 func TestRAGRerankerInvoked(t *testing.T) {
 	idx := rag.NewIndex(fakeEmbedder{})
 	idx.AddDocument(context.Background(),
-		"zebra 是企业级 AI Agent 参考项目，提供工具调用、记忆、技能与 RAG 能力。", "zebra.md", 100, 0)
+		"zebra 是 AI Agent 参考项目，提供工具调用、记忆、技能与 RAG 能力。", "zebra.md", 100, 0)
 
 	prompts := prompt.NewRegistry("z")
 	prompts.Register(&prompt.Template{Name: "assistant", Version: "v1", Text: "系统提示"})
@@ -67,7 +67,7 @@ func TestRAGRerankerInvoked(t *testing.T) {
 	}
 }
 
-// TestKGInjectedIntoMessages 验证：图谱有实体关系时，被注入为 system 消息（P52 接线）。
+// TestKGInjectedIntoMessages 验证：图谱有实体关系时，被注入为 system 消息（接线）。
 func TestKGInjectedIntoMessages(t *testing.T) {
 	graph := kg.NewGraph()
 	graph.Add(kg.Triple{Subject: "zebra", Predicate: "支持", Object: "工具调用"})

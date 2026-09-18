@@ -1,4 +1,4 @@
-// 可靠 HTTP 客户端（B7 熔断/降级/容错 + B9 错误恢复）
+// 可靠 HTTP 客户端（熔断/降级/容错 + 错误恢复）
 //
 // 三件套：超时 → 重试（指数退避）→ 熔断。
 // 纯标准库实现，足够演示生产级容错骨架；真实场景可在此之上换用
@@ -34,7 +34,7 @@ func NewHTTPClient(timeout time.Duration, maxRetries int, backoff time.Duration)
 	}
 }
 
-// NewHTTPClientWithBreaker 构造，支持自定义熔断参数（B7 配置化）。
+// NewHTTPClientWithBreaker 构造，支持自定义熔断参数（配置化）。
 // breakerThreshold <=0 时回落默认 5；breakerCooldown <=0 时回落默认 30s。
 func NewHTTPClientWithBreaker(timeout time.Duration, maxRetries int, backoff time.Duration, breakerThreshold int, breakerCooldown time.Duration) *HTTPClient {
 	if breakerThreshold <= 0 {
@@ -64,7 +64,7 @@ func (c *HTTPClient) Do(ctx context.Context, method, url string, payload []byte,
 			delay := c.backoff << uint(attempt-1) // 指数退避
 			select {
 			case <-ctx.Done():
-				return nil, ctx.Err() // B9: 上下文取消/超时传播
+				return nil, ctx.Err() // 上下文取消/超时传播
 			case <-time.After(delay):
 			}
 		}

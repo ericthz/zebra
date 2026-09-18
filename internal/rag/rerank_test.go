@@ -55,7 +55,7 @@ func TestLLMRerankerFallback(t *testing.T) {
 func TestRetrieveReranked(t *testing.T) {
 	idx := NewIndex(fakeEmbedder{})
 	ctx := context.Background()
-	idx.AddDocument(ctx, "zebra 是 Go 写的企业级 AI Agent。", "zebra.md", 100, 0)
+	idx.AddDocument(ctx, "zebra 是 Go 写的 AI Agent。", "zebra.md", 100, 0)
 	idx.AddDocument(ctx, "QDRANT_URL 配置向量库。", "qdrant.md", 100, 0)
 	idx.AddDocument(ctx, "北京的冬天很冷。", "beijing.md", 100, 0)
 

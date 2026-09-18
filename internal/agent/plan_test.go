@@ -65,7 +65,7 @@ func TestPlanAndExecute(t *testing.T) {
 	}
 }
 
-// TestPlanAndExecuteStream P60：流式规划-执行按阶段推送 phase/delta 事件。
+// TestPlanAndExecuteStream：流式规划-执行按阶段推送 phase/delta 事件。
 func TestPlanAndExecuteStream(t *testing.T) {
 	prompts := prompt.NewRegistry("z")
 	prompts.Register(&prompt.Template{Name: "assistant", Version: "v1", Text: "你是助手 {role}"})
@@ -118,7 +118,7 @@ func (p *sloppyPlannerProvider) ChatStream(context.Context, []provider.Message, 
 	return nil, context.Canceled
 }
 
-// TestPlanAndExecuteSloppyModel P62：包裹+step_title 的不规范规划也能执行。
+// TestPlanAndExecuteSloppyModel：包裹+step_title 的不规范规划也能执行。
 func TestPlanAndExecuteSloppyModel(t *testing.T) {
 	prompts := prompt.NewRegistry("z")
 	prompts.Register(&prompt.Template{Name: "assistant", Version: "v1", Text: "你是助手 {role}"})

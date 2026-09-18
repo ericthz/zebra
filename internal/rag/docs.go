@@ -1,4 +1,4 @@
-// 知识库文档加载（P36）：读取 docs/ 目录下的 .md / .txt 文档作为 RAG 摄取源，
+// 知识库文档加载：读取 docs/ 目录下的 .md / .txt 文档作为 RAG 摄取源
 // 供 cmd/server 与 cmd/zebra 共用（保证两个入口的知识库装配一致）。
 package rag
 

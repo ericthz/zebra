@@ -1,4 +1,4 @@
-// Package config 配置加载（P30）：零依赖 .env 加载器。
+// Package config 配置加载：零依赖 .env 加载器。
 //
 // 背景：此前 zebra 只用 os.Getenv 读系统环境变量，仓库根目录的 .env
 // 对程序是"惰性"的——不 export/source 就不生效，README 的说法与实际

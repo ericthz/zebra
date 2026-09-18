@@ -1,4 +1,4 @@
-// 工具注册表 + 权限边界（D20）。
+// 工具注册表 + 权限边界。
 //
 // 三层防线：
 //  1. 角色白名单 allow：role → 允许的工具集合（未配置的 role 视为 admin 全开）
@@ -44,7 +44,7 @@ func (r *Registry) Register(t Tool) {
 	r.tools[t.Name()] = t
 }
 
-// Remove 移除一个工具（P53 插件热重载用）。
+// Remove 移除一个工具（插件热重载用）。
 func (r *Registry) Remove(name string) bool {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -131,11 +131,11 @@ func (r *Registry) DenyTool(role, name string) {
 	delete(set, name)
 }
 
-// Subset 返回只包含指定工具的子注册表（P13 多 Agent 专业化）：
+// Subset 返回只包含指定工具的子注册表（多 Agent 专业化）：
 // 未在 names 中的工具不复制；names 为空表示复制全部。
 // 同时复制角色白名单 allow，保持权限语义一致；审计器 audit 一并复制
-// （S-4：supervisor/worker 用 Subset 得到子注册表，若审计不复制则其工具
-// 调用审计事件丢失，D20 审计链路断裂）。
+// （supervisor/worker 用 Subset 得到子注册表，若审计不复制则其工具
+// 调用审计事件丢失， 审计链路断裂）。
 func (r *Registry) Subset(names ...string) *Registry {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
@@ -181,7 +181,7 @@ func (r *Registry) ToolsFor(role string) []provider.Tool {
 	return out
 }
 
-// Execute 安全执行工具。confirm 用于高危工具的人工二次确认（D20）。
+// Execute 安全执行工具。confirm 用于高危工具的人工二次确认。
 func (r *Registry) Execute(ctx context.Context, name string, args map[string]interface{}, user, role string, confirm bool) (string, error) {
 	r.mu.RLock()
 	t, ok := r.tools[name]
@@ -202,7 +202,7 @@ func (r *Registry) Execute(ctx context.Context, name string, args map[string]int
 		}
 	}
 
-	if err := ValidateArgs(t, args); err != nil { // C13 结构化输出校验
+	if err := ValidateArgs(t, args); err != nil { // 结构化输出校验
 		return "", err
 	}
 

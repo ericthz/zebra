@@ -49,7 +49,7 @@ func TestMetricsSnapshot(t *testing.T) {
 	t.Log(body)
 }
 
-// TestMetricsCostRequiresAdmin P1-9：/metrics/cost 含 per-user/per-session
+// TestMetricsCostRequiresAdmin：/metrics/cost 含 per-user/per-session
 // 成本明细，禁止公开。未带密钥 401；普通用户 403；admin 才能访问。
 func TestMetricsCostRequiresAdmin(t *testing.T) {
 	keys := NewKeyStore()

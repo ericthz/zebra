@@ -1,4 +1,4 @@
-# E21 工程化常用命令
+# 工程化常用命令
 .PHONY: build run zebra mcp test vet lint eval eval-redteam fmt clean docker-up docker-down
 
 build:
@@ -6,7 +6,7 @@ build:
 	go build -o bin/zebra ./cmd/zebra
 	go build -o bin/zebra-mcp ./cmd/mcp
 
-run: ## 启动企业版服务
+run: ## 启动服务端
 	go run ./cmd/server
 
 zebra: ## 本地 CLI 客户端

@@ -1,10 +1,10 @@
-// 被遗忘权（P6/GDPR）：DELETE /v1/user/data —— 删除该用户全链路数据。
+// 被遗忘权（/GDPR）：DELETE /v1/user/data —— 删除该用户全链路数据。
 //
 // 触发范围（循序渐进，先做最有价值的三处）：
 //  1. 会话：删除该用户全部会话（含历史）
 //  2. 工作记忆：清空这些会话的进程内记忆
 //  3. 长期记忆：清空该租户的向量集合（Qdrant）
-//  4. 用户画像：删除该用户全部画像事实（P22）
+//  4. 用户画像：删除该用户全部画像事实
 //
 // 生产演化：还需清理日志/审计/缓存/账单中的个人数据，并落"删除请求"审计。
 package server
@@ -45,7 +45,7 @@ func (s *APIServer) handleForget(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// 4. 删除用户画像（P22 扩展被遗忘权覆盖范围）
+	// 4. 删除用户画像（扩展被遗忘权覆盖范围）
 	if s.deps.Profile != nil {
 		s.deps.Profile.ForgetUser(p.User)
 	}

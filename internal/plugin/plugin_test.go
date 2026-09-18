@@ -55,7 +55,7 @@ func TestHTTPPluginTool(t *testing.T) {
 		t.Fatal("服务端 400 应报错")
 	}
 
-	// SSRF：未加白名单的内网地址应被拦截（复用 P6）
+	// SSRF：未加白名单的内网地址应被拦截
 	blocked := &HTTPPluginTool{def: Def{Name: "bad", URL: "http://127.0.0.1:9999/hook"}}
 	if _, err := blocked.Execute(context.Background(), map[string]interface{}{}); err == nil {
 		t.Fatal("内网插件 URL 应被 SSRF 拦截")

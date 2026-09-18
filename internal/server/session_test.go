@@ -37,7 +37,7 @@ func TestSessionCreateGetExpire(t *testing.T) {
 }
 
 func TestSessionIsolation(t *testing.T) {
-	// 每个会话持有独立历史（A4 隔离）
+	// 每个会话持有独立历史（隔离）
 	store := NewInMemoryStore(time.Minute)
 	defer store.Stop()
 
@@ -71,7 +71,7 @@ func TestForgetUser(t *testing.T) {
 	}
 }
 
-// TestForgetWaitsForInFlightChat P0-2：ForgetUser 必须先等该会话在飞对话
+// TestForgetWaitsForInFlightChat：ForgetUser 必须先等该会话在飞对话
 // 结束（持 runMu）再删除。若在飞对话先删后写，已删会话会"复活"。
 func TestForgetWaitsForInFlightChat(t *testing.T) {
 	store := NewInMemoryStore(time.Minute)

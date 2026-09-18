@@ -1,5 +1,5 @@
-// 工作记忆：会话内短期上下文（C12 记忆分层）。
-// 按 sessionID 隔离（A4 多租户隔离在会话维度体现），每条记录带时间戳，
+// 工作记忆：会话内短期上下文（记忆分层）。
+// 按 sessionID 隔离（多租户隔离在会话维度体现），每条记录带时间戳，
 // 超过 max 条自动淘汰最旧（滑动）。
 package memory
 
@@ -39,7 +39,7 @@ func (w *WorkingMemory) Add(sessionID, userInput, assistant string) {
 	w.items[sessionID] = list
 }
 
-// ReplaceLast 覆写某会话最近一条摘要（F-4：reflect 修订版替换原回答）。
+// ReplaceLast 覆写某会话最近一条摘要（reflect 修订版替换原回答）。
 // 用于"同一轮的回答被改进"场景：避免追加成两条"用户: X"造成召回重复/冲突。
 // 无记录时退化为 Add。
 func (w *WorkingMemory) ReplaceLast(sessionID, userInput, assistant string) {

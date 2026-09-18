@@ -1,13 +1,13 @@
-// Redis 长期记忆（P51）：memory.Memory 的 Redis 实现（关键词检索）。
+// Redis 长期记忆：memory.Memory 的 Redis 实现（关键词检索）。
 //
 // 背景：Qdrant 做向量语义检索；Redis 则提供"轻量、可水平扩展"的长期记忆
 // （记录最近说过什么，关键词重叠打分），适合无向量库的部署。会话/任务已
-// 迁 Redis（P28/P43），本实现把"长期记忆"也纳入 Redis 家族。
+// 迁 Redis，本实现把"长期记忆"也纳入 Redis 家族。
 //
 // 存储：key = zebra:mem:<tenant>，值为 JSON 数组（含内容/元数据/时间），
 // 读写采用"整数组读改写"，每租户保留最近 max 条（默认 200）。
 // 生产演化方向：改为 RPUSH/LRANGE 列表 + SCAN；检索升级为向量（如
-// 用 Qdrant）；TTL 策略与遗忘机制（P22）联动。
+// 用 Qdrant）；TTL 策略与遗忘机制联动。
 package memory
 
 import (
@@ -41,12 +41,12 @@ type RedisMemory struct {
 	mu sync.Mutex
 }
 
-// NewRedisMemory 构造（tenant 用于 A4 租户隔离）。
+// NewRedisMemory 构造（tenant 用于租户隔离）。
 func NewRedisMemory(client *redis.Client, tenant string) *RedisMemory {
 	return &RedisMemory{client: client, key: redisMemPrefix + tenant, max: 200}
 }
 
-// ForTenant 返回绑定到指定租户的实例（A4）。
+// ForTenant 返回绑定到指定租户的实例。
 func (m *RedisMemory) ForTenant(tenant string) Memory {
 	return NewRedisMemory(m.client, tenant)
 }
@@ -63,7 +63,7 @@ func (m *RedisMemory) Store(ctx context.Context, content string, meta map[string
 	return m.save(ctx, entries)
 }
 
-// Retrieve 按关键词重叠打分返回该 user 最相关的 limit 条（P1-A 用户隔离，
+// Retrieve 按关键词重叠打分返回该 user 最相关的 limit 条（用户隔离
 // 只检索 meta.user == user 的条目，防止跨用户泄露）。user 为空时不按用户过滤。
 func (m *RedisMemory) Retrieve(ctx context.Context, user, query string, limit int) ([]string, error) {
 	entries := m.load(ctx)
@@ -109,7 +109,7 @@ func (m *RedisMemory) Clear(ctx context.Context) error {
 	return err
 }
 
-// ForgetUser 按用户删除全部记忆（P6 被遗忘权）。
+// ForgetUser 按用户删除全部记忆（被遗忘权）。
 // Redis 版按 meta.user 过滤，保留其他用户的条目，不误伤同租户其他用户。
 func (m *RedisMemory) ForgetUser(ctx context.Context, user string) error {
 	m.mu.Lock()

@@ -1,4 +1,4 @@
-// 文档产出（P23）：生成 .docx（Office Open XML）。
+// 文档产出：生成 .docx（Office Open XML）。
 //
 // 背景：Agent 产出不能只停在聊天文本，要能交付"文件"。docx 本质是
 // zip 包 + 一组 XML（OOXML），Go 标准库的 archive/zip + 手写 XML 即可生成，

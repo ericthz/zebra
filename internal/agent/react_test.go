@@ -78,7 +78,7 @@ func TestReActMaxSteps(t *testing.T) {
 	}
 }
 
-// TestReActStream P60：流式 ReAct 推送 思考/行动/观察/结论 轨迹。
+// TestReActStream：流式 ReAct 推送 思考/行动/观察/结论 轨迹。
 func TestReActStream(t *testing.T) {
 	ag := newReActAgent(reactProvider{})
 	var evs []Event

@@ -42,7 +42,7 @@ func (s *Server) SetHTTPToken(token string) {
 	s.httpToken = token
 }
 
-// ValidateHTTPStart 校验 HTTP 模式启动前提（P2-E）：HTTP 模式必须显式配置
+// ValidateHTTPStart 校验 HTTP 模式启动前提：HTTP 模式必须显式配置
 // Bearer 令牌，否则拒绝启动（默认拒绝、显式放行）。stdio 模式走本地管道，
 // 由启动方授权，无需令牌。
 func ValidateHTTPStart(httpAddr, token string) error {
@@ -152,7 +152,7 @@ func (s *Server) ServeHTTP(ctx context.Context, addr string) error {
 			http.Error(w, "only POST allowed", http.StatusMethodNotAllowed)
 			return
 		}
-		// D19 HTTP 鉴权：设置了 token 则校验 Bearer，失败返回 401 且不处理请求。
+		// HTTP 鉴权：设置了 token 则校验 Bearer，失败返回 401 且不处理请求。
 		if !s.checkToken(r) {
 			w.Header().Set("WWW-Authenticate", "Bearer")
 			http.Error(w, "unauthorized", http.StatusUnauthorized)

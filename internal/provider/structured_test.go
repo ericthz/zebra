@@ -80,7 +80,7 @@ func (fencedProvider) ChatStream(context.Context, []Message, []Tool) (<-chan Str
 	return nil, context.Canceled
 }
 
-// TestStructuredChatFencedJSON P62：代码围栏包裹的 JSON 也能通过结构化校验。
+// TestStructuredChatFencedJSON：代码围栏包裹的 JSON 也能通过结构化校验。
 func TestStructuredChatFencedJSON(t *testing.T) {
 	router := NewRouter(fencedProvider{})
 	sch := map[string]interface{}{"type": "object", "required": []interface{}{"ok"}}
@@ -113,7 +113,7 @@ func (p *countingStructuredProvider) ChatJSON(_ context.Context, _ []Message, _ 
 	return Message{Role: "assistant", Content: `{"wrong":1}`}, nil // 不合 schema
 }
 
-// TestStructuredChatNoDoubleCallPrimary F-6：主模型强约束失败后不得再次被
+// TestStructuredChatNoDoubleCallPrimary：主模型强约束失败后不得再次被
 // ChatWithFallback 从链首重试（避免同一主模型被调两次、成本翻倍）。
 func TestStructuredChatNoDoubleCallPrimary(t *testing.T) {
 	primary := &countingStructuredProvider{}
@@ -147,7 +147,7 @@ func (multiObjectProvider) ChatStream(context.Context, []Message, []Tool) (<-cha
 	return nil, context.Canceled
 }
 
-// TestStructuredChatMultiObject P62：多对象输出按括号配对取第一个完整对象。
+// TestStructuredChatMultiObject：多对象输出按括号配对取第一个完整对象。
 func TestStructuredChatMultiObject(t *testing.T) {
 	router := NewRouter(multiObjectProvider{})
 	sch := map[string]interface{}{
@@ -174,7 +174,7 @@ func (wrappedProvider) ChatStream(context.Context, []Message, []Tool) (<-chan St
 	return nil, context.Canceled
 }
 
-// TestStructuredChatWrappedObject P62：单键包裹的对象可被解包校验。
+// TestStructuredChatWrappedObject：单键包裹的对象可被解包校验。
 func TestStructuredChatWrappedObject(t *testing.T) {
 	router := NewRouter(wrappedProvider{})
 	sch := map[string]interface{}{
@@ -198,7 +198,7 @@ func (arrayOfPlanProvider) ChatStream(context.Context, []Message, []Tool) (<-cha
 	return nil, context.Canceled
 }
 
-// TestStructuredChatArrayOfPlan P62：顶层数组只含一个目标对象 → 解包。
+// TestStructuredChatArrayOfPlan：顶层数组只含一个目标对象 → 解包。
 func TestStructuredChatArrayOfPlan(t *testing.T) {
 	router := NewRouter(arrayOfPlanProvider{})
 	sch := map[string]interface{}{
@@ -230,7 +230,7 @@ func (arrayOfStepsProvider) ChatStream(context.Context, []Message, []Tool) (<-ch
 	return nil, context.Canceled
 }
 
-// TestStructuredChatArrayOfSteps P62：步骤数组按 schema 包装成 {"steps":[...]}。
+// TestStructuredChatArrayOfSteps：步骤数组按 schema 包装成 {"steps":[...]}。
 func TestStructuredChatArrayOfSteps(t *testing.T) {
 	router := NewRouter(arrayOfStepsProvider{})
 	sch := map[string]interface{}{

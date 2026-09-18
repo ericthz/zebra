@@ -25,7 +25,7 @@ func TestShadowStats(t *testing.T) {
 		t.Fatalf("胜率计算错误: %f", all.WinRate)
 	}
 
-	// 用户维度过滤（A4）
+	// 用户维度过滤
 	alice := store.Stats("alice")
 	if alice.Total != 6 || alice.CandidateBetter != 3 {
 		t.Fatalf("用户过滤错误: %+v", alice)
@@ -52,7 +52,7 @@ func TestRecommendSwitch(t *testing.T) {
 	}
 }
 
-// TestRecommendRollback P42 金丝雀回滚：胜率不达标才建议回滚。
+// TestRecommendRollback 金丝雀回滚：胜率不达标才建议回滚。
 func TestRecommendRollback(t *testing.T) {
 	// 样本达标 + 胜率低 → 回滚
 	if !RecommendRollback(ShadowStats{Total: 10, CandidateBetter: 2, PrimaryBetter: 8}, 10, 60) {

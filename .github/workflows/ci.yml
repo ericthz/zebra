@@ -1,8 +1,11 @@
-# E21 CI：提交/PR 时自动跑 构建 + 单元测试 + vet（真实模型评测可另起定时任务）
+# CI：提交/PR 时自动跑 构建 + 单元测试 + vet（真实模型评测可另起定时任务）
+#
+# 触发范围：所有分支的 push + 所有 PR。
+# 注意不要写成 branches: [main] —— 本仓库分支为 dev / master / demo，没有 main，
+# 那样写会导致 push 永远不触发、CI 形同虚设。
 name: ci
 on:
   push:
-    branches: [main]
   pull_request:
 
 jobs:

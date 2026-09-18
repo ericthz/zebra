@@ -1,4 +1,4 @@
-// 异步长任务 API（P12）：
+// 异步长任务 API：
 //
 //	POST /v1/tasks      提交任务（立即返回 task_id，后台执行）
 //	GET  /v1/tasks      列出当前用户的全部任务
@@ -9,7 +9,7 @@
 //	任务执行前/后，把会话历史序列化为快照存进 Task.Checkpoint；
 //	恢复/继续时反序列化回 history，实现"断点续跑"。
 //
-// 完成/失败时触发 Webhook 通知（复用 P4）。
+// 完成/失败时触发 Webhook 通知。
 package server
 
 import (
@@ -69,7 +69,7 @@ func (s *APIServer) handleSubmitTask(w http.ResponseWriter, r *http.Request) {
 // taskRun 由 Manager 注入的任务执行函数：
 // 反序列化检查点 → 构建 Agent → 执行 → 序列化新检查点。
 func (s *APIServer) taskRun(ctx context.Context, user, session, prompt string, cp []byte) (string, []byte, error) {
-	// F-5：以会话现有历史为"上文"基础（"继续上一条分析"类任务需要读到
+	// 以会话现有历史为"上文"基础（"继续上一条分析"类任务需要读到
 	// 该会话已有多轮对话）。防御性拷贝，避免与并发聊天写历史竞态。
 	hist := make([]provider.Message, 0)
 	if sess, ok := s.deps.Sessions.Get(session); ok {
@@ -78,7 +78,7 @@ func (s *APIServer) taskRun(ctx context.Context, user, session, prompt string, c
 	if len(cp) > 0 {
 		// 检查点恢复（断点续跑）。解析失败不得静默当空历史重跑——
 		// 那会"丢失上文"继续执行（违背断点续跑语义），应让任务失败
-		// 便于排查（P2-13）。
+		// 便于排查。
 		if err := json.Unmarshal(cp, &hist); err != nil {
 			return "", nil, fmt.Errorf("检查点解析失败: %w", err)
 		}
@@ -127,7 +127,7 @@ func (s *APIServer) handleGetTask(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	t, ok := s.tasks.Get(id)
-	if !ok || t.User != p.User { // A4 隔离：只能查自己的任务
+	if !ok || t.User != p.User { // 隔离：只能查自己的任务
 		http.Error(w, "task not found", http.StatusNotFound)
 		return
 	}
@@ -137,7 +137,7 @@ func (s *APIServer) handleGetTask(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// makeTaskNotifier 构造任务完成通知器（复用 P4 Webhook，发送完成事件）。
+// makeTaskNotifier 构造任务完成通知器（复用 Webhook，发送完成事件）。
 func (s *APIServer) makeTaskNotifier() task.NotifyFunc {
 	return func(t *task.Task) {
 		if s.deps.Notifier == nil {

@@ -68,7 +68,7 @@ func TestOpenAIStreamToolCallFragments(t *testing.T) {
 	}
 }
 
-// TestOpenAIStreamEOFWithoutDone P0-4：部分网关在工具调用分片后直接断流、
+// TestOpenAIStreamEOFWithoutDone：部分网关在工具调用分片后直接断流
 // 不发 [DONE]。EOF 必须等价于 [DONE] 收尾（flush 完整工具调用 + 发 Done 事件），
 // 否则累加器中的工具调用会静默丢失，agent 侧误判为"无工具调用"。
 func TestOpenAIStreamEOFWithoutDone(t *testing.T) {
@@ -113,7 +113,7 @@ func TestOpenAIStreamEOFWithoutDone(t *testing.T) {
 		t.Fatal("正常 EOF 不应产生 Error 事件")
 	}
 	if !gotDone {
-		t.Fatal("EOF 断流也应发出 Done 事件（P0-4）")
+		t.Fatal("EOF 断流也应发出 Done 事件")
 	}
 	if len(toolCalls) != 1 {
 		t.Fatalf("EOF 后应 flush 出 1 个完整工具调用，实际 %d 个", len(toolCalls))

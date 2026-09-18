@@ -1,4 +1,4 @@
-// Ollama 原生协议适配（/api/chat），支持 NDJSON 流式（C10）。
+// Ollama 原生协议适配（/api/chat），支持 NDJSON 流式。
 package provider
 
 import (

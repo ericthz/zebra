@@ -1,4 +1,4 @@
-// 流式运行器（C10）：Agent 层事件模型 + SSE 语义。
+// 流式运行器：Agent 层事件模型 + SSE 语义。
 package agent
 
 import (
@@ -13,7 +13,7 @@ type EventType string
 const (
 	EventDelta EventType = "delta"     // 文本增量
 	EventTool  EventType = "tool_call" // 模型调用工具
-	EventSkill EventType = "skill"     // 注入技能（P61）
+	EventSkill EventType = "skill"     // 注入技能
 	EventPhase EventType = "phase"     // 阶段提示（规划/执行/思考/观察等）
 	EventDone  EventType = "done"      // 本轮完成
 	EventError EventType = "error"     // 出错

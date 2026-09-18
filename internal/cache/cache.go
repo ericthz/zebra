@@ -1,4 +1,4 @@
-// Package cache 语义缓存（P5 成本治理）。
+// Package cache 语义缓存（成本治理）。
 //
 // 价值：用户反复问相似问题（如"今天天气""今天天气怎么样"）时，
 // 若语义相近，直接返回缓存答案，省一次 LLM 调用（省钱 + 省延迟）。
@@ -35,7 +35,7 @@ type SemanticCache struct {
 }
 
 type cacheItem struct {
-	scope  string // 租户/用户命名空间（A4 隔离：跨用户答案不得互命）
+	scope  string // 租户/用户命名空间（隔离：跨用户答案不得互命）
 	query  string
 	answer string
 	vec    []float32
@@ -66,7 +66,7 @@ func (c *SemanticCache) Get(ctx context.Context, scope, query string) (string, b
 	var bestAnswer string
 	for _, it := range c.items {
 		if it.scope != scope {
-			continue // 只在自己命名空间内比较，防跨租户泄漏（A4）
+			continue // 只在自己命名空间内比较，防跨租户泄漏
 		}
 		if sim := memory.Cosine(vec, it.vec); sim > best {
 			best = sim

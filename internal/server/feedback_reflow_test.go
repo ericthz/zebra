@@ -18,7 +18,7 @@ import (
 	"github.com/ericthz/zebra/internal/provider"
 )
 
-// TestFeedbackReflow P55：负面反馈自动把问答对追加进评测数据集。
+// TestFeedbackReflow：负面反馈自动把问答对追加进评测数据集。
 func TestFeedbackReflow(t *testing.T) {
 	casesDir := t.TempDir()
 	keys := NewKeyStore()

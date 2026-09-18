@@ -1,4 +1,4 @@
-// 规划-执行编排（P10，Plan-then-Execute）。
+// 规划-执行编排（，Plan-then-Execute）。
 //
 // 背景：单次工具循环适合"一步到位"的任务；但成熟 Agent 面对复杂任务
 // （"做一个季度分析报告"）需要先【拆解】再【逐个执行】——
@@ -46,8 +46,8 @@ type Plan struct {
 
 // PlanAndExecute 规划-执行两阶段编排入口。
 func (a *Agent) PlanAndExecute(ctx context.Context, userInput string, opts RunOptions) (string, error) {
-	ctx = a.usageCtx(ctx) // F-3：规划/子步骤执行计入用量
-	// D18 输入审核（P2-A）：先于规划 LLM 调用与子步骤执行。
+	ctx = a.usageCtx(ctx) // 规划/子步骤执行计入用量
+	// 输入审核：先于规划 LLM 调用与子步骤执行。
 	if err := a.checkInput(userInput); err != nil {
 		return "", err
 	}
@@ -73,7 +73,7 @@ func (a *Agent) PlanAndExecute(ctx context.Context, userInput string, opts RunOp
 
 	// 阶段 3：汇总（把"问题→最终汇总"写入历史与记忆，保证多轮上下文连续）
 	summary := fmt.Sprintf("按规划完成（共 %d 步）：\n%s", len(plan.Steps), strings.Join(parts, "\n"))
-	// D18 输出审核（P2-A）：先审核再持久化，违规汇总不进历史/记忆。
+	// 输出审核：先审核再持久化，违规汇总不进历史/记忆。
 	if err := a.checkOutput(summary); err != nil {
 		return "", err
 	}
@@ -87,8 +87,8 @@ func (a *Agent) PlanAndExecuteStream(ctx context.Context, userInput string, opts
 	if emit == nil {
 		return a.PlanAndExecute(ctx, userInput, opts)
 	}
-	ctx = a.usageCtx(ctx) // F-3：流式规划-执行计入用量
-	// D18 输入审核（P2-A）：与 run 同一道横切点。
+	ctx = a.usageCtx(ctx) // 流式规划-执行计入用量
+	// 输入审核：与 run 同一道横切点。
 	if err := a.checkInput(userInput); err != nil {
 		return "", err
 	}
@@ -113,7 +113,7 @@ func (a *Agent) PlanAndExecuteStream(ctx context.Context, userInput string, opts
 		parts = append(parts, fmt.Sprintf("步骤%d【%s】: %s", i+1, step.Title, out))
 	}
 	summary := fmt.Sprintf("按规划完成（共 %d 步）：\n%s", len(plan.Steps), strings.Join(parts, "\n"))
-	// D18 输出审核（P2-A）：先审核再持久化。
+	// 输出审核：先审核再持久化。
 	if err := a.checkOutput(summary); err != nil {
 		return "", err
 	}
@@ -124,7 +124,7 @@ func (a *Agent) PlanAndExecuteStream(ctx context.Context, userInput string, opts
 }
 
 // plan 阶段 1：让 LLM 输出 JSON 步骤列表。
-// P17 结构化输出强约束：用 StructuredChat（优先 response_format 强约束，
+// 结构化输出强约束：用 StructuredChat（优先 response_format 强约束
 // 回退普通调用 + schema 校验），保证拿到合法规划 JSON。
 func (a *Agent) plan(ctx context.Context, userInput string, images []string) (*Plan, error) {
 	prompt := fmt.Sprintf(`你是一个任务规划器。请把下面的用户请求拆解为 2~5 个有序的执行步骤。
@@ -154,7 +154,7 @@ func (a *Agent) plan(ctx context.Context, userInput string, images []string) (*P
 	return &p, nil
 }
 
-// planSchema 规划输出的 JSON Schema（P17 强约束）。
+// planSchema 规划输出的 JSON Schema（强约束）。
 var planSchema = map[string]interface{}{
 	"type": "object",
 	"properties": map[string]interface{}{
@@ -178,7 +178,7 @@ var planSchema = map[string]interface{}{
 
 // executeStep 阶段 2：执行单个子任务（一次工具循环）。
 // 关键：不写历史/记忆，只返回该步骤的最终文本。
-// 多模态（C14）：把 opts.Images 一并带给子步骤，让"分析这张图"类子任务
+// 多模态：把 opts.Images 一并带给子步骤，让"分析这张图"类子任务
 // 能真正看到图（否则子步骤只见文字任务描述，仍是半实现）。
 func (a *Agent) executeStep(ctx context.Context, step PlanStep, opts RunOptions, emit func(Event)) (string, error) {
 	msgs := []provider.Message{}

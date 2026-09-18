@@ -152,7 +152,7 @@ func TestShadowAPI(t *testing.T) {
 	}
 }
 
-// TestChatConsistentMode P40 自一致性：/v1/chat 的 mode=consistent 走独立采样择优。
+// TestChatConsistentMode 自一致性：/v1/chat 的 mode=consistent 走独立采样择优。
 func TestChatConsistentMode(t *testing.T) {
 	h, _, _ := newShadowServer(t)
 	do := func(key, body string) *httptest.ResponseRecorder {
@@ -215,7 +215,7 @@ func TestSessionConcurrentChat(t *testing.T) {
 	}
 }
 
-// TestShadowDashboardAndPromote 看板统计 + 灰度切换（P26）。
+// TestShadowDashboardAndPromote 看板统计 + 灰度切换。
 func TestShadowDashboardAndPromote(t *testing.T) {
 	h, _, _ := newShadowServer(t)
 	do := func(method, path, key string) *httptest.ResponseRecorder {
@@ -259,7 +259,7 @@ func TestShadowDashboardAndPromote(t *testing.T) {
 	}
 }
 
-// TestShadowAutoRollback P42 金丝雀自动回滚：promote 后胜率不达标自动切回原主。
+// TestShadowAutoRollback 金丝雀自动回滚：promote 后胜率不达标自动切回原主。
 func TestShadowAutoRollback(t *testing.T) {
 	h, store, api := newShadowServer(t)
 	do := func(method, path, key string) *httptest.ResponseRecorder {

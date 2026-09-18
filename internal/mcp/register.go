@@ -1,4 +1,4 @@
-// MCP 工具装配（P32）：按环境变量挂载远端 MCP 工具，供 cmd/server 与
+// MCP 工具装配：按环境变量挂载远端 MCP 工具，供 cmd/server 与
 // cmd/zebra 共用，保证两个入口对"外部工具"的行为一致。
 //
 // 环境变量（与 README §5.2 对齐）：
@@ -7,7 +7,7 @@
 //	MCP_COMMAND       stdio 模式的可执行命令（含参数）
 //	MCP_HTTP_URL      http 模式的远端地址（默认 http://localhost:9000）
 //
-// 连接失败只告警不阻断启动（B7 降级：缺外部依赖时本地能力照常可用）。
+// 连接失败只告警不阻断启动（降级：缺外部依赖时本地能力照常可用）。
 package mcp
 
 import (

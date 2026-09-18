@@ -1,4 +1,4 @@
-// Package prompt Prompt 工程管理（C16）：模板化 + 版本化 + 灰度切换。
+// Package prompt Prompt 工程管理：模板化 + 版本化 + 灰度切换。
 //
 // 生产演进方向：模板仓库 + A/B 测试 + 线上效果回流，本包保持最简骨架。
 package prompt
@@ -69,7 +69,7 @@ func (r *Registry) Render(name string, vars map[string]string) (string, error) {
 	return out, nil
 }
 
-// LoadAll 批量注册模板（供 LoadDir 后调用；P18 热更新用）。
+// LoadAll 批量注册模板（供 LoadDir 后调用； 热更新用）。
 func (r *Registry) LoadAll(templates []*Template) {
 	for _, t := range templates {
 		r.Register(t)

@@ -1,4 +1,4 @@
-// 日志文件（P35）：Zebra CLI 与 server 共用的日志文件打开逻辑。
+// 日志文件：Zebra CLI 与 server 共用的日志文件打开逻辑。
 //
 // 约定（与 ZEBRA_LOG / LOG_FILE 语义一致）：
 //

@@ -1,9 +1,9 @@
-// LLM 摘要压缩（P47）：把旧对话压成语义摘要，替代"截断式"PrefixSummarizer。
+// LLM 摘要压缩：把旧对话压成语义摘要，替代"截断式"PrefixSummarizer。
 //
 // 背景：上下文超预算时，PrefixSummarizer 只是机械截断，会丢关键信息。
 // LLMSummarizer 让模型提炼"关键事实/结论/待办"，摘要以 system 消息回填，
 // 长对话下既控 token 又保语义。模型不可用/输出异常时返回错误，
-// 由 ContextWindow.Trim 保持原消息（B9 容错，不劣化）。
+// 由 ContextWindow.Trim 保持原消息（容错，不劣化）。
 package agent
 
 import (

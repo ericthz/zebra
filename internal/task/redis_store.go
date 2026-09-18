@@ -1,4 +1,4 @@
-// Redis 任务存储（P43）：task.Store 的 Redis 实现，支撑水平扩展。
+// Redis 任务存储：task.Store 的 Redis 实现，支撑水平扩展。
 //
 // 背景：InMemoryStore 把任务绑在单机进程，多副本部署时任务互相不可见。
 // 本实现把任务以 JSON 存于 Redis（zebra:task:<id>，TTL 兜底清理），

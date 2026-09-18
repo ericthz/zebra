@@ -19,7 +19,7 @@
 // 生产演化方向：
 //   - 检索从"关键词打分"升级为"向量检索"（复用 memory 包嵌入器）
 //   - SKILL.md 支持多行 description、依赖声明、内置自测
-//   - scripts/ 在隔离沙箱执行（见 P2 本地执行）
+//   - scripts/ 在隔离沙箱执行（见本地执行）
 package skill
 
 import (

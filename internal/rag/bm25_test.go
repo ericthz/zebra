@@ -45,7 +45,7 @@ func TestRetrieveHybrid(t *testing.T) {
 	ctx := context.Background()
 
 	// 摄入"语义相近但无精确术语"的两篇 + 一篇含专有名词
-	idx.AddDocument(ctx, "zebra 提供企业级 AI Agent 能力，包括记忆、技能、工具调用。", "zebra.md", 100, 0)
+	idx.AddDocument(ctx, "zebra 提供 AI Agent 能力，包括记忆、技能、工具调用。", "zebra.md", 100, 0)
 	idx.AddDocument(ctx, "QDRANT_URL 配置后启用长期记忆，连接向量数据库。", "qdrant.md", 100, 0)
 	idx.AddDocument(ctx, "北京的冬天很冷，夏天炎热，四季分明。", "beijing.md", 100, 0)
 

@@ -12,7 +12,7 @@ import (
 	"github.com/ericthz/zebra/internal/tool"
 )
 
-// TestOnSkillHook P31：命中技能时 OnSkill 上报技能名（学习/可观测钩子）。
+// TestOnSkillHook：命中技能时 OnSkill 上报技能名（学习/可观测钩子）。
 func TestOnSkillHook(t *testing.T) {
 	skillReg := skill.NewRegistry()
 	skillReg.Register(&skill.Skill{Name: "report-sop", Version: "1.0.0",
@@ -69,7 +69,7 @@ func (f *oneCallProvider) ChatStream(context.Context, []provider.Message, []prov
 	return nil, context.Canceled
 }
 
-// TestOnToolHook P31：工具真实执行时 OnTool 上报名称/参数/结果。
+// TestOnToolHook：工具真实执行时 OnTool 上报名称/参数/结果。
 func TestOnToolHook(t *testing.T) {
 	prompts := prompt.NewRegistry("z")
 	prompts.Register(&prompt.Template{Name: "assistant", Version: "v1", Text: "系统提示"})
@@ -107,7 +107,7 @@ func TestOnToolHook(t *testing.T) {
 	}
 }
 
-// TestSkillEventEmitted P61：技能注入时发出 skill 流式事件（前端轨迹展示）。
+// TestSkillEventEmitted：技能注入时发出 skill 流式事件（前端轨迹展示）。
 func TestSkillEventEmitted(t *testing.T) {
 	skillReg := skill.NewRegistry()
 	skillReg.Register(&skill.Skill{Name: "report-sop", Description: "写报告", Instructions: "SOP"})

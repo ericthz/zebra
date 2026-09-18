@@ -1,4 +1,4 @@
-// 用户反馈 API（P16 反馈闭环）：
+// 用户反馈 API（反馈闭环）：
 //
 //	POST /v1/feedback   提交点赞/踩（{session_id, rating: 1|-1, comment?}）
 //	GET  /v1/feedback   列出当前用户反馈 + 正负计数
@@ -57,7 +57,7 @@ func (s *APIServer) handleSubmitFeedback(w http.ResponseWriter, r *http.Request)
 			Detail: safety.Redact(req.Comment), Risk: 0, Success: true,
 		})
 	}
-	// P55 反馈回流：负面反馈把该问答对追加进评测数据集（供回归纳入）
+	// 反馈回流：负面反馈把该问答对追加进评测数据集（供回归纳入）
 	if fb.Rating == feedback.RatingDown && s.deps.EvalCasesDir != "" && req.SessionID != "" {
 		if q, a := s.latestQAPairForUser(p, req.SessionID); q != "" && a != "" {
 			if err := eval.AppendCase(s.deps.EvalCasesDir, eval.CaseFromFeedback(q, a, fb.Comment)); err != nil {
@@ -79,7 +79,7 @@ func (s *APIServer) latestQAPairForUser(p Principal, sessionID string) (string, 
 	if !ok {
 		return "", ""
 	}
-	if sess.Tenant != p.Tenant || sess.User != p.User { // A4 归属校验
+	if sess.Tenant != p.Tenant || sess.User != p.User { // 归属校验
 		return "", ""
 	}
 	sess.runMu.Lock() // 与 /v1/chat 同款执行锁：锁内重取最新历史

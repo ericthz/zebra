@@ -213,7 +213,7 @@ func TestManagerConcurrency(t *testing.T) {
 	}
 }
 
-// TestSubmitQueueFullReturnsError P2-11：队列满时 Submit 立即返回 ErrQueueFull，
+// TestSubmitQueueFullReturnsError：队列满时 Submit 立即返回 ErrQueueFull
 // 不得无限阻塞。执行函数阻塞，让并发槽+队列全部占满。
 func TestSubmitQueueFullReturnsError(t *testing.T) {
 	store := NewInMemoryStore()
@@ -242,7 +242,7 @@ func TestSubmitQueueFullReturnsError(t *testing.T) {
 				gotFull = true
 			}
 		case <-time.After(2 * time.Second):
-			t.Fatalf("第 %d 个提交阻塞了（P2-11 未修复）", i)
+			t.Fatalf("第 %d 个提交阻塞了（队列满时应立即返回错误，不应阻塞）", i)
 		}
 	}
 	if !gotFull {

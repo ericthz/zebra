@@ -51,7 +51,7 @@ func TestCacheTenantIsolation(t *testing.T) {
 	c := New(fakeEmbedder{}, 0.5, 10)
 	ctx := context.Background()
 
-	// A 用户的问题写入缓存后，B 用户即使问完全一样的问题也不得命中（A4 隔离）
+	// A 用户的问题写入缓存后，B 用户即使问完全一样的问题也不得命中（隔离）
 	c.Put(ctx, "user-a", "我叫什么名字", "你叫小明。")
 
 	if _, ok := c.Get(ctx, "user-b", "我叫什么名字"); ok {

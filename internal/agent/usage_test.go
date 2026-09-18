@@ -5,7 +5,7 @@ import (
 	"testing"
 )
 
-// TestUsageReportedPerCall F-3：用量必须按"每次成功 LLM 调用"上报，且模型名
+// TestUsageReportedPerCall：用量必须按"每次成功 LLM 调用"上报，且模型名
 // 取实际服务者（不是固定主模型名）。
 func TestUsageReportedPerCall(t *testing.T) {
 	var calls []struct {
@@ -39,7 +39,7 @@ func TestUsageReportedPerCall(t *testing.T) {
 	}
 }
 
-// TestUsageToolLoopPerTurn F-3：多轮工具循环每轮都要上报用量（此前只记一次）。
+// TestUsageToolLoopPerTurn：多轮工具循环每轮都要上报用量（此前只记一次）。
 func TestUsageToolLoopPerTurn(t *testing.T) {
 	var n int
 	ag := newLoopAgent(&alternatingProvider{}, 4) // 会触发死循环中止
@@ -55,7 +55,7 @@ func TestUsageToolLoopPerTurn(t *testing.T) {
 	}
 }
 
-// TestUsageNotReportedWithoutHook F-3：未挂 OnUsage 时静默跳过，不 panic。
+// TestUsageNotReportedWithoutHook：未挂 OnUsage 时静默跳过，不 panic。
 func TestUsageNotReportedWithoutHook(t *testing.T) {
 	ag := newLoopAgent(&scriptedProvider{}, 3)
 	if _, err := ag.SelfConsistent(context.Background(), "问题", 3); err != nil {

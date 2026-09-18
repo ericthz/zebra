@@ -1,4 +1,4 @@
-// ReAct 轨迹（P45）：把 Agent 执行从"隐式工具循环"升级为"显式推理-行动"。
+// ReAct 轨迹：把 Agent 执行从"隐式工具循环"升级为"显式推理-行动"。
 //
 // ReAct（Reasoning + Acting）是最经典的 Agent 范式：每一步模型输出
 //
@@ -20,7 +20,7 @@ import (
 	"github.com/ericthz/zebra/internal/safety"
 )
 
-// reactStepSchema ReAct 每步输出 JSON Schema（P17 强约束）。
+// reactStepSchema ReAct 每步输出 JSON Schema（强约束）。
 var reactStepSchema = map[string]interface{}{
 	"type": "object",
 	"properties": map[string]interface{}{
@@ -71,11 +71,11 @@ func (a *Agent) ReActStream(ctx context.Context, question string, opts RunOption
 // react ReAct 推理-行动循环核心。emit 非 nil 时上报 思考/行动/观察/结论。
 // maxSteps<=0 时默认 6 步；工具执行复用 registry（权限/审计/高危确认）。
 func (a *Agent) react(ctx context.Context, question string, opts RunOptions, maxSteps int, emit func(Event)) (string, error) {
-	ctx = a.usageCtx(ctx) // F-3：ReAct 路径（StructuredChat/工具执行）计入用量
+	ctx = a.usageCtx(ctx) // ReAct 路径（StructuredChat/工具执行）计入用量
 	if maxSteps <= 0 {
 		maxSteps = 6
 	}
-	// D18 输入审核（P2-A）：与 run 同一道横切点，先于一切 LLM 调用与工具执行。
+	// 输入审核：与 run 同一道横切点，先于一切 LLM 调用与工具执行。
 	if err := a.checkInput(question); err != nil {
 		return "", err
 	}
@@ -105,7 +105,7 @@ func (a *Agent) react(ctx context.Context, question string, opts RunOptions, max
 		// 无行动 → 输出答案（或异常）
 		if out.Action.Name == "" {
 			if out.Answer != "" {
-				// D18 输出审核（P2-A）：先审核再持久化，违规回答不进历史/记忆。
+				// 输出审核：先审核再持久化，违规回答不进历史/记忆。
 				if err := a.checkOutput(out.Answer); err != nil {
 					return "", err
 				}
@@ -123,7 +123,7 @@ func (a *Agent) react(ctx context.Context, question string, opts RunOptions, max
 		if emit != nil && out.Thought != "" {
 			emit(Event{Type: EventPhase, Phase: "思考：" + out.Thought})
 		}
-		// D20 高危二次确认：与 toolLoop 共用 confirmTool，拒绝则反馈给模型
+		// 高危二次确认：与 toolLoop 共用 confirmTool，拒绝则反馈给模型
 		confirmGranted, rejected := a.confirmTool(out.Action.Name, out.Action.Args, opts)
 		if rejected {
 			result := "用户拒绝执行该工具调用，请勿重试并改用其他方式回答"
@@ -138,7 +138,7 @@ func (a *Agent) react(ctx context.Context, question string, opts RunOptions, max
 		if terr != nil {
 			result = "工具执行错误: " + terr.Error()
 		}
-		// D17 工具结果侧注入防护（P2-C）：与 toolLoop 同款双防线——
+		// 工具结果侧注入防护：与 toolLoop 同款双防线——
 		// 先清洗（剥离注入指令/混淆），再检出注入并打审计标记 + 追加
 		// "视为数据"提醒。防止 fetch_url 等工具抓取的网页含"忽略以上指令"
 		// 类内容污染模型上下文。

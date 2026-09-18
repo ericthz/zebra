@@ -26,7 +26,7 @@ func newSilentStdio() *stdioTransport {
 	return tr
 }
 
-// TestStdioNotificationDoesNotBlock 通知类请求写后即返回（P34 stdio 竞态修复）。
+// TestStdioNotificationDoesNotBlock 通知类请求写后即返回（stdio 竞态修复）。
 func TestStdioNotificationDoesNotBlock(t *testing.T) {
 	tr := newSilentStdio()
 	ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)

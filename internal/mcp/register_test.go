@@ -83,7 +83,7 @@ func TestRegisterToolsHTTP(t *testing.T) {
 	}
 }
 
-// TestValidateHTTPStart P2-E：HTTP 模式未配置令牌必须拒绝启动（默认拒绝）。
+// TestValidateHTTPStart：HTTP 模式未配置令牌必须拒绝启动（默认拒绝）。
 func TestValidateHTTPStart(t *testing.T) {
 	// HTTP 模式 + 空令牌 → 拒绝
 	if err := ValidateHTTPStart(":9000", ""); err == nil {

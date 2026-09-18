@@ -1,4 +1,4 @@
-// 语音交互 API（P25）：
+// 语音交互 API：
 //
 //	POST /v1/voice/transcribe  音频 → 文本（multipart 上传）
 //	POST /v1/voice/synthesize  文本 → 音频（返回音频字节流）
@@ -20,7 +20,7 @@ import (
 
 // readAudioPart 从 multipart 流式读取 file 字段与其他表单字段。
 // 不用 ParseMultipartForm：它会把整个请求体先缓冲到内存（32MB 档），
-// 再 ReadAll(f) 又复制一份，峰值内存翻倍（修复 P25 双重缓冲）。
+// 再 ReadAll(f) 又复制一份，峰值内存翻倍（修复双重缓冲）。
 // limitBytes 为音频大小上限；返回音频字节 + 其他文本字段。
 // 注意：不能遇到 file 就提前 return，否则 file 之后的表单字段
 // （如 session_id）会被丢弃——顺序无关地读完整个 multipart 流。

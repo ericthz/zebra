@@ -41,7 +41,7 @@ func TestRedisTaskStore(t *testing.T) {
 		t.Fatal("不存在任务应返回 false")
 	}
 
-	// 用户过滤（A4 隔离）
+	// 用户过滤（隔离）
 	other := &Task{ID: "t2", User: "bob", Prompt: "x"}
 	store.Create(other)
 	alice := store.List("alice")

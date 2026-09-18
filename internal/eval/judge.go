@@ -1,4 +1,4 @@
-// Package eval LLM 质量闭环（P3）。
+// Package eval LLM 质量闭环。
 //
 // 核心：LLM-as-a-Judge —— 用"评审模型"给 Agent 的输出自动打分，
 // 替代人工逐条看。这是"质量闭环"的发动机：

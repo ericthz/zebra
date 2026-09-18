@@ -1,6 +1,6 @@
-// 用量上报（B5/P5）：provider 层通过 ctx 把每次成功的 LLM 调用上报给上层。
+// 用量上报：provider 层通过 ctx 把每次成功的 LLM 调用上报给上层。
 //
-// 背景（F-3）：此前 OnUsage 只在 agent.run 末尾调用一次——react/plan/debate/
+// 背景：此前 OnUsage 只在 agent.run 末尾调用一次——react/plan/debate/
 // consistent/supervisor/rewrite 等直接调 StructuredChat/ChatWithFallback 的
 // 路径从不触发（成本=0）；多轮工具循环每轮重发全量上下文也只记一次；降级时
 // 按主模型名计价（错归模型）。

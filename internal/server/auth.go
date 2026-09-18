@@ -1,8 +1,8 @@
-// A3 认证鉴权 + B6 限流配额。
+// 认证鉴权 + 限流配额。
 //
-//	A3 API Key + RBAC：Bearer Token 认证，admin/user 两级角色；
-//	   角色→工具权限的具体收敛在 tool.Registry 白名单（D20）。
-//	B6 令牌桶限流：按身份维度（user）限流，防滥用；配额计量由 Metrics 完成。
+//	API Key + RBAC：Bearer Token 认证，admin/user 两级角色；
+//	   角色→工具权限的具体收敛在 tool.Registry 白名单。
+//	令牌桶限流：按身份维度（user）限流，防滥用；配额计量由 Metrics 完成。
 package server
 
 import (
@@ -15,7 +15,7 @@ type Principal struct {
 	Key    string `json:"key"`
 	User   string `json:"user"`
 	Role   string `json:"role"`   // "admin" | "user"
-	Tenant string `json:"tenant"` // A4 租户隔离标识
+	Tenant string `json:"tenant"` // 租户隔离标识
 }
 
 // KeyStore 内存 API Key 存储（生产替换为数据库/密钥管理系统）。
@@ -44,7 +44,7 @@ func (k *KeyStore) Authenticate(bearer string) (Principal, bool) {
 	return p, ok
 }
 
-// ---------------- B6 令牌桶限流 ----------------
+// ---------------- 令牌桶限流 ----------------
 
 // TokenBucket 单桶令牌桶（均匀速率 + 突发容量）。
 type TokenBucket struct {

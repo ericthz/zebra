@@ -38,7 +38,7 @@ func TestRewriteQueryFallback(t *testing.T) {
 	}
 }
 
-// TestBuildMessagesRewrites P48 集成：开启后检索与最终消息都用改写后的问题。
+// TestBuildMessagesRewrites 集成：开启后检索与最终消息都用改写后的问题。
 func TestBuildMessagesRewrites(t *testing.T) {
 	prompts := prompt.NewRegistry("z")
 	prompts.Register(&prompt.Template{Name: "assistant", Version: "v1", Text: "系统提示"})

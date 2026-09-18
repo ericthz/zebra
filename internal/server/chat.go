@@ -1,4 +1,4 @@
-// A1 对话 API：/v1/chat（JSON）与 /v1/chat/stream（SSE）。
+// 对话 API：/v1/chat（JSON）与 /v1/chat/stream（SSE）。
 package server
 
 import (
@@ -22,17 +22,17 @@ type ChatRequest struct {
 	SessionID    string   `json:"session_id,omitempty"`    // 空则新建会话
 	Message      string   `json:"message"`                 // 用户输入
 	Stream       bool     `json:"stream,omitempty"`        // 是否流式
-	ConfirmRisky bool     `json:"confirm_risky,omitempty"` // D20 高危工具二次确认授权
-	Mode         string   `json:"mode,omitempty"`          // "plan"=规划-执行(P10)；"reflect"=反思(P40)；"react"=ReAct(P45)；空=普通执行
-	Shadow       bool     `json:"shadow,omitempty"`        // P21 显式触发影子评测（默认按采样率）
-	Images       []string `json:"images,omitempty"`        // C14 多模态：http(s) URL 或 data: 数据 URI 列表（可空）
+	ConfirmRisky bool     `json:"confirm_risky,omitempty"` // 高危工具二次确认授权
+	Mode         string   `json:"mode,omitempty"`          // "plan"=规划-执行；"reflect"=反思；"react"=ReAct；空=普通执行
+	Shadow       bool     `json:"shadow,omitempty"`        // 显式触发影子评测（默认按采样率）
+	Images       []string `json:"images,omitempty"`        // 多模态：http(s) URL 或 data: 数据 URI 列表（可空）
 }
 
 // ChatResponse 非流式响应。
 type ChatResponse struct {
 	SessionID string `json:"session_id"`
 	Reply     string `json:"reply"`
-	Shadow    bool   `json:"shadow_sampled,omitempty"` // P21 是否进了影子对比
+	Shadow    bool   `json:"shadow_sampled,omitempty"` // 是否进了影子对比
 }
 
 // handleChat 非流式对话。
@@ -55,13 +55,13 @@ func (s *APIServer) handleChat(w http.ResponseWriter, r *http.Request) {
 
 	ag := s.agentFor(sess)
 	opts := agent.RunOptions{Images: req.Images}
-	// D20 高危二次确认：仅当客户端显式传 confirm_risky=true 时，才向执行层
+	// 高危二次确认：仅当客户端显式传 confirm_risky=true 时，才向执行层
 	// 授权高危工具；且按角色收敛——调用方角色不在该工具 AllowedRoles 内时
 	// 一律拒绝（防止普通用户借 confirm 越权执行 admin-only 工具）。
 	if req.ConfirmRisky {
 		opts.Confirm = s.confirmFor(sess.User, sess.Role)
 	}
-	// P10 编排模式：先规划再逐步执行；P13 多 Agent：自动路由到专业 Worker
+	// 编排模式：先规划再逐步执行； 多 Agent：自动路由到专业 Worker
 	var reply string
 	switch req.Mode {
 	case "plan":
@@ -79,17 +79,17 @@ func (s *APIServer) handleChat(w http.ResponseWriter, r *http.Request) {
 		}
 		s.deps.Logger.Info("supervisor 路由", "worker", workerName)
 	case "reflect":
-		// P40 反思：先正常回答，再让模型批判-改进一轮；修订版写回历史并重新审核
-		// （P2-B：RunReflect 统一处理修订版的 D18 审核与 replaceLastAssistant）。
+		// 反思：先正常回答，再让模型批判-改进一轮；修订版写回历史并重新审核
+		// （RunReflect 统一处理修订版的审核与 replaceLastAssistant）。
 		reply, err = ag.RunReflect(ctx, req.Message, opts)
 	case "react":
-		// P45 ReAct：显式"思考→行动→观察→答案"轨迹
+		// ReAct：显式"思考→行动→观察→答案"轨迹
 		reply, err = ag.ReAct(ctx, req.Message, opts, 6)
 	case "debate":
-		// P46 双 Agent 辩论：左右立场独立作答→交换观点→评审选优
+		// 双 Agent 辩论：左右立场独立作答→交换观点→评审选优
 		reply, _, err = ag.Debate(ctx, req.Message, "", "", req.Images...)
 	case "consistent":
-		// P40 自一致性：独立采样多份回答再择优，降低单次采样随机性。
+		// 自一致性：独立采样多份回答再择优，降低单次采样随机性。
 		// 采样数可配（SELF_CONSISTENT_SAMPLES，默认 3），与 CLI mode 对齐。
 		reply, err = ag.SelfConsistent(ctx, req.Message, atoiDefault(os.Getenv("SELF_CONSISTENT_SAMPLES"), 3), req.Images...)
 	default:
@@ -105,23 +105,23 @@ func (s *APIServer) handleChat(w http.ResponseWriter, r *http.Request) {
 
 	resp := ChatResponse{SessionID: sess.ID, Reply: reply}
 
-	// P28 水平扩展：Redis 会话存储需要把 Agent 修改后的历史写回，
+	// 水平扩展：Redis 会话存储需要把 Agent 修改后的历史写回
 	// 否则下一轮请求打到其它副本时读不到多轮上下文。
 	s.persistHistory(sess)
 
-	// P21 影子模式：真实流量按采样率（或显式请求）复制给候选模型对比。
+	// 影子模式：真实流量按采样率（或显式请求）复制给候选模型对比。
 	// 异步执行，不阻塞用户响应；结论落影子记录，供换模型前的回归评估。
 	if s.deps.Shadow != nil && s.deps.Shadow.WantSample(req.Shadow) {
 		resp.Shadow = true
 		go func() {
 			res := s.deps.Shadow.Run(context.Background(), sess.User, sess.ID, req.Message, reply, s.deps.Model)
 			s.deps.Logger.Info("shadow sampled", "id", res.ID, "verdict", res.Verdict)
-			s.maybeShadowRollback() // P42 金丝雀自动回滚
+			s.maybeShadowRollback() // 金丝雀自动回滚
 		}()
 	}
 	json.NewEncoder(w).Encode(resp)
 
-	// P4 主动出站：任务完成异步通知业务系统（不阻塞响应）
+	// 主动出站：任务完成异步通知业务系统（不阻塞响应）
 	if s.deps.Notifier != nil {
 		go func() {
 			ev := notify.Event{
@@ -135,7 +135,7 @@ func (s *APIServer) handleChat(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// confirmFor 构造 D20 高危二次确认回调：
+// confirmFor 构造高危二次确认回调：
 //   - 该工具非高危（风险 < 2）→ 无需确认，直接放行
 //   - 该工具声明了 AllowedRoles 且当前角色不在其中 → 拒绝（防越权）
 //   - 高危 + 角色匹配 → 放行（客户端已显式传 confirm_risky=true）
@@ -170,7 +170,7 @@ func truncateText(s string, n int) string {
 	return s
 }
 
-// redactErr 工具失败错误脱敏（S-2）：错误里可能携带命令完整输出或机密
+// redactErr 工具失败错误脱敏：错误里可能携带命令完整输出或机密
 // （run_command 失败时输出并入 err），日志只留脱敏+截断后的摘要。
 func redactErr(err error) string {
 	if err == nil {
@@ -179,7 +179,7 @@ func redactErr(err error) string {
 	return truncateText(safety.Redact(err.Error()), 240)
 }
 
-// handleChatStream SSE 流式：事件逐条推给客户端（C10）。
+// handleChatStream SSE 流式：事件逐条推给客户端。
 func (s *APIServer) handleChatStream(w http.ResponseWriter, r *http.Request) {
 	var req ChatRequest
 	if err := decodeJSON(w, r, &req); err != nil {
@@ -232,7 +232,7 @@ func (s *APIServer) handleChatStream(w http.ResponseWriter, r *http.Request) {
 			flusher.Flush()
 		}
 	}
-	// P28：流式对话结束后同样写回历史
+	// 流式对话结束后同样写回历史
 	s.persistHistory(sess)
 }
 
@@ -273,7 +273,7 @@ func (s *APIServer) streamForMode(ctx context.Context, ag *agent.Agent, sess *Se
 				reply, _, err = ag.Debate(ctx, req.Message, "", "", req.Images...)
 			}
 			if err != nil {
-				// 流式失败：内部细节只进日志，客户端收通用文案（P1-10）
+				// 流式失败：内部细节只进日志，客户端收通用文案
 				s.deps.Logger.Warn("stream failed", "session", sess.ID, "err", err)
 				ch <- agent.Event{Type: agent.EventError, Message: userFacingError(err), Err: err}
 			} else if reply != "" && !streamed {
@@ -296,7 +296,7 @@ func (s *APIServer) persistHistory(sess *Session) {
 	}
 }
 
-// sessionFor 获取或创建会话，并刷新 TTL（A2）。
+// sessionFor 获取或创建会话，并刷新 TTL。
 func (s *APIServer) sessionFor(ctx context.Context, sessionID string) (*Session, error) {
 	p, ok := principal(ctx)
 	if !ok {
@@ -304,7 +304,7 @@ func (s *APIServer) sessionFor(ctx context.Context, sessionID string) (*Session,
 	}
 	if sessionID != "" {
 		if sess, ok := s.deps.Sessions.Get(sessionID); ok {
-			if sess.Tenant == p.Tenant && sess.User == p.User { // A4 会话归属校验
+			if sess.Tenant == p.Tenant && sess.User == p.User { // 会话归属校验
 				s.deps.Sessions.Touch(sessionID)
 				return sess, nil
 			}
@@ -333,12 +333,12 @@ func (s *APIServer) lockSession(ctx context.Context, sessionID string) (*Session
 	}
 	sess.runMu.Lock() // 共享执行锁（Redis 模式下按会话 ID 统一互斥）
 	// 用 sess.ID 而非原始参数重取：新建会话时 sessionID 为空，直接 Get("")
-	// 永远取不到（P0-3 改为报错后，空 ID 会把新建会话误判为"已过期"）。
+	// 永远取不到（改为报错后，空 ID 会把新建会话误判为"已过期"）。
 	if fresh, ok := s.deps.Sessions.Get(sess.ID); ok {
 		// 锁内重取最新历史；fresh 与 sess 共享同一把 runMu（同一指针）
 		return fresh, nil
 	}
-	// 锁内重取失败 = 会话已被删除/过期（P0-3）。绝不能回退锁外陈旧快照
+	// 锁内重取失败 = 会话已被删除/过期。绝不能回退锁外陈旧快照
 	// 继续执行并整历史写回——那会让被遗忘/过期的会话"复活"。解锁后报错，
 	// 与 sessionFor 的语义一致。
 	sess.runMu.Unlock()

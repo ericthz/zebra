@@ -57,7 +57,7 @@ func TestProfileLearnViewForget(t *testing.T) {
 		return rr
 	}
 
-	// 1. 对话中说出事实 → Agent 自动学习（P22 画像学习）
+	// 1. 对话中说出事实 → Agent 自动学习（画像学习）
 	rr := do("POST", "/v1/chat", "alice-key", `{"message":"我叫小明，我喜欢吃火锅。"}`)
 	if rr.Code != http.StatusOK {
 		t.Fatalf("chat 应 200，实际 %d body=%s", rr.Code, rr.Body.String())
@@ -85,14 +85,14 @@ func TestProfileLearnViewForget(t *testing.T) {
 		t.Fatalf("应只遗忘 name: %s", rr.Body.String())
 	}
 
-	// 4. 租户/用户隔离：bob 看不到 alice 的画像（A4）
+	// 4. 租户/用户隔离：bob 看不到 alice 的画像
 	rr = do("GET", "/v1/user/profile", "bob-key", "")
 	if rr.Code != http.StatusOK || strings.Contains(rr.Body.String(), "火锅") {
 		t.Fatalf("bob 不应看到 alice 画像: %s", rr.Body.String())
 	}
 }
 
-// TestProfileConflictResolveAPI P57：同名不同值记录冲突，可裁决回退旧值。
+// TestProfileConflictResolveAPI：同名不同值记录冲突，可裁决回退旧值。
 func TestProfileConflictResolveAPI(t *testing.T) {
 	h, profile := newProfileServer(t)
 	do := func(method, path, key, body string) *httptest.ResponseRecorder {

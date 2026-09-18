@@ -1,12 +1,12 @@
-// 插件动态加载（P53）：从目录加载 JSON 定义的外部 HTTP 工具，运行时注册。
+// 插件动态加载：从目录加载 JSON 定义的外部 HTTP 工具，运行时注册。
 //
 // 背景：工具目前是编译期注册（改一个工具就要改代码重编译）。本包让
-// "新增一个外部服务工具"变成"放一个 JSON 文件"——配合 P18 热更新，
+// "新增一个外部服务工具"变成"放一个 JSON 文件"——配合热更新
 // 运行时即可加载/卸载插件工具。
 //
 // 协议：插件工具 Execute 时 POST 到 def.url，body 为 {"args":{...}}，
 // 响应文本作为工具结果返回。生产演化方向：插件鉴权、超时/重试、
-// SSRF 校验（复用 P6）、插件市场/版本管理。
+// SSRF 校验、插件市场/版本管理。
 package plugin
 
 import (
@@ -77,7 +77,7 @@ func (t *HTTPPluginTool) Parameters() map[string]interface{} {
 
 // Execute POST {"args":{...}} 到插件 URL，响应文本即工具结果。
 func (t *HTTPPluginTool) Execute(ctx context.Context, args map[string]interface{}) (string, error) {
-	// SSRF 校验（复用 P6）：插件 URL 若被篡改指向内网，Agent 会成为内网代理。
+	// SSRF 校验：插件 URL 若被篡改指向内网，Agent 会成为内网代理。
 	// AllowHosts 白名单命中则放行（供内部插件显式声明），否则拦截内网/本地地址。
 	// 返回解析后的安全 IP，供 DialContext 绑定，消除 DNS 重绑定 TOCTOU 窗口（六8）。
 	safeIPs, err := safety.ResolveSSRF(t.def.URL, t.def.AllowHosts)

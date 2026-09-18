@@ -1,4 +1,4 @@
-// 前端 Web UI（P14/P61）：单页 SSE 聊天工作台（企业风格）。
+// 前端 Web UI：单页 SSE 聊天工作台。
 //
 // 零构建：一个内嵌 HTML 文件，浏览器直接可用；聊天走 /v1/chat/stream（SSE），
 // 用 fetch + ReadableStream 解析（POST + JSON body，EventSource 不支持）。
@@ -200,7 +200,7 @@ const chatUI = `<!DOCTYPE html>
     <div class="chat" id="chat">
       <div class="empty-hint" id="empty">
         <div class="big" data-ic-prepend="logo" data-ic-size="22">Zebra AI Agent</div>
-        企业级 Agent 对话工作台<br>
+        Agent 对话工作台<br>
         支持工具调用 · RAG 知识库 · 记忆画像 · 五种推理模式<br>
         输入问题开始对话，Enter 发送 / Shift+Enter 换行
       </div>

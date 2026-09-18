@@ -1,11 +1,11 @@
-// 多 Agent 辩论（P46）：让两个不同立场的"辩手"先独立作答，再互相看到
+// 多 Agent 辩论：让两个不同立场的"辩手"先独立作答，再互相看到
 // 对方观点后给出最终立场，最后由评审模型选优——提升答案的全面性与稳健性。
 //
 // 流程：
 //
 //	左/右独立回答 → 交换观点（各给一轮反驳/完善）→ 评审选优（结构化输出）
 //
-// 可靠性：评审失败时回退左方最终立场（不阻塞，B9 容错）。
+// 可靠性：评审失败时回退左方最终立场（不阻塞， 容错）。
 package agent
 
 import (
@@ -28,10 +28,10 @@ var debateSchema = map[string]interface{}{
 }
 
 // Debate 双 Agent 辩论。返回（胜出答案, 评审理由, error）。
-// Debate 双 Agent 辩论（P46）：左右立场独立作答→交换观点→评审选优。
-// images 为可选多模态图片（C14，可省略；有图时两路辩手都能看到）。
+// Debate 双 Agent 辩论：左右立场独立作答→交换观点→评审选优。
+// images 为可选多模态图片（可省略；有图时两路辩手都能看到）。
 func (a *Agent) Debate(ctx context.Context, question, leftPersona, rightPersona string, images ...string) (string, string, error) {
-	ctx = a.usageCtx(ctx) // F-3：辩论 5 次 LLM 调用全部计入用量
+	ctx = a.usageCtx(ctx) // 辩论 5 次 LLM 调用全部计入用量
 	if leftPersona == "" {
 		leftPersona = "你是左方辩手：严谨，偏好引用事实、数据与计算验证。"
 	}
@@ -39,7 +39,7 @@ func (a *Agent) Debate(ctx context.Context, question, leftPersona, rightPersona 
 		rightPersona = "你是右方辩手：务实，偏好简明、直接、可执行的结论。"
 	}
 
-	// D18 输入审核（P2-A）：先于两路辩手 LLM 调用。
+	// 输入审核：先于两路辩手 LLM 调用。
 	if err := a.checkInput(question); err != nil {
 		return "", "", err
 	}
@@ -75,7 +75,7 @@ func (a *Agent) Debate(ctx context.Context, question, leftPersona, rightPersona 
 	data, err := provider.StructuredChat(ctx, a.cfg.Router,
 		[]provider.Message{{Role: "user", Content: prompt}}, debateSchema)
 	if err != nil {
-		// D18 输出审核（P2-A）：回退立场也是最终交付物，须先审核再持久化。
+		// 输出审核：回退立场也是最终交付物，须先审核再持久化。
 		if cerr := a.checkOutput(left2); cerr != nil {
 			return "", "", cerr
 		}

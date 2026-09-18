@@ -1,5 +1,5 @@
-// B5 可观测性横切：结构化日志 + 请求 ID + panic 恢复。
-// 同时承载 A3（认证注入）与 B6（限流）两个横切点，集中在这里装配。
+// 可观测性横切：结构化日志 + 请求 ID + panic 恢复。
+// 同时承载 （认证注入）与 （限流）两个横切点，集中在这里装配。
 package server
 
 import (
@@ -81,7 +81,7 @@ func AccessLog(logger *slog.Logger, metrics *Metrics) func(http.Handler) http.Ha
 	}
 }
 
-// Recover panic 恢复：请求级兜底，不拖垮整个服务（B9 错误恢复）。
+// Recover panic 恢复：请求级兜底，不拖垮整个服务（错误恢复）。
 func Recover(logger *slog.Logger) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -124,7 +124,7 @@ func Auth(keys *KeyStore, public ...string) func(http.Handler) http.Handler {
 	}
 }
 
-// RateLimit 限流中间件：按用户身份限流，超限返回 429（B6）。
+// RateLimit 限流中间件：按用户身份限流，超限返回 429。
 func RateLimit(lim *RateLimiter) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -147,7 +147,7 @@ func principal(ctx context.Context) (Principal, bool) {
 	return p, ok
 }
 
-// requireAdmin 管理员专用（P1-9）：须先经 Auth（principal 已注入），
+// requireAdmin 管理员专用：须先经 Auth（principal 已注入）
 // 非 admin 角色一律 403。用于 /metrics/cost 等含跨用户明细的敏感端点。
 func requireAdmin(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -164,7 +164,7 @@ func requireAdmin(next http.Handler) http.Handler {
 	})
 }
 
-// userFacingError 透传面向用户的错误文案；其余一律回通用文案（P1-10）：
+// userFacingError 透传面向用户的错误文案；其余一律回通用文案：
 // 内部错误细节（provider URL、堆栈、内部路径）只进日志，绝不外泄给客户端。
 func userFacingError(err error) string {
 	var ue *agent.UserFacingError

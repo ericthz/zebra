@@ -141,7 +141,7 @@ func envOr(k, d string) string {
 	return d
 }
 
-// TestJudgeClosedLoop —— 质量闭环演示（P3）：
+// TestJudgeClosedLoop —— 质量闭环演示：
 // 跑真实 Agent → 用 Judge 模型给每个回答自动打分 → 汇总通过率。
 // 开启方式：ZEBRA_EVAL=1 go test ./test/eval/ -v
 func TestJudgeClosedLoop(t *testing.T) {

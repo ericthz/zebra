@@ -177,7 +177,7 @@ func TestRedisSessionConcurrentChat(t *testing.T) {
 	}
 }
 
-// TestRedisForgetNoResurrection P0-2：ForgetUser 删除会话后，迟到的对话
+// TestRedisForgetNoResurrection：ForgetUser 删除会话后，迟到的对话
 // 请求必须报 401（lockSession 锁内重取失败），绝不能基于陈旧快照继续执行
 // 并 persistHistory 把已删会话写回复活。
 func TestRedisForgetNoResurrection(t *testing.T) {

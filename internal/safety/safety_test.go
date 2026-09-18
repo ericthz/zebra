@@ -13,7 +13,7 @@ func TestRedact(t *testing.T) {
 	}
 }
 
-// TestRedactExtendedSecrets P1-7：日志脱敏必须覆盖 PEM 私钥、Bearer Token、
+// TestRedactExtendedSecrets：日志脱敏必须覆盖 PEM 私钥、Bearer Token
 // 以及显式的 password|token|secret|api_key=值——而不仅是 sk-/手机/邮箱。
 func TestRedactExtendedSecrets(t *testing.T) {
 	in := "auth=Bearer abcdefghijklmnop123456, " +
@@ -33,7 +33,7 @@ func TestRedactExtendedSecrets(t *testing.T) {
 	}
 }
 
-// TestRedactArgsWhitelist P1-7：工具参数日志按键名白名单脱敏。
+// TestRedactArgsWhitelist：工具参数日志按键名白名单脱敏。
 // command/content 等可携带内嵌机密的键必须输出 [redacted]，值不得入日志。
 func TestRedactArgsWhitelist(t *testing.T) {
 	out := RedactArgs(map[string]interface{}{

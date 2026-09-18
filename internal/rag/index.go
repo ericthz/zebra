@@ -1,4 +1,4 @@
-// RAG 向量索引（检索增强生成，P8）。
+// RAG 向量索引（检索增强生成）。
 //
 // 价值：把"私有知识库"接进 Agent —— 用户问知识库里的问题，Agent 检索
 // 相关片段作为上下文，回答就有据可依（接地/防幻觉），而不是模型瞎编。
@@ -101,7 +101,7 @@ func (idx *Index) Retrieve(ctx context.Context, query string, topK int) ([]Resul
 	return out, nil
 }
 
-// Reset 清空索引（P18 热更新：重载知识库前先清空再重建）。
+// Reset 清空索引（热更新：重载知识库前先清空再重建）。
 func (idx *Index) Reset() {
 	idx.mu.Lock()
 	defer idx.mu.Unlock()
@@ -109,7 +109,7 @@ func (idx *Index) Reset() {
 	idx.vecs = nil
 }
 
-// RetrieveHybrid 混合检索（P20）：向量余弦 × 0.7 + BM25 关键词 × 0.3 融合。
+// RetrieveHybrid 混合检索：向量余弦 × 0.7 + BM25 关键词 × 0.3 融合。
 // 向量擅长"语义相近"，BM25 擅长"精确术语"，融合后兼顾两者。
 // 生产演化方向：加 Reranker（重排模型）二次精排；权重按召回率调优。
 func (idx *Index) RetrieveHybrid(ctx context.Context, query string, topK int, vectorWeight float64) ([]Result, error) {

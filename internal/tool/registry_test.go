@@ -63,7 +63,7 @@ func TestRoleAllowlist(t *testing.T) {
 		t.Fatalf("user 默认应可用，err=%v", err)
 	}
 
-	// 高危工具：user 不在 AllowedRoles，即使 confirm 也拒绝（D20）
+	// 高危工具：user 不在 AllowedRoles，即使 confirm 也拒绝
 	if _, err := r.Execute(context.Background(), "risky", map[string]interface{}{}, "u", "user", true); err == nil {
 		t.Fatal("高危工具 user 应被拒绝")
 	}
@@ -97,7 +97,7 @@ func TestToolsForRoleFiltering(t *testing.T) {
 	}
 }
 
-// TestRegistryNames P31：启动清单需要"全部工具名"（排序）。
+// TestRegistryNames：启动清单需要"全部工具名"（排序）。
 func TestRegistryNames(t *testing.T) {
 	r := NewRegistry()
 	r.Register(fakeTool{})  // "fake"
@@ -134,8 +134,8 @@ func (f *fakeAuditor) LogToolCall(_, _, _ string, _ int, _ map[string]interface{
 	f.calls++
 }
 
-// TestSubsetCopiesAudit S-4：Subset 必须复制审计器，否则 supervisor/worker
-// 子注册表的工具调用不会产生审计事件（D20 审计链路断裂）。
+// TestSubsetCopiesAudit：Subset 必须复制审计器，否则 supervisor/worker
+// 子注册表的工具调用不会产生审计事件（审计链路断裂）。
 func TestSubsetCopiesAudit(t *testing.T) {
 	r := NewRegistry()
 	r.Register(fakeTool{})

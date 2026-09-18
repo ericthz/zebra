@@ -38,7 +38,7 @@ func (e *leakyError) Error() string {
 	return "POST https://internal-llm.example/v1/chat/completions: 401 invalid key"
 }
 
-// TestInternalErrorMasked P1-10：provider 内部错误（URL/密钥/堆栈细节）
+// TestInternalErrorMasked：provider 内部错误（URL/密钥/堆栈细节）
 // 不得回给客户端，客户端只看到通用文案；细节仅进日志。
 func TestInternalErrorMasked(t *testing.T) {
 	keys := NewKeyStore()
@@ -76,7 +76,7 @@ func TestInternalErrorMasked(t *testing.T) {
 	}
 }
 
-// TestModerationErrorUserVisible P1-10：内容审核拦截属用户应知信息，
+// TestModerationErrorUserVisible：内容审核拦截属用户应知信息
 // 文案需保留（用户需要知道"为什么被拒"），不套通用 internal error。
 func TestModerationErrorUserVisible(t *testing.T) {
 	keys := NewKeyStore()
@@ -121,7 +121,7 @@ func TestUserFacingErrorHelper(t *testing.T) {
 	}
 }
 
-// TestRedactErr S-2：工具失败错误（可能携带命令完整输出/机密）写入日志前
+// TestRedactErr：工具失败错误（可能携带命令完整输出/机密）写入日志前
 // 必须脱敏+截断，不能原样落日志。
 func TestRedactErr(t *testing.T) {
 	if redactErr(nil) != "" {
@@ -142,7 +142,7 @@ func TestRedactErr(t *testing.T) {
 	}
 }
 
-// TestTaskRunLoadsSessionHistory F-5：任务执行必须以会话现有历史为上文
+// TestTaskRunLoadsSessionHistory：任务执行必须以会话现有历史为上文
 // （"继续上一条分析"类任务），无检查点时不从空历史重跑。
 func TestTaskRunLoadsSessionHistory(t *testing.T) {
 	keys := NewKeyStore()
@@ -183,7 +183,7 @@ func TestTaskRunLoadsSessionHistory(t *testing.T) {
 	}
 }
 
-// TestTaskRunCorruptCheckpoint P2-13：检查点损坏时任务应失败并报出解析错误，
+// TestTaskRunCorruptCheckpoint：检查点损坏时任务应失败并报出解析错误
 // 而不是静默丢弃上文继续执行。
 func TestTaskRunCorruptCheckpoint(t *testing.T) {
 	keys := NewKeyStore()
@@ -221,7 +221,7 @@ func TestTaskRunCorruptCheckpoint(t *testing.T) {
 	}
 }
 
-// TestEmptyMessageRejected P2-12：空消息不得进入 Agent（会浪费一次调用且
+// TestEmptyMessageRejected：空消息不得进入 Agent（会浪费一次调用且
 // 污染历史），chat/stream/tasks 一律 400。
 func TestEmptyMessageRejected(t *testing.T) {
 	keys := NewKeyStore()

@@ -1,4 +1,4 @@
-// 用户画像 API（P22 记忆画像/遗忘机制）。
+// 用户画像 API（记忆画像/遗忘机制）。
 //
 //	GET  /v1/user/profile         查看自己的画像事实（TTL 之外自动隐藏）
 //	POST /v1/user/profile/forget  删除一条画像事实（{key: "name"}）
@@ -29,7 +29,7 @@ func (s *APIServer) handleGetProfile(w http.ResponseWriter, r *http.Request) {
 	jsonOK(w, map[string]interface{}{
 		"user":      p.User,
 		"facts":     facts,
-		"conflicts": s.deps.Profile.ConflictsFor(p.User), // P57 冲突消解可见
+		"conflicts": s.deps.Profile.ConflictsFor(p.User), // 冲突消解可见
 	})
 }
 
@@ -77,7 +77,7 @@ type ProfileResolveRequest struct {
 	Keep string `json:"keep"` // "old"=回退旧值；其它值=保留新值
 }
 
-// handleResolveProfile 裁决画像冲突（P57）。
+// handleResolveProfile 裁决画像冲突。
 func (s *APIServer) handleResolveProfile(w http.ResponseWriter, r *http.Request) {
 	p, ok := principal(r.Context())
 	if !ok {

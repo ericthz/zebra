@@ -40,7 +40,7 @@ func TestIndexAddRetrieve(t *testing.T) {
 	ctx := context.Background()
 
 	// 摄入两篇"不同主题"的文档
-	idx.AddDocument(ctx, "zebra 是一个企业级 AI Agent 参考项目，提供工具调用、记忆、技能等能力。", "zebra.md", 100, 0)
+	idx.AddDocument(ctx, "zebra 是一个 AI Agent 参考项目，提供工具调用、记忆、技能等能力。", "zebra.md", 100, 0)
 	idx.AddDocument(ctx, "北京的天气夏天炎热，冬天寒冷，四季分明。", "beijing.md", 100, 0)
 	idx.AddDocument(ctx, "春天的樱桃很好吃，果园里有很多樱桃树。", "cherry.md", 100, 0)
 

@@ -1,4 +1,4 @@
-// Package schema 结构化输出强约束（P17）。
+// Package schema 结构化输出强约束。
 //
 // 背景：zebra 之前对"结构化输出"是【事后校验】（工具参数解析失败再反馈重试）。
 // 成熟产品更进一步：在【生成前】约束（constrained decoding / response_format），
@@ -115,7 +115,7 @@ func jsonEqual(a, b interface{}) bool {
 
 // enumValues 归一化 enum 声明，兼容 []string 与 []interface{} 两种形态。
 // 历史上 schema 混用两种类型；只按 []interface{} 断言会导致 []string 声明的
-// enum 静默失效（P2-D：如 debate.go 的 winner、memory/extract.go 的类型枚举）。
+// enum 静默失效（如 debate.go 的 winner、memory/extract.go 的类型枚举）。
 // 返回 []interface{} 以便 jsonEqual 深度比较。
 func enumValues(sch map[string]interface{}) []interface{} {
 	if enum, ok := sch["enum"].([]string); ok {

@@ -1,4 +1,4 @@
-// 结构化输出通用助手（P17）：优先"强约束"，回退"事后校验"。
+// 结构化输出通用助手：优先"强约束"，回退"事后校验"。
 package provider
 
 import (
@@ -34,7 +34,7 @@ func StructuredChat(ctx context.Context, router *Router, messages []Message, jso
 			}
 			// 强约束仍不符 → 落到普通路径
 		}
-		// F-6：主模型强约束失败（小模型常见）时不得再次调用主模型——
+		// 主模型强约束失败（小模型常见）时不得再次调用主模型——
 		// ChatWithFallback 会从链首重新尝试，导致同一主模型被调两次（成本
 		// 翻倍）。改为从"主模型之后的备选"开始普通调用，避免重复请求。
 		return structuredFallback(ctx, router, messages, jsonSchema, router.Primary())
@@ -47,7 +47,7 @@ func StructuredChat(ctx context.Context, router *Router, messages []Message, jso
 	content := msg.Content
 	if err := schema.Validate([]byte(content), jsonSchema); err != nil {
 		// 小模型常把 JSON 包在 Markdown 代码围栏里（```json ... ```），
-		// 直接校验失败；提取 JSON 块再校验（P62 修复，惠及全部结构化输出）。
+		// 直接校验失败；提取 JSON 块再校验（修复，惠及全部结构化输出）。
 		if extracted := extractJSON(content); extracted != "" {
 			if schema.Validate([]byte(extracted), jsonSchema) == nil {
 				return []byte(extracted), nil
@@ -67,7 +67,7 @@ func StructuredChat(ctx context.Context, router *Router, messages []Message, jso
 }
 
 // structuredFallback 强约束失败后的回退路径：跳过主模型，从链上其余候选
-// 依次普通调用 + 事后校验（F-6：不再让 ChatWithFallback 从头重试主模型）。
+// 依次普通调用 + 事后校验（不再让 ChatWithFallback 从头重试主模型）。
 // skip 指定要跳过的 provider（刚失败的主模型，可能为 nil）。
 func structuredFallback(ctx context.Context, router *Router, messages []Message, jsonSchema map[string]interface{}, skip Provider) ([]byte, error) {
 	for _, p := range router.Chain() {

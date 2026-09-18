@@ -1,4 +1,4 @@
-// 文档产出（P23）：生成最小 PDF（Portable Document Format）。
+// 文档产出：生成最小 PDF（Portable Document Format）。
 //
 // PDF 文件结构（理解它 = 会造 PDF）：
 //

@@ -131,7 +131,7 @@ func TestPrintInventoryDisabled(t *testing.T) {
 	}
 }
 
-// TestRedactURL S-3：带凭据的 URL（REDIS_URL / WEBHOOK_URL）打印清单时
+// TestRedactURL：带凭据的 URL（REDIS_URL / WEBHOOK_URL）打印清单时
 // 必须剥掉 userinfo，不泄露密码。
 func TestRedactURL(t *testing.T) {
 	cases := []struct{ in, want string }{

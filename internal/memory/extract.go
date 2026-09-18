@@ -1,8 +1,8 @@
-// 画像事实抽取器（P27）：从"规则抽取"升级为"LLM 抽取 + 规则回退"。
+// 画像事实抽取器：从"规则抽取"升级为"LLM 抽取 + 规则回退"。
 //
-// 背景：P22 的规则抽取（正则）只能识别固定句式（"我叫X"），换种说法就漏。
+// 背景： 的规则抽取（正则）只能识别固定句式（"我叫X"），换种说法就漏。
 // LLM 语义理解更强，但贵且可能跑飞。本文件用"双保险"：
-//  1. LLM 结构化抽取（P17 StructuredChat 强约束 JSON）
+//  1. LLM 结构化抽取（StructuredChat 强约束 JSON）
 //  2. 失败/空结果 → 自动回退规则抽取（零成本保底）
 //
 // 生产演化方向：抽取结果按置信度阈值入库；LLM 抽取可异步批量跑
@@ -22,7 +22,7 @@ type Extractor interface {
 	Extract(ctx context.Context, text string) ([]Fact, error)
 }
 
-// RuleExtractor 规则抽取（P22 原有能力，作为默认与回退实现）。
+// RuleExtractor 规则抽取（原有能力，作为默认与回退实现）。
 type RuleExtractor struct{}
 
 // Extract 调用规则抽取器（纯正则，零成本、确定性）。
@@ -30,7 +30,7 @@ func (RuleExtractor) Extract(_ context.Context, text string) ([]Fact, error) {
 	return ExtractFacts(text), nil
 }
 
-// FactsSchema LLM 抽取输出 JSON Schema（P17 强约束 + 事后校验复用）。
+// FactsSchema LLM 抽取输出 JSON Schema（强约束 + 事后校验复用）。
 var FactsSchema = map[string]interface{}{
 	"type": "object",
 	"properties": map[string]interface{}{

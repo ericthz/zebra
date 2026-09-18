@@ -1,6 +1,6 @@
 // Anthropic 协议适配（/v1/messages）。
 // 本实现只演示非流式：ChatStream 回退为"Chat 一次 + 单个 delta + done"，
-// 展示"接口必须支持流式、但底层可不流式"的兼容模式（C10）。
+// 展示"接口必须支持流式、但底层可不流式"的兼容模式。
 package provider
 
 import (

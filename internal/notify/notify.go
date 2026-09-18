@@ -1,4 +1,4 @@
-// Package notify 主动出站能力（P4）。
+// Package notify 主动出站能力。
 //
 // 背景：Agent 此前只会"你问→我答"。成熟 Agent 需要【主动通知】：
 //   - 长任务完成回调（异步任务跑完 → Webhook 推给业务系统）

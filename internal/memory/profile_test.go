@@ -122,7 +122,7 @@ func TestForgetPolicyCapacity(t *testing.T) {
 	}
 }
 
-// TestProfileConflictAndResolve P57：同 key 不同取值记录冲突，可裁决回退。
+// TestProfileConflictAndResolve：同 key 不同取值记录冲突，可裁决回退。
 func TestProfileConflictAndResolve(t *testing.T) {
 	s := NewProfileStore()
 	now := time.Date(2026, 8, 13, 12, 0, 0, 0, time.UTC)
@@ -152,7 +152,7 @@ func TestProfileConflictAndResolve(t *testing.T) {
 	}
 }
 
-// TestProfileConsolidate P57：同分类下取值归一化相同的事实合并，保留高置信度。
+// TestProfileConsolidate：同分类下取值归一化相同的事实合并，保留高置信度。
 func TestProfileConsolidate(t *testing.T) {
 	s := NewProfileStore()
 	now := time.Date(2026, 8, 13, 12, 0, 0, 0, time.UTC)

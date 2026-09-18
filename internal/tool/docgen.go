@@ -1,6 +1,6 @@
-// 文档/图表产出工具（P23）：Agent 把聊天结果落地成"可交付文件"。
+// 文档/图表产出工具：Agent 把聊天结果落地成"可交付文件"。
 //
-// 背景：企业 Agent 的产出常是 Word 报告、图表、PDF 摘要——如果只能输出
+// 背景：实际项目里 Agent 的产出常是 Word 报告、图表、PDF 摘要——如果只能输出
 // 文本，用户还得自己复制粘贴。本文件把 internal/docgen 的能力暴露为
 // 工具（generate_docx / generate_chart），模型按 schema 传参即可生成文件。
 //
@@ -104,7 +104,7 @@ func (t *GenerateChartTool) Execute(_ context.Context, args map[string]interface
 	return ToResult(fmt.Sprintf("已生成图表 %s（%d 个数据点）", path, len(values))), nil
 }
 
-// GeneratePDFTool 生成 PDF 摘要文档（P23 产出族第三件）。
+// GeneratePDFTool 生成 PDF 摘要文档（产出族第三件）。
 // 说明：最小 PDF 引擎仅支持 ASCII，中文字符会被替换为占位符，避免乱码。
 type GeneratePDFTool struct{ Sandbox *ExecSandbox }
 

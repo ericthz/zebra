@@ -1,6 +1,6 @@
-// Package cost 成本与资源治理（P5）。
+// Package cost 成本与资源治理。
 //
-// 背景：LLM 按 token 计费，企业必须知道"钱花哪了"。zebra 此前只有裸计数器。
+// 背景：LLM 按 token 计费，实际部署必须知道"钱花哪了"。zebra 此前只有裸计数器。
 // 本包实现：
 //   - CostTracker：按 用户×会话 记录 in/out token，结合单价表估算成本
 //   - 提供 Prometheus 文本输出（挂 /metrics/cost），支撑账单与预算告警
@@ -8,7 +8,7 @@
 // 单价模型（简化）：每百万 token 价格，按模型名查找；未知模型给默认价。
 // 生产演化方向：
 //   - 精确单价从计费平台/合同读取；按账期拆分月度账单
-//   - 预算告警：用量超阈值触发 notify（复用 P4）
+//   - 预算告警：用量超阈值触发 notify
 package cost
 
 import (

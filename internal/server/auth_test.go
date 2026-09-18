@@ -31,7 +31,7 @@ func TestTokenBucketRateLimit(t *testing.T) {
 		t.Fatalf("期望突发 3 次放行，实际 %d", allowed)
 	}
 
-	// 不同用户互不影响（A4 隔离）
+	// 不同用户互不影响（隔离）
 	other := lim.Allow("u2")
 	if !other {
 		t.Fatal("不同用户应使用独立桶")

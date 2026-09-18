@@ -68,7 +68,7 @@ func (dropMidStreamProvider) ChatStream(_ context.Context, _ []provider.Message,
 }
 
 // TestStreamDegradeKeepsPrefix 验证：流式中途失败降级非流式时，已发出的 delta
-// 不丢失，且补全后的完整答案也要推送给客户端（F-2 修复：此前只推半截前缀）。
+// 不丢失，且补全后的完整答案也要推送给客户端（修复：此前只推半截前缀）。
 func TestStreamDegradeKeepsPrefix(t *testing.T) {
 	ag := newLoopAgent(dropMidStreamProvider{}, 3)
 	var events []Event

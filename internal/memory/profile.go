@@ -1,4 +1,4 @@
-// 记忆画像（P22）：从对话里持续提炼"关于用户的事实"，形成可复用的用户画像。
+// 记忆画像：从对话里持续提炼"关于用户的事实"，形成可复用的用户画像。
 //
 // 背景：记忆系统只会"存对话"，但产品要的是"懂用户"——下次对话自动带上
 // 已知偏好/事实，少问一遍。本文件实现：
@@ -30,7 +30,7 @@ type Fact struct {
 type ProfileStore struct {
 	mu        sync.Mutex
 	facts     map[string]map[string]Fact // user → key → fact
-	conflicts map[string][]Conflict      // user → 冲突历史（P57）
+	conflicts map[string][]Conflict      // user → 冲突历史
 }
 
 // Conflict 一次画像事实冲突记录：同一 key 出现不同取值（且置信度可比）。
@@ -72,7 +72,7 @@ func (s *ProfileStore) Learn(user string, facts []Fact, now time.Time) {
 			if old.Confidence == f.Confidence && old.LastSeen.After(f.LastSeen) {
 				continue
 			}
-			// P57 冲突消解：不同取值且新置信度与旧值可比 → 记录冲突，不静默覆盖
+			// 冲突消解：不同取值且新置信度与旧值可比 → 记录冲突，不静默覆盖
 			if old.Value != f.Value && f.Confidence >= old.Confidence*0.8 {
 				s.conflicts[user] = append(s.conflicts[user], Conflict{
 					Key: f.Key, OldValue: old.Value, NewValue: f.Value, Time: now,
@@ -197,7 +197,7 @@ func (s *ProfileStore) ForgetKey(user, key string) bool {
 	return false
 }
 
-// ForgetUser 删除某用户的全部画像（被遗忘权，P6 扩展）。
+// ForgetUser 删除某用户的全部画像（被遗忘权， 扩展）。
 func (s *ProfileStore) ForgetUser(user string) int {
 	s.mu.Lock()
 	defer s.mu.Unlock()

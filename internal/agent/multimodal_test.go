@@ -19,7 +19,7 @@ func TestUserMessagePlain(t *testing.T) {
 	_ = ag
 }
 
-// TestUserMessageImages C14：有图时构造 text+image_url 内容块，
+// TestUserMessageImages：有图时构造 text+image_url 内容块，
 // 且图片列表原样透传（URL/data URI 均由上层归一化）。
 func TestUserMessageImages(t *testing.T) {
 	empty := &Agent{}
@@ -48,7 +48,7 @@ func TestUserMessageImagesOnly(t *testing.T) {
 	}
 }
 
-// TestBuildMessagesWithImages C14：buildMessages 组装出的用户消息携带
+// TestBuildMessagesWithImages：buildMessages 组装出的用户消息携带
 // ContentParts（历史里仍只写文本——多模态图只进当前轮）。
 func TestBuildMessagesWithImages(t *testing.T) {
 	ag := newLoopAgent(&scriptedProvider{}, 3)

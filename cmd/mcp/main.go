@@ -22,7 +22,7 @@ func main() {
 
 	logger := slog.New(slog.NewTextHandler(os.Stderr, nil))
 
-	// P2-E：HTTP 模式默认拒绝——必须显式配置 Bearer 令牌才能启动，否则
+	// HTTP 模式默认拒绝——必须显式配置 Bearer 令牌才能启动，否则
 	// 未授权调用可直达只读工具（消费配额、泄露出口 IP 等）。stdio 模式
 	// 走本地管道无需鉴权（客户端已由启动方授权）。
 	if err := mcp.ValidateHTTPStart(*httpAddr, *httpToken); err != nil {

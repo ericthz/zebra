@@ -1,4 +1,4 @@
-// A2 会话管理：多会话并发、TTL 过期、租户/角色隔离。
+// 会话管理：多会话并发、TTL 过期、租户/角色隔离。
 //
 // 当前为进程内内存实现（单机部署足够）；生产替换为 Redis/数据库，
 // 只需实现 SessionStore 接口。
@@ -13,7 +13,7 @@ import (
 	"github.com/ericthz/zebra/internal/provider"
 )
 
-// Session 一次会话：持有与 Agent 共享的历史，绑定租户/用户/角色（A4 隔离）。
+// Session 一次会话：持有与 Agent 共享的历史，绑定租户/用户/角色（隔离）。
 type Session struct {
 	ID      string
 	Tenant  string
@@ -46,10 +46,10 @@ type SessionStore interface {
 	Create(user, tenant, role string, ttl time.Duration) (*Session, error)
 	Delete(id string)
 	Touch(id string) bool            // 续期
-	ForgetUser(user string) []string // P6 被遗忘权：删该用户全部会话，返回被删 ID
+	ForgetUser(user string) []string // 被遗忘权：删该用户全部会话，返回被删 ID
 }
 
-// HistoryPersister 可选接口：会话存储需要"历史写回"时实现（P28 Redis）。
+// HistoryPersister 可选接口：会话存储需要"历史写回"时实现（Redis）。
 // Agent 在对话中通过 History() 指针就地修改历史，内存实现天然同步；
 // Redis 等分布式存储必须在请求结束前把最新历史显式写回，否则多轮丢失。
 type HistoryPersister interface {
@@ -64,7 +64,7 @@ type InMemoryStore struct {
 	stop  chan struct{}
 }
 
-// NewInMemoryStore 构造，并启动后台过期清理（A2 过期）。
+// NewInMemoryStore 构造，并启动后台过期清理（过期）。
 func NewInMemoryStore(ttl time.Duration) *InMemoryStore {
 	s := &InMemoryStore{items: make(map[string]*Session), ttl: ttl, stop: make(chan struct{})}
 	go s.cleanupLoop()
@@ -139,7 +139,7 @@ func (s *InMemoryStore) Create(user, tenant, role string, ttl time.Duration) (*S
 	return sess, nil
 }
 
-// Delete 删除会话。删除前先获取该会话的 runMu（P0-2）：保证删除严格
+// Delete 删除会话。删除前先获取该会话的 runMu：保证删除严格
 // 发生在所有在飞对话（持锁执行 rememberTurn/Profile.Learn/persistHistory）
 // 完成之后，否则 in-flight 的写回会让已删会话"复活"。
 func (s *InMemoryStore) Delete(id string) {
@@ -156,7 +156,7 @@ func (s *InMemoryStore) Delete(id string) {
 	s.mu.Unlock()
 }
 
-// ForgetUser 被遗忘权（P6）：删除某用户全部会话，返回被删会话 ID。
+// ForgetUser 被遗忘权：删除某用户全部会话，返回被删会话 ID。
 // 先 RLock 快照该用户的会话（避免持 map 锁去拿 runMu 造成锁序反转：
 // chat 路径是 runMu→map，此处必须也是 runMu→map），逐个取 runMu 后再删。
 func (s *InMemoryStore) ForgetUser(user string) []string {

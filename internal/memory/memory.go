@@ -1,4 +1,4 @@
-// Package memory 分层记忆系统（C12）。
+// Package memory 分层记忆系统。
 //
 // 分层模型：
 //
@@ -17,7 +17,7 @@ import (
 // Memory 长期记忆存储与检索接口。
 type Memory interface {
 	Store(ctx context.Context, content string, meta map[string]string) error
-	// Retrieve 检索与 query 相关、且属于指定 user 的记忆（P1-A 用户隔离）。
+	// Retrieve 检索与 query 相关、且属于指定 user 的记忆（用户隔离）。
 	// user 为空时表示不按用户过滤（仅内部工具用，如启动自检）。
 	Retrieve(ctx context.Context, user, query string, limit int) ([]string, error)
 	Clear(ctx context.Context) error
@@ -35,7 +35,7 @@ func NewManager(working *WorkingMemory, long Memory) *Manager {
 }
 
 // Remember 记录一轮对话：写入工作记忆；异步写入长期记忆（不阻塞主流程）。
-// user 写进长期记忆元数据，供按用户删除（P6 被遗忘权，见 ForgetUser）。
+// user 写进长期记忆元数据，供按用户删除（被遗忘权，见 ForgetUser）。
 func (m *Manager) Remember(sessionID, user, userInput, assistant string) {
 	if m.Working != nil {
 		m.Working.Add(sessionID, userInput, assistant)
@@ -44,7 +44,7 @@ func (m *Manager) Remember(sessionID, user, userInput, assistant string) {
 		return
 	}
 	content := "用户: " + userInput + "\n助手: " + assistant
-	go func() { // 异步落库，失败不阻塞对话（B9 容错）
+	go func() { // 异步落库，失败不阻塞对话（容错）
 		ctx, cancel := context.WithTimeout(context.Background(), 5_000_000_000)
 		defer cancel()
 		_ = m.Long.Store(ctx, content, map[string]string{
@@ -53,7 +53,7 @@ func (m *Manager) Remember(sessionID, user, userInput, assistant string) {
 	}()
 }
 
-// ReplaceLast 覆写某会话最近一条工作记忆（F-4：reflect 修订版替换原回答）。
+// ReplaceLast 覆写某会话最近一条工作记忆（reflect 修订版替换原回答）。
 // 只改工作记忆，不动长期记忆（修订版与原始回答的语义召回均可接受，避免
 // 为同一轮追加两条长期记录造成膨胀）。
 func (m *Manager) ReplaceLast(sessionID, userInput, assistant string) {
@@ -62,18 +62,18 @@ func (m *Manager) ReplaceLast(sessionID, userInput, assistant string) {
 	}
 }
 
-// TenantScoped 可选接口：长期记忆支持按租户切分（QdrantMemory 实现，A4）。
+// TenantScoped 可选接口：长期记忆支持按租户切分（QdrantMemory 实现）。
 type TenantScoped interface {
 	ForTenant(tenant string) Memory
 }
 
-// UserScoped 可选接口：长期记忆支持按用户删除（P6 被遗忘权）。
+// UserScoped 可选接口：长期记忆支持按用户删除（被遗忘权）。
 // 实现须保证只删除该用户的记忆，不误伤同租户其他用户。
 type UserScoped interface {
 	ForgetUser(ctx context.Context, user string) error
 }
 
-// ForgetTenant 被遗忘权（P6/GDPR）：删除某租户的全部长期记忆。
+// ForgetTenant 被遗忘权（/GDPR）：删除某租户的全部长期记忆。
 // 生产还需：删除会话、日志、审计中的该租户数据（全链路）。
 func (m *Manager) ForgetTenant(ctx context.Context, tenant string) error {
 	if m.Long == nil {
@@ -86,7 +86,7 @@ func (m *Manager) ForgetTenant(ctx context.Context, tenant string) error {
 	return m.Long.Clear(ctx)
 }
 
-// ForgetUser 被遗忘权（P6/GDPR）：删除某用户的全部长期记忆。
+// ForgetUser 被遗忘权（/GDPR）：删除某用户的全部长期记忆。
 // 优先走按用户删除（不会误删同租户其他用户）；存储不支持按用户删除时，
 // 退化为整租户清空并返回错误说明，由调用方决定是否接受。
 func (m *Manager) ForgetUser(ctx context.Context, user string) error {
@@ -110,7 +110,7 @@ func (m *Manager) ForgetSession(sessionID string) {
 }
 
 // Recall 检索相关记忆：先合并工作记忆的最近摘要，再叠加长期记忆语义检索。
-// user 用于长期记忆按用户过滤（P1-A：防止检索到同租户其他用户的对话）。
+// user 用于长期记忆按用户过滤（防止检索到同租户其他用户的对话）。
 func (m *Manager) Recall(ctx context.Context, sessionID, user, query string, limit int) []string {
 	var out []string
 	if m.Working != nil {

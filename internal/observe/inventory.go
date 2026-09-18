@@ -1,4 +1,4 @@
-// Package observe 启动能力清单（P31/P36）：Zebra CLI 与 server 共用的清单渲染。
+// Package observe 启动能力清单：Zebra CLI 与 server 共用的清单渲染。
 //
 // 背景：两个入口此前各自打印清单，行结构与状态措辞容易漂移。抽成共享
 // 渲染器后，两端只用同一套符号、配色与行格式；"这台程序有什么"一目了然，
@@ -17,7 +17,7 @@ import (
 	"github.com/ericthz/zebra/internal/tool"
 )
 
-// redactURL 能力清单脱敏（S-3）：剥掉 URL 里的 userinfo（REDIS_URL 常带
+// redactURL 能力清单脱敏：剥掉 URL 里的 userinfo（REDIS_URL 常带
 // 密码），避免清单/日志泄露凭据。解析失败原样返回。
 func redactURL(u string) string {
 	parsed, err := url.Parse(u)

@@ -1,4 +1,4 @@
-// Package console 终端排版小工具（P31 增强）：解决 emoji/CJK/ASCII 混排
+// Package console 终端排版小工具（增强）：解决 emoji/CJK/ASCII 混排
 // 时的对齐问题，让启动清单与执行痕迹更易读。
 //
 // 为什么需要：fmt 的 %-Ns 按"字节/runes"补齐，但终端里 CJK 字符占 2 格、

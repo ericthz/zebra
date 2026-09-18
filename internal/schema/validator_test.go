@@ -49,7 +49,7 @@ func TestValidateEnumAndArray(t *testing.T) {
 	}
 }
 
-// TestValidateEnumStringSlice P2-D：enum 用 []string 声明时也必须生效
+// TestValidateEnumStringSlice：enum 用 []string 声明时也必须生效
 // （历史 bug：只断言 []interface{}，[]string 声明的 enum 被静默跳过）。
 func TestValidateEnumStringSlice(t *testing.T) {
 	sch := map[string]interface{}{

@@ -56,9 +56,9 @@ func assertBlocked(t *testing.T, err error, hist []provider.Message, wm *memory.
 	}
 }
 
-// ---- P2-A：react / plan / debate / consistent 四种模式补输入+输出审核 ----
+// ----：react / plan / debate / consistent 四种模式补输入+输出审核 ----
 
-// TestReactModeration P2-A：ReAct 输入/输出都要过 D18，违规不得持久化。
+// TestReactModeration：ReAct 输入/输出都要过，违规不得持久化。
 func TestReactModeration(t *testing.T) {
 	// 输入违规：先于任何 LLM 调用拦截
 	ag, hist, wm := newModeAgent(&reactProvider{}, "违规词")
@@ -82,7 +82,7 @@ func (blockedReactProvider) ChatStream(context.Context, []provider.Message, []pr
 	return nil, context.Canceled
 }
 
-// TestPlanModeration P2-A：规划-执行输入/输出都要过 D18。
+// TestPlanModeration：规划-执行输入/输出都要过。
 func TestPlanModeration(t *testing.T) {
 	// 输入违规
 	ag, hist, wm := newModeAgent(&plannerProvider{}, "违规词")
@@ -112,7 +112,7 @@ func (blockedDebateProvider) ChatStream(context.Context, []provider.Message, []p
 	return nil, context.Canceled
 }
 
-// TestDebateModeration P2-A：辩论输入/输出都要过 D18。
+// TestDebateModeration：辩论输入/输出都要过。
 func TestDebateModeration(t *testing.T) {
 	// 输入违规
 	ag, hist, wm := newModeAgent(&blockedDebateProvider{}, "违规词")
@@ -125,7 +125,7 @@ func TestDebateModeration(t *testing.T) {
 	assertBlocked(t, err, *hist, wm)
 }
 
-// TestConsistentModeration P2-A：自一致性输入/输出都要过 D18。
+// TestConsistentModeration：自一致性输入/输出都要过。
 func TestConsistentModeration(t *testing.T) {
 	// 输入违规
 	ag, hist, wm := newModeAgent(&scriptedProvider{}, "违规词")
@@ -152,7 +152,7 @@ func (blockedConsistentProvider) ChatStream(context.Context, []provider.Message,
 	return nil, context.Canceled
 }
 
-// ---- P2-B：reflect 修订版写回历史并重新审核 ----
+// ----：reflect 修订版写回历史并重新审核 ----
 
 // reflectToRevisedProvider 普通回答返回原回答，反思调用返回修订版。
 type reflectToRevisedProvider struct{}
@@ -169,7 +169,7 @@ func (reflectToRevisedProvider) ChatStream(context.Context, []provider.Message, 
 	return nil, context.Canceled
 }
 
-// TestRunReflectWritesRevisedToHistory P2-B：修订版必须替换历史中的原回答，
+// TestRunReflectWritesRevisedToHistory：修订版必须替换历史中的原回答
 // 下一轮上下文读到的是改进后的回答。
 func TestRunReflectWritesRevisedToHistory(t *testing.T) {
 	ag, hist, wm := newModeAgent(&reflectToRevisedProvider{}, "绝不匹配的敏感词")
@@ -184,13 +184,13 @@ func TestRunReflectWritesRevisedToHistory(t *testing.T) {
 	if len(h) != 2 || h[0].Content != "北京天气" || h[1].Content != "改进版回答" {
 		t.Fatalf("历史应为（问题→修订版），实际 %+v", h)
 	}
-	// F-4：工作记忆最近一条应被修订版替换（不再残留原回答）
+	// 工作记忆最近一条应被修订版替换（不再残留原回答）
 	if items := wm.Recent("s", 10); len(items) != 1 || !strings.Contains(items[0], "改进版回答") || strings.Contains(items[0], "原回答") {
 		t.Fatalf("记忆应被修订版替换，实际: %+v", items)
 	}
 }
 
-// TestRunReflectModeratesRevised P2-B：修订版是最终交付物，必须重新过 D18——
+// TestRunReflectModeratesRevised：修订版是最终交付物，必须重新过 ——
 // 修订版违规时报错，历史不残留违规文本。
 func TestRunReflectModeratesRevised(t *testing.T) {
 	ag, hist, wm := newModeAgent(&reflectToRevisedProvider{}, "改进版")

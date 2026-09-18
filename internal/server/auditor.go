@@ -1,4 +1,4 @@
-// tool.Auditor → safety.AuditLog 适配：工具调用审计 + 成功率指标（P3 质量闭环）。
+// tool.Auditor → safety.AuditLog 适配：工具调用审计 + 成功率指标（质量闭环）。
 package server
 
 import (
@@ -20,10 +20,10 @@ func NewToolAuditor(log safety.AuditLog, metrics *Metrics) *auditAdapter {
 }
 
 // LogToolCall 记录一次工具调用：
-//   - 审计事件（参数落库前脱敏 D19/S-1：复用 RedactArgs 白名单，与 OnTool
+//   - 审计事件（参数落库前脱敏：复用 RedactArgs 白名单，与 OnTool
 //     日志同一强度——run_command 完整命令串、write_file content 等可携带
 //     机密的键绝不原样落审计日志）
-//   - 成功率指标：tool_call:<name>:ok / tool_call:<name>:fail（P3）
+//   - 成功率指标：tool_call:<name>:ok / tool_call:<name>:fail
 func (a *auditAdapter) LogToolCall(user, role, toolName string, risk int, args map[string]interface{}, result string, err error) {
 	detail := safety.RedactArgs(args)
 	evt := safety.AuditEvent{

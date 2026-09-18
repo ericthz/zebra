@@ -1,8 +1,8 @@
-// 记忆装配（P32）：按环境变量构建分层记忆，供 cmd/server 与 cmd/zebra 共用。
+// 记忆装配：按环境变量构建分层记忆，供 cmd/server 与 cmd/zebra 共用。
 //
 // 背景：两个入口此前各自装配记忆，Zebra CLI 只启工作记忆、与 server 行为
 // 不一致。抽成共享 helper 后两端逻辑天然一致：配置了 QDRANT_URL 且探针
-// 通过 → 工作记忆 + Qdrant 长期记忆；否则自动降级为仅工作记忆（B7）。
+// 通过 → 工作记忆 + Qdrant 长期记忆；否则自动降级为仅工作记忆。
 //
 // 环境变量（与 README §5 对齐）：
 //
@@ -34,7 +34,7 @@ func SetupManager(logger *slog.Logger) (*Manager, bool) {
 	}
 	qmem := NewQdrantMemory(q, envOr("QDRANT_COLLECTION", "zebra_mem"), vectorSize(), NewEmbedderFromEnv())
 	// 就绪探针：先 ensure 集合（首启自动创建，幂等），再检索验证读写链路；
-	// Qdrant 不可用（连接失败/嵌入服务不可用）时自动降级为仅工作记忆（B7）。
+	// Qdrant 不可用（连接失败/嵌入服务不可用）时自动降级为仅工作记忆。
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
 	if err := qmem.ensure(ctx); err != nil {
@@ -82,8 +82,8 @@ func vectorSize() int {
 	return n
 }
 
-// SetupManagerRedis 按环境变量装配"Redis 长期记忆"分层记忆（P51）。
-// 先写读探针 key 验证连通性；失败自动降级为仅工作记忆（B7）。
+// SetupManagerRedis 按环境变量装配"Redis 长期记忆"分层记忆。
+// 先写读探针 key 验证连通性；失败自动降级为仅工作记忆。
 func SetupManagerRedis(client *redis.Client, logger *slog.Logger) (*Manager, bool) {
 	working := NewWorkingMemory(10)
 	mem := NewManager(working, nil)

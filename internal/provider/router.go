@@ -1,4 +1,4 @@
-// 多模型路由（C15）：主备切换 / 降级 fallback / 按序尝试。
+// 多模型路由：主备切换 / 降级 fallback / 按序尝试。
 //
 // 生产演进方向：
 //   - 按任务类型路由（长文本→大模型、简单问答→小模型、成本优先→便宜模型）
@@ -17,7 +17,7 @@ import (
 type Router struct {
 	// chain 按优先级从高到低；index 指向主提供者（也即 chain 首个成功候选）。
 	chain []Provider
-	mu    sync.Mutex // 保护 chain（P42：影子评测异步 promote/回滚并发安全）
+	mu    sync.Mutex // 保护 chain（影子评测异步 promote/回滚并发安全）
 }
 
 // NewRouter 构造。providers 第一个为默认主模型，其余为备选（fallback）。
@@ -55,9 +55,9 @@ func (r *Router) Get(name string) Provider {
 	return nil
 }
 
-// Promote 灰度切换（P26）：把指定名称的候选 Provider 提升为主模型。
+// Promote 灰度切换：把指定名称的候选 Provider 提升为主模型。
 // 返回（被顶替的原主模型名, 是否成功）；已位于主位时 prev 为空。
-// 切换即时生效，后续请求走新主；prev 供金丝雀自动回滚（P42）使用。
+// 切换即时生效，后续请求走新主；prev 供金丝雀自动回滚使用。
 func (r *Router) Promote(name string) (string, bool) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -82,8 +82,8 @@ func (r *Router) Promote(name string) (string, bool) {
 }
 
 // ChatWithFallback 依次尝试每个候选，直到成功；返回命中的 Provider 供上层观测。
-// 这同时实现了 B7 的"降级"：主模型故障 → 自动切备选，而不是把错误抛给用户。
-// 先在锁内取候选链快照再遍历，避免与异步 Promote/回滚（P42）并发改写切片造成数据竞争。
+// 这同时实现了"降级"：主模型故障 → 自动切备选，而不是把错误抛给用户。
+// 先在锁内取候选链快照再遍历，避免与异步 Promote/回滚并发改写切片造成数据竞争。
 func (r *Router) ChatWithFallback(ctx context.Context, messages []Message, tools []Tool) (Message, Provider, error) {
 	r.mu.Lock()
 	chain := append([]Provider(nil), r.chain...)
@@ -99,7 +99,7 @@ func (r *Router) ChatWithFallback(ctx context.Context, messages []Message, tools
 			lastErr = err
 			continue // 主模型失败 → 降级到下一个
 		}
-		// B5/P5 用量上报（F-3）：每次成功调用上报一次，模型名取实际服务者。
+		// 用量上报：每次成功调用上报一次，模型名取实际服务者。
 		ReportUsage(ctx, UsageCall{Model: p.Name(), In: messages, Out: msg})
 		return msg, p, nil
 	}

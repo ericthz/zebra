@@ -1,4 +1,4 @@
-// A1 服务装配：路由 + 中间件 + 优雅停机（B8）。
+// 服务装配：路由 + 中间件 + 优雅停机。
 package server
 
 import (
@@ -33,47 +33,47 @@ import (
 
 // Deps 服务依赖（全部可替换，方便测试与生产替换实现）。
 type Deps struct {
-	Router        *provider.Router     // C15 多模型路由
-	Tools         *tool.Registry       // D20 工具权限
-	Prompts       *prompt.Registry     // C16 提示词
-	Mem           *memory.Manager      // C12 记忆
-	Window        *agent.ContextWindow // C11 上下文工程
-	Moderator     safety.Moderator     // D18 内容审核
-	Audit         safety.AuditLog      // D20 审计
-	Sessions      SessionStore         // A2 会话
-	Keys          *KeyStore            // A3 API Key
-	Rate          *RateLimiter         // B6 限流
-	Logger        *slog.Logger         // B5 日志
-	Metrics       *Metrics             // B5 指标
+	Router        *provider.Router     // 多模型路由
+	Tools         *tool.Registry       // 工具权限
+	Prompts       *prompt.Registry     // 提示词
+	Mem           *memory.Manager      // 记忆
+	Window        *agent.ContextWindow // 上下文工程
+	Moderator     safety.Moderator     // 内容审核
+	Audit         safety.AuditLog      // 审计
+	Sessions      SessionStore         // 会话
+	Keys          *KeyStore            // API Key
+	Rate          *RateLimiter         // 限流
+	Logger        *slog.Logger         // 日志
+	Metrics       *Metrics             // 指标
 	MaxTurns      int
 	ReActMaxSteps int // ReAct 最大推理-行动步数（<=0 默认 6）
 	PromptName    string
-	Skills        *skill.Registry         // P1 技能注册表（nil 关闭技能检索）
-	Notifier      notify.Notifier         // P4 主动出站：任务完成通知（nil 关闭）
-	Cost          *cost.Tracker           // P5 成本归因（nil 关闭）
-	Cache         *cache.SemanticCache    // P5 语义缓存（nil 关闭）
-	RAG           *rag.Index              // P8 知识库检索（nil 关闭）
-	Reranker      rag.Reranker            // P41 RAG 二次精排（nil 则混合检索原序）
+	Skills        *skill.Registry         // 技能注册表（nil 关闭技能检索）
+	Notifier      notify.Notifier         // 主动出站：任务完成通知（nil 关闭）
+	Cost          *cost.Tracker           // 成本归因（nil 关闭）
+	Cache         *cache.SemanticCache    // 语义缓存（nil 关闭）
+	RAG           *rag.Index              // 知识库检索（nil 关闭）
+	Reranker      rag.Reranker            // RAG 二次精排（nil 则混合检索原序）
 	Model         string                  // 主模型名（成本归因用）
-	TaskStore     task.Store              // P12 异步任务存储（nil 关闭异步 API）
-	Supervisor    *supervisor.Supervisor  // P13 多 Agent（nil 关闭 supervisor 模式）
-	Feedback      *feedback.InMemoryStore // P16 反馈闭环（nil 关闭反馈 API）
-	Reload        func() error            // P18 配置热更新（nil 关闭重载端点）
-	Shadow        *eval.ShadowEvaluator   // P21 在线评测/影子模式（nil 关闭）
-	Profile       *memory.ProfileStore    // P22 用户画像（nil 关闭画像 API 与注入）
-	ProfileTTL    time.Duration           // P22 画像事实保鲜期（<=0 永不过期）
-	Extractor     memory.Extractor        // P27 画像抽取器（nil 用规则抽取）
-	Voice         *provider.VoiceClient   // P25 语音交互（nil 关闭语音 API）
-	KG            *kg.Graph               // P52 知识图谱（nil 关闭图谱 API）
-	EvalCasesDir  string                  // P55 反馈回流评测数据集目录（空=关闭回流）
+	TaskStore     task.Store              // 异步任务存储（nil 关闭异步 API）
+	Supervisor    *supervisor.Supervisor  // 多 Agent（nil 关闭 supervisor 模式）
+	Feedback      *feedback.InMemoryStore // 反馈闭环（nil 关闭反馈 API）
+	Reload        func() error            // 配置热更新（nil 关闭重载端点）
+	Shadow        *eval.ShadowEvaluator   // 在线评测/影子模式（nil 关闭）
+	Profile       *memory.ProfileStore    // 用户画像（nil 关闭画像 API 与注入）
+	ProfileTTL    time.Duration           // 画像事实保鲜期（<=0 永不过期）
+	Extractor     memory.Extractor        // 画像抽取器（nil 用规则抽取）
+	Voice         *provider.VoiceClient   // 语音交互（nil 关闭语音 API）
+	KG            *kg.Graph               // 知识图谱（nil 关闭图谱 API）
+	EvalCasesDir  string                  // 反馈回流评测数据集目录（空=关闭回流）
 }
 
 // APIServer HTTP 服务。
 type APIServer struct {
 	deps  Deps
-	tasks *task.Manager // P12 异步任务管理器（NewAPIServer 时构建）
+	tasks *task.Manager // 异步任务管理器（NewAPIServer 时构建）
 
-	// P42 金丝雀自动回滚：记录 promote 时的原主模型名，质量回退时切回。
+	// 金丝雀自动回滚：记录 promote 时的原主模型名，质量回退时切回。
 	shadowMu       sync.Mutex
 	shadowPrev     string
 	shadowPromoted string
@@ -88,7 +88,7 @@ func NewAPIServer(deps Deps) *APIServer {
 		deps.Metrics = NewMetrics()
 	}
 	api := &APIServer{deps: deps}
-	// P12 异步任务：有存储则构建管理器（run 由 APIServer 提供，可访问 buildAgent）
+	// 异步任务：有存储则构建管理器（run 由 APIServer 提供，可访问 buildAgent）
 	if deps.TaskStore != nil {
 		api.tasks = task.NewManager(deps.TaskStore, api.taskRun, 4)
 		api.tasks.SetNotify(api.makeTaskNotifier())
@@ -98,7 +98,7 @@ func NewAPIServer(deps Deps) *APIServer {
 }
 
 // buildAgent 用指定会话上下文构造 Agent（history 可来自会话或任务检查点）。
-// 每 Agent 共享只读依赖；历史按会话/任务隔离（A4）。
+// 每 Agent 共享只读依赖；历史按会话/任务隔离。
 func (s *APIServer) buildAgent(user, role, sessionID string, hist *[]provider.Message) *agent.Agent {
 	ag := agent.New(agent.Config{
 		Router:       s.deps.Router,
@@ -118,26 +118,26 @@ func (s *APIServer) buildAgent(user, role, sessionID string, hist *[]provider.Me
 		ProfileTTL:   s.deps.ProfileTTL,
 		Extractor:    s.deps.Extractor,
 		Model:        s.deps.Model,
-		RewriteQuery: os.Getenv("ZEBRA_QUERY_REWRITE") == "1", // P48 查询改写
-		OnSkill: func(names []string) { // P31：技能注入可观测
+		RewriteQuery: os.Getenv("ZEBRA_QUERY_REWRITE") == "1", // 查询改写
+		OnSkill: func(names []string) { // 技能注入可观测
 			s.deps.Logger.Info("skill.inject", "session", sessionID, "user", user,
 				"skills", strings.Join(names, ","))
 		},
-		OnTool: func(name string, args map[string]interface{}, ok bool, err error) { // P31：工具调用可观测
+		OnTool: func(name string, args map[string]interface{}, ok bool, err error) { // 工具调用可观测
 			// 参数按白名单脱敏：command/content 等可携带机密的键只留 [redacted]
-			//（S-1）；失败错误里可能携带命令输出/机密（S-2），同样脱敏+截断，
+			// 失败错误里可能携带命令输出/机密，同样脱敏+截断
 			// 绝不把工具输出原样持久化到日志。
 			s.deps.Logger.Info("tool.call", "session", sessionID, "user", user,
 				"tool", name, "args", safety.RedactArgs(args), "ok", ok, "err", redactErr(err))
 		},
-		OnUsage: func(model string, in, out int) { // B5 用量指标 + P5 成本归因
+		OnUsage: func(model string, in, out int) { // 用量指标 + 成本归因
 			s.deps.Metrics.Inc("tokens_in:" + itoa(in/100))
 			s.deps.Metrics.Inc("tokens_out:" + itoa(out/100))
 			if s.deps.Cost != nil {
 				s.deps.Cost.Record(user, sessionID, model, in, out)
 			}
 		},
-		OnInjection: func(kind, hit string) { // D17 注入检测审计
+		OnInjection: func(kind, hit string) { // 注入检测审计
 			s.deps.Logger.Warn("prompt.injection.detected", "session", sessionID, "user", user, "kind", kind, "hit", hit)
 			s.deps.Metrics.Inc("injection_detected")
 		},
@@ -155,40 +155,40 @@ func (s *APIServer) Handler() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/v1/chat", s.handleChat)
 	mux.HandleFunc("/v1/chat/stream", s.handleChatStream)
-	mux.HandleFunc("DELETE /v1/user/data", s.handleForget) // P6 被遗忘权
+	mux.HandleFunc("DELETE /v1/user/data", s.handleForget) // 被遗忘权
 	if s.tasks != nil {
-		mux.HandleFunc("POST /v1/tasks", s.handleSubmitTask) // P12 异步任务
-		mux.HandleFunc("GET /v1/tasks", s.handleListTasks)   // P12 任务列表
-		mux.HandleFunc("GET /v1/tasks/", s.handleGetTask)    // P12 任务查询
+		mux.HandleFunc("POST /v1/tasks", s.handleSubmitTask) // 异步任务
+		mux.HandleFunc("GET /v1/tasks", s.handleListTasks)   // 任务列表
+		mux.HandleFunc("GET /v1/tasks/", s.handleGetTask)    // 任务查询
 	}
 	if s.deps.Feedback != nil {
-		mux.HandleFunc("POST /v1/feedback", s.handleSubmitFeedback) // P16 反馈
-		mux.HandleFunc("GET /v1/feedback", s.handleListFeedback)    // P16 反馈列表
+		mux.HandleFunc("POST /v1/feedback", s.handleSubmitFeedback) // 反馈
+		mux.HandleFunc("GET /v1/feedback", s.handleListFeedback)    // 反馈列表
 	}
 	if s.deps.Reload != nil {
-		mux.HandleFunc("POST /v1/admin/reload", s.handleReload) // P18 热更新（仅 admin）
+		mux.HandleFunc("POST /v1/admin/reload", s.handleReload) // 热更新（仅 admin）
 	}
 	if s.deps.Shadow != nil {
-		mux.HandleFunc("POST /v1/eval/shadow", s.handleRunShadow)             // P21 影子评测
-		mux.HandleFunc("GET /v1/eval/shadow", s.handleListShadow)             // P21 影子记录
-		mux.HandleFunc("GET /v1/eval/shadow/stats", s.handleShadowStats)      // P26 影子看板
-		mux.HandleFunc("POST /v1/eval/shadow/promote", s.handleShadowPromote) // P26 灰度切换
+		mux.HandleFunc("POST /v1/eval/shadow", s.handleRunShadow)             // 影子评测
+		mux.HandleFunc("GET /v1/eval/shadow", s.handleListShadow)             // 影子记录
+		mux.HandleFunc("GET /v1/eval/shadow/stats", s.handleShadowStats)      // 影子看板
+		mux.HandleFunc("POST /v1/eval/shadow/promote", s.handleShadowPromote) // 灰度切换
 	}
 	if s.deps.Profile != nil {
-		mux.HandleFunc("GET /v1/user/profile", s.handleGetProfile)              // P22 画像查看
-		mux.HandleFunc("POST /v1/user/profile/forget", s.handleForgetProfile)   // P22 精细遗忘
-		mux.HandleFunc("POST /v1/user/profile/resolve", s.handleResolveProfile) // P57 冲突裁决
+		mux.HandleFunc("GET /v1/user/profile", s.handleGetProfile)              // 画像查看
+		mux.HandleFunc("POST /v1/user/profile/forget", s.handleForgetProfile)   // 精细遗忘
+		mux.HandleFunc("POST /v1/user/profile/resolve", s.handleResolveProfile) // 冲突裁决
 	}
 	if s.deps.Voice != nil {
-		mux.HandleFunc("POST /v1/voice/transcribe", s.handleVoiceTranscribe) // P25 ASR
-		mux.HandleFunc("POST /v1/voice/synthesize", s.handleVoiceSynthesize) // P25 TTS
-		mux.HandleFunc("POST /v1/voice/chat", s.handleVoiceChat)             // P25 语音对话
+		mux.HandleFunc("POST /v1/voice/transcribe", s.handleVoiceTranscribe) // ASR
+		mux.HandleFunc("POST /v1/voice/synthesize", s.handleVoiceSynthesize) // TTS
+		mux.HandleFunc("POST /v1/voice/chat", s.handleVoiceChat)             // 语音对话
 	}
 	if s.deps.KG != nil {
-		mux.HandleFunc("GET /v1/knowledge", s.handleKnowledge) // P52 知识图谱查询
+		mux.HandleFunc("GET /v1/knowledge", s.handleKnowledge) // 知识图谱查询
 	}
-	mux.HandleFunc("/favicon.svg", faviconHandler()) // P14 浏览器标签图标（品牌 Z logo）
-	mux.HandleFunc("/", uiHandler())                 // P14 前端 Web UI（公开）
+	mux.HandleFunc("/favicon.svg", faviconHandler()) // 浏览器标签图标（品牌 Z logo）
+	mux.HandleFunc("/", uiHandler())                 // 前端 Web UI（公开）
 	mux.HandleFunc("/healthz", HealthzHandler())
 	mux.HandleFunc("/readyz", ReadyzHandler(s.deps.Logger, map[string]func() error{
 		"llm":   func() error { return s.llmReadyCheck() },
@@ -196,8 +196,8 @@ func (s *APIServer) Handler() http.Handler {
 	}))
 	mux.Handle("/metrics", s.deps.Metrics.Handler())
 	if s.deps.Cost != nil {
-		// P1-9：成本数据含 per-user/per-session 明细，禁止公开——
-		// 从 Auth 豁免列表移除，并额外要求 admin 角色（A4 隔离）。
+		// 成本数据含 per-user/per-session 明细，禁止公开——
+		// 从 Auth 豁免列表移除，并额外要求 admin 角色（隔离）。
 		mux.Handle("/metrics/cost", requireAdmin(s.deps.Cost.Handler()))
 	}
 
@@ -211,7 +211,7 @@ func (s *APIServer) Handler() http.Handler {
 	return h
 }
 
-// Serve 启动服务并阻塞，处理信号实现优雅停机（B8）。
+// Serve 启动服务并阻塞，处理信号实现优雅停机。
 func (s *APIServer) Serve(ctx context.Context, addr string) error {
 	srv := &http.Server{
 		Addr:              addr,

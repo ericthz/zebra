@@ -1,11 +1,11 @@
-// 在线评测 / 影子模式 API（P21）。
+// 在线评测 / 影子模式 API。
 //
 //	POST /v1/eval/shadow  触发一次影子评测（同步返回主回答 + 影子对比结论）
 //	GET  /v1/eval/shadow   列出影子记录（运维视图）
 //
 // 影子模式把"真实流量"复制给候选模型：主模型照常回答用户，候选模型
 // 独立回答同一问题，后台双评对比 —— 换模型前先积累回归数据，而不是拍脑袋切。
-// 本端点属于运维能力，仅 admin 可用（与 P18 热更新同级）。
+// 本端点属于运维能力，仅 admin 可用（与热更新同级）。
 package server
 
 import (
@@ -73,7 +73,7 @@ func (s *APIServer) handleRunShadow(w http.ResponseWriter, r *http.Request) {
 	s.persistHistory(sess)
 	// 2. 影子对比（同步：评测请求可等待完整结论）
 	res := s.deps.Shadow.Run(r.Context(), sess.User, sess.ID, req.Message, reply, s.deps.Model)
-	s.maybeShadowRollback() // P42：金丝雀质量回退自动切回
+	s.maybeShadowRollback() // 金丝雀质量回退自动切回
 	jsonOK(w, map[string]interface{}{
 		"reply":  reply,
 		"shadow": res,
@@ -104,7 +104,7 @@ func (s *APIServer) handleListShadow(w http.ResponseWriter, r *http.Request) {
 	jsonOK(w, map[string]interface{}{"runs": s.deps.Shadow.Store.Recent("", limit)})
 }
 
-// handleShadowStats 影子评测看板：聚合统计 + 灰度切换建议（P26）。
+// handleShadowStats 影子评测看板：聚合统计 + 灰度切换建议。
 func (s *APIServer) handleShadowStats(w http.ResponseWriter, r *http.Request) {
 	p, ok := principal(r.Context())
 	if !ok {
@@ -151,13 +151,13 @@ func (s *APIServer) handleShadowPromote(w http.ResponseWriter, r *http.Request) 
 		http.Error(w, "候选模型未在路由链中: "+name, http.StatusNotFound)
 		return
 	}
-	// P42 候选提升为新主后，把影子候选重指向原主模型：
+	// 候选提升为新主后，把影子候选重指向原主模型：
 	// 否则候选 == 新主 → 影子变成"新主 vs 自己"的自我对比，胜率数据被污染。
 	// 重指向后，影子持续对比"新主 vs 原主"，为金丝雀回滚提供真实信号。
 	if next := s.deps.Router.Get(prev); next != nil {
 		s.deps.Shadow.SetCandidate(next)
 	}
-	// 记录原主模型与本次提升的模型，供金丝雀自动回滚（P42）
+	// 记录原主模型与本次提升的模型，供金丝雀自动回滚
 	s.shadowMu.Lock()
 	s.shadowPrev = prev
 	s.shadowPromoted = name
@@ -173,7 +173,7 @@ func (s *APIServer) handleShadowPromote(w http.ResponseWriter, r *http.Request) 
 	jsonOK(w, map[string]interface{}{"status": "promoted", "primary": name})
 }
 
-// maybeShadowRollback 金丝雀自动回滚（P42）：promote 后影子候选已重指向
+// maybeShadowRollback 金丝雀自动回滚：promote 后影子候选已重指向
 // 原主模型，影子持续对比"新主 vs 原主"。当原主（候选）胜率达标——即新主
 // 质量回退——自动切回原主。
 func (s *APIServer) maybeShadowRollback() {

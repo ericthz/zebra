@@ -1,6 +1,6 @@
 // 长期记忆：Qdrant 向量数据库（纯 HTTP 手写，无 SDK）。
 //
-// 多租户隔离（A4）：QdrantMemory.ForTenant(tenant) 返回一个 collection
+// 多租户隔离：QdrantMemory.ForTenant(tenant) 返回一个 collection
 // 名带租户后缀的实例，各租户向量互不可见。生产可用 Qdrant payload filter
 // 或独立实例替换，接口不变。
 package memory
@@ -40,14 +40,14 @@ func NewQdrantMemory(baseURL, collection string, vector int, embed Embedder) *Qd
 	}
 }
 
-// 编译期断言：实现 Memory、TenantScoped 与 UserScoped（P6 被遗忘权）。
+// 编译期断言：实现 Memory、TenantScoped 与 UserScoped（被遗忘权）。
 var (
 	_ Memory       = (*QdrantMemory)(nil)
 	_ TenantScoped = (*QdrantMemory)(nil)
 	_ UserScoped   = (*QdrantMemory)(nil)
 )
 
-// ForTenant 返回绑定到指定租户的隔离实例（A4）。
+// ForTenant 返回绑定到指定租户的隔离实例。
 // 逐字段克隆（不复制内部锁），共享底层 HTTP client 与嵌入器。
 func (m *QdrantMemory) ForTenant(tenant string) Memory {
 	return &QdrantMemory{
@@ -74,9 +74,9 @@ func (m *QdrantMemory) Store(ctx context.Context, content string, meta map[strin
 	}})
 }
 
-// Retrieve 语义检索属于指定 user 的记忆（P1-A 用户隔离）。
+// Retrieve 语义检索属于指定 user 的记忆（用户隔离）。
 // Qdrant payload 里存了 user（Store 写入），检索时用 filter 精确匹配，
-// 防止检索到同租户其他用户的对话（A4 纵深防御）。
+// 防止检索到同租户其他用户的对话（纵深防御）。
 func (m *QdrantMemory) Retrieve(ctx context.Context, user, query string, limit int) ([]string, error) {
 	vec, err := m.embed.Embed(ctx, query)
 	if err != nil {
@@ -128,7 +128,7 @@ func (m *QdrantMemory) Clear(ctx context.Context) error {
 	return nil
 }
 
-// ForgetUser 按用户删除全部记忆（P6 被遗忘权）。
+// ForgetUser 按用户删除全部记忆（被遗忘权）。
 // Qdrant 支持按 payload filter 删除点，只删该用户的记录，不误伤同集合其他用户。
 func (m *QdrantMemory) ForgetUser(ctx context.Context, user string) error {
 	filter := map[string]interface{}{

@@ -1,4 +1,4 @@
-// Package schedule 定时调度能力（P4 主动出站）。
+// Package schedule 定时调度能力（主动出站）。
 //
 // 背景：Agent 此前只会"响应式"回答。成熟 Agent 需要【主动触发】：
 //   - 定时任务：每天 9 点自动汇总、每小时巡检
@@ -95,7 +95,7 @@ func (s *Scheduler) run(ctx context.Context, j *job) {
 	}
 }
 
-// safeRun 执行任务并兜住 panic（B9：单个任务崩溃不影响调度器）。
+// safeRun 执行任务并兜住 panic（单个任务崩溃不影响调度器）。
 func (s *Scheduler) safeRun(ctx context.Context, j *job) {
 	defer func() { recover() }() // 任务 panic 时记录日志并继续
 	j.fn(ctx)
