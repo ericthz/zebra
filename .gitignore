@@ -1,5 +1,55 @@
+# Go defaults (from github/gitignore Go template)
+# Binaries
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
 bin/
+
+# Test binary
+*.test
+
+# Coverage / test artifacts
+*.out
+coverage.*
+*.coverprofile
+profile.cov
+
+# Backup files from eval atomic writes
+*.bak
+
+# Dependencies (uncomment to include)
+# vendor/
+
+# Go workspace
+go.work
+go.work.sum
+
+# Env files (.env.example is the committed template)
 .env
+.env.*
+!.env.example
+
+# Log files
 *.log
-.vscode/
+
+# Runtime artifacts written by tools
 workspace/
+
+# Editor / IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS files
+.DS_Store
+._*
+
+# Agent session memory (not project source)
+.workbuddy/
+
+# Private docs (not for publication)
+docs/private/
